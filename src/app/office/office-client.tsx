@@ -46,7 +46,13 @@ const TABS = [
 
 type TabKey = (typeof TABS)[number]["key"];
 
-export function OfficeClient({ adminName }: { adminName: string }) {
+export function OfficeClient({
+  adminName,
+  anonymousBypass = false,
+}: {
+  adminName: string;
+  anonymousBypass?: boolean;
+}) {
   const [tab, setTab] = useState<TabKey>("pipeline");
 
   return (
@@ -58,6 +64,20 @@ export function OfficeClient({ adminName }: { adminName: string }) {
           Run the pipeline, review the engine, and manage access.
         </p>
       </header>
+
+      {anonymousBypass && (
+        <Alert status="warning">
+          <Alert.Title>Reachable, but reading nothing</Alert.Title>
+          <Alert.Description>
+            The bypass gets you to this page, but it doesn&rsquo;t fake an
+            identity — and admin tables are protected by row-level security, not
+            by the route guard. With no session, every panel below reads back
+            empty. Actions still run. Use the flask button to sign in as
+            <code className="mx-1 font-mono">admin@moonodds.test</code>
+            and the data appears.
+          </Alert.Description>
+        </Alert>
+      )}
 
       <nav className="flex gap-1 overflow-x-auto rounded-xl border border-border bg-surface-secondary p-1">
         {TABS.map((t) => (
@@ -120,7 +140,7 @@ function PipelinePanel() {
             These are the same functions pg_cron calls on schedule.
           </Card.Description>
         </Card.Header>
-        <Card.Content className="flex flex-wrap gap-2">
+        <Card.Content className="flex flex-row flex-wrap gap-2">
           {steps.map((s) => (
             <Button
               key={s.action}

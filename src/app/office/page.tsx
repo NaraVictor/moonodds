@@ -3,6 +3,7 @@ import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { SiteHeader } from "@/components/layout/site-header";
 import { OfficeClient } from "./office-client";
 import { devBypassEnabled } from "@/lib/dev-bypass";
+import { RoleSwitcher } from "@/components/dev/role-switcher";
 
 export const metadata = { title: "Office" };
 
@@ -25,7 +26,8 @@ export default async function OfficePage() {
     return (
       <>
         <SiteHeader signedIn={false} />
-        <OfficeClient adminName="bypass (not signed in)" />
+        <OfficeClient adminName="bypass (not signed in)" anonymousBypass />
+        <RoleSwitcher />
       </>
     );
   }
@@ -56,6 +58,7 @@ export default async function OfficePage() {
     <>
       <SiteHeader signedIn />
       <OfficeClient adminName={profile?.display_name ?? user!.email ?? "admin"} />
+      {process.env.NODE_ENV !== "production" && <RoleSwitcher />}
     </>
   );
 }
