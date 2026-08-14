@@ -430,6 +430,46 @@ function EnginePanel() {
   const action = useOfficeAction();
   const [prompt, setPrompt] = useState<string | null>(null);
   const [weights, setWeights] = useState<Record<string, number> | null>(null);
+  const [otp, setOtp] = useState<{ sent: boolean; masked?: string; devCode?: string } | null>(null);
+  const [code, setCode] = useState("");
+  const [otpError, setOtpError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  async function requestCode() {
+    setOtpError(null);
+    setBusy(true);
+    try {
+      const res = await fetch("/api/office/otp", { method: "POST" });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error);
+      setOtp({ sent: true, masked: json.maskedEmail, devCode: json.devCode });
+    } catch (e) {
+      setOtpError(e instanceof Error ? e.message : "Could not send a code.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function applyPrompt(configId: string) {
+    setOtpError(null);
+    setBusy(true);
+    try {
+      const res = await fetch("/api/office/otp", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code, configId, systemPrompt: prompt ?? "" }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error);
+      setPrompt(null);
+      setOtp(null);
+      setCode("");
+    } catch (e) {
+      setOtpError(e instanceof Error ? e.message : "Could not save the prompt.");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   if (isPending) return <Skeleton className="h-96 rounded-xl" />;
   if (!config) return <Empty>No active engine config.</Empty>;
@@ -521,29 +561,76 @@ function EnginePanel() {
             onChange={(e) => setPrompt(e.target.value)}
             className="w-full rounded-xl border border-field-border bg-field p-3 font-mono text-xs leading-relaxed text-field-foreground"
           />
-          <div className="flex justify-end gap-2">
-            <Button
-              size="sm"
-              variant="ghost"
-              isDisabled={prompt === null}
-              onPress={() => setPrompt(null)}
-            >
-              Discard
-            </Button>
-            <Button
-              size="sm"
-              isDisabled={prompt === null || action.isPending}
-              onPress={() =>
-                action.mutate({
-                  action: "updateSystemPrompt",
-                  configId: config.id,
-                  systemPrompt: prompt ?? "",
-                })
-              }
-            >
-              Save prompt
-            </Button>
-          </div>
+          {otpError && (
+            <Alert status="danger">
+              <Alert.Description>{otpError}</Alert.Description>
+            </Alert>
+          )}
+
+          {otp?.sent ? (
+            <div className="space-y-2 rounded-lg border border-border bg-surface-secondary p-3">
+              <p className="text-xs text-muted">
+                Code sent to {otp.masked}. It expires in 10 minutes.
+                {otp.devCode && (
+                  <>
+                    {" "}
+                    Providers are mocked, so here it is:{" "}
+                    <code className="font-mono text-foreground">{otp.devCode}</code>
+                  </>
+                )}
+              </p>
+              <div className="flex gap-2">
+                <input
+                  inputMode="numeric"
+                  maxLength={6}
+                  value={code}
+                  onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
+                  placeholder="000000"
+                  aria-label="Confirmation code"
+                  className="w-32 rounded-lg border border-field-border bg-field px-3 py-2 text-center font-mono tracking-[0.3em] text-field-foreground"
+                />
+                <Button
+                  size="sm"
+                  isDisabled={code.length !== 6 || busy}
+                  onPress={() => applyPrompt(config.id)}
+                >
+                  Confirm &amp; save
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  isDisabled={busy}
+                  onPress={() => {
+                    setOtp(null);
+                    setCode("");
+                  }}
+                >
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="flex items-center justify-end gap-2">
+              <p className="mr-auto text-xs text-muted">
+                Changing the prompt needs an emailed confirmation code.
+              </p>
+              <Button
+                size="sm"
+                variant="ghost"
+                isDisabled={prompt === null}
+                onPress={() => setPrompt(null)}
+              >
+                Discard
+              </Button>
+              <Button
+                size="sm"
+                isDisabled={prompt === null || busy}
+                onPress={requestCode}
+              >
+                Save prompt…
+              </Button>
+            </div>
+          )}
         </Card.Content>
       </Card>
 

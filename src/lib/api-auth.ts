@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient, createServiceClient } from "./supabase/server";
+import { devBypassEnabled } from "./dev-bypass";
 
 /**
  * Guard for the /api/cron/* routes.
@@ -9,6 +10,10 @@ import { createClient, createServiceClient } from "./supabase/server";
  * timing. The secret lives in both CRON_SECRET and app.settings.cron_secret.
  */
 export function assertCronRequest(request: Request): NextResponse | null {
+  // Dev bypass: lets you POST the cron routes from a browser or curl without
+  // the bearer token. Off in production, always.
+  if (devBypassEnabled()) return null;
+
   const expected = process.env.CRON_SECRET;
   if (!expected) {
     return NextResponse.json(
@@ -51,6 +56,20 @@ export async function currentUser() {
  * user-writable outright.
  */
 export async function requireSuperAdmin() {
+  if (devBypassEnabled()) {
+    // Office actions still need SOME actor for audit fields, so fall back to
+    // the seeded admin when there's no session at all.
+    const bypassUser = await currentUser();
+    return {
+      user:
+        bypassUser ??
+        ({ id: "55555555-5555-4555-8555-555555555555", email: "bypass@dev.local" } as {
+          id: string;
+          email: string;
+        }),
+    };
+  }
+
   const user = await currentUser();
   if (!user) {
     return { error: NextResponse.json({ error: "Unauthorized" }, { status: 401 }) };

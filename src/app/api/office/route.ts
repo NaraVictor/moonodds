@@ -32,11 +32,6 @@ const Body = z.discriminatedUnion("action", [
     isSuperAdmin: z.boolean().optional(),
   }),
   z.object({
-    action: z.literal("updateSystemPrompt"),
-    configId: z.uuid(),
-    systemPrompt: z.string().min(20).max(100_000),
-  }),
-  z.object({
     action: z.literal("updateWeights"),
     configId: z.uuid(),
     rankingWeights: z.record(z.string(), z.number()),
@@ -122,19 +117,6 @@ export async function POST(request: Request) {
         if (body.isSuperAdmin !== undefined) patch.is_super_admin = body.isSuperAdmin;
 
         const { error } = await db.from("profiles").update(patch).eq("id", body.userId);
-        if (error) throw new Error(error.message);
-        return NextResponse.json({ updated: true });
-      }
-
-      case "updateSystemPrompt": {
-        const { error } = await db
-          .from("ai_engine_config")
-          .update({
-            system_prompt: body.systemPrompt,
-            last_updated_at: new Date().toISOString(),
-            approved_by: actor,
-          })
-          .eq("id", body.configId);
         if (error) throw new Error(error.message);
         return NextResponse.json({ updated: true });
       }

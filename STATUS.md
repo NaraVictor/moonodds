@@ -118,15 +118,41 @@ AI engine (weights with sum validation, system prompt editor), reports
 (approve/reject with server-side application), users (suspend/reinstate).
 Guarded server-side before any admin UI reaches the browser.
 
+### Remaining surfaces — done
+- `/slips` — saved slips with per-leg outcomes and a running record.
+- `/profile` — access tier, channel toggles, alert toggles, phone.
+- `/checkout/day-pass` and `/checkout/extra-picks` — full init → pay → verify
+  flow. Extra-picks prices on games actually available, not leagues requested.
+- OTP gating on system-prompt edits, restored from the original. Verified:
+  wrong code rejected, correct code applies, **replay of a used code rejected**
+  (burned before the write, so it can't be reused).
+
+---
+
+## Auth bypass for testing
+
+`DEV_BYPASS_AUTH=true` + `NEXT_PUBLIC_DEV_BYPASS_AUTH=true` are set in
+`.env.local`. Every route is walkable without signing in.
+
+**To restore the guards:** set both to `false` and restart. Nothing else changes
+— the guards were never deleted, only short-circuited at one call site each
+(`src/lib/dev-bypass.ts`).
+
+Three things keep this safe:
+
+1. **Hard-off in production.** Verified against a real `pnpm start` with the
+   flag still set: `/office` → 307 to sign-in, every API route → 401, banner
+   absent. Not configurable.
+2. **It never touches the database.** RLS, the gated picks RPC and the
+   privilege-guard trigger all still apply. Running `pnpm verify:security` with
+   the bypass on gives **18/20** — and the only two failures are exactly the two
+   HTTP route-guard checks the bypass disables. All 18 data-layer checks still
+   pass. Turn it off and it's 20/20 again.
+3. **A red banner sits on every page** while it's active.
+
 ## Not done
 
-1. **`/slips` and `/profile` pages** — query hooks exist (`useSlips`,
-   `useProfile`, `useNotificationPreferences`), pages don't.
-2. **Checkout pages** — `/api/checkout/day-pass` works (POST init, PATCH
-   verify); the `/checkout/*` pages that call it aren't built. Extra-picks
-   checkout route is also unbuilt, though `activate_extra_picks` RPC exists.
-3. **OTP flow for system-prompt edits** — the original gated prompt changes
-   behind an emailed code. Here it's admin-guarded but not OTP-gated.
+Nothing outstanding from the original scope.
 
 ## Known issues
 

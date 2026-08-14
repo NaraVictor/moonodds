@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Archivo, Manrope, JetBrains_Mono } from "next/font/google";
 import { Providers } from "./providers";
+import { BypassBanner } from "@/components/dev/bypass-banner";
 import "./globals.css";
 
 /**
@@ -63,6 +64,7 @@ export default function RootLayout({
       suppressHydrationWarning
     >
       <body className="min-h-full flex flex-col bg-background text-foreground">
+        <BypassBanner />
         <Providers>{children}</Providers>
       </body>
     </html>
