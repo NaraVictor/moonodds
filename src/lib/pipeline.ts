@@ -1,0 +1,482 @@
+import { createServiceClient } from "./supabase/server";
+import { getProviders } from "./providers";
+import type { Market } from "./types";
+
+/**
+ * The daily pipeline, ported from convex/cron_jobs and convex/football.
+ *
+ * Everything here runs with the service role because it writes rows no user is
+ * authorised to write. None of it is reachable from the browser — the routes
+ * that call it are behind the cron bearer secret.
+ */
+
+type Outcome = "won" | "lost" | "void" | "review_needed";
+
+/**
+ * Grade a settled prediction.
+ *
+ * DELIBERATE DEVIATION from the Convex original: that version returned `false`
+ * for markets it couldn't evaluate, so corners and half-goals picks were all
+ * written as LOSSES — despite the code comments saying they should be marked
+ * for review. Draws on draw-no-bet were graded as losses too, when they should
+ * void and refund.
+ *
+ * Here: half-time markets are graded properly (we store ht_home_goals /
+ * ht_away_goals), draw-no-bet voids on a draw, and genuinely ungradeable
+ * markets return review_needed rather than quietly costing someone a win.
+ */
+export function gradePrediction(
+  market: Market,
+  value: string,
+  hg: number,
+  ag: number,
+  htHg: number | null,
+  htAg: number | null,
+): Outcome {
+  const total = hg + ag;
+  const v = value.toLowerCase();
+  const ou = (line: number, sum: number): Outcome =>
+    v === "over" ? (sum > line ? "won" : "lost") : sum < line ? "won" : "lost";
+
+  switch (market) {
+    case "1x2":
+      if (v === "1") return hg > ag ? "won" : "lost";
+      if (v === "x") return hg === ag ? "won" : "lost";
+      if (v === "2") return ag > hg ? "won" : "lost";
+      return "review_needed";
+
+    case "over_under_1_5":
+      return ou(1.5, total);
+    case "over_under_2_5":
+      return ou(2.5, total);
+    case "over_under_3_5":
+      return ou(3.5, total);
+
+    case "btts": {
+      const both = hg > 0 && ag > 0;
+      return v === "yes" ? (both ? "won" : "lost") : both ? "lost" : "won";
+    }
+
+    case "double_chance":
+      if (value === "1X") return hg >= ag ? "won" : "lost";
+      if (value === "X2") return ag >= hg ? "won" : "lost";
+      if (value === "12") return hg !== ag ? "won" : "lost";
+      return "review_needed";
+
+    case "draw_no_bet":
+      // A draw refunds the stake — it is not a loss.
+      if (hg === ag) return "void";
+      if (v === "1") return hg > ag ? "won" : "lost";
+      if (v === "2") return ag > hg ? "won" : "lost";
+      return "review_needed";
+
+    case "handicap": {
+      const [side, lineRaw] = value.split(" ");
+      const line = Number.parseFloat(lineRaw);
+      if (!Number.isFinite(line)) return "review_needed";
+      const margin = side === "home" ? hg - ag : ag - hg;
+      const adjusted = margin + line;
+      if (adjusted === 0) return "void";
+      return adjusted > 0 ? "won" : "lost";
+    }
+
+    case "correct_score": {
+      const [eh, ea] = value.split("-").map(Number);
+      if (!Number.isFinite(eh) || !Number.isFinite(ea)) return "review_needed";
+      return hg === eh && ag === ea ? "won" : "lost";
+    }
+
+    case "first_half_goals":
+      if (htHg == null || htAg == null) return "review_needed";
+      return ou(0.5, htHg + htAg);
+
+    case "second_half_goals":
+      if (htHg == null || htAg == null) return "review_needed";
+      return ou(0.5, total - (htHg + htAg));
+
+    case "corners_over_under":
+      // Corner counts need a separate API call we don't make. Flag, don't guess.
+      return "review_needed";
+
+    default:
+      return "review_needed";
+  }
+}
+
+/** Pull fixtures for a date and upsert leagues, teams and fixtures. */
+export async function runFetchFixtures(date: string) {
+  const db = createServiceClient();
+  const { football } = getProviders();
+
+  const { data: config } = await db
+    .from("ai_engine_config")
+    .select("selected_league_ids")
+    .eq("status", "active")
+    .maybeSingle();
+
+  const leagueIds: number[] = config?.selected_league_ids?.length
+    ? config.selected_league_ids
+    : [39, 140, 135, 78, 61, 88];
+
+  const raw = await football.fetchFixtures(date, leagueIds);
+  let inserted = 0;
+
+  for (const f of raw) {
+    const { data: league } = await db
+      .from("leagues")
+      .upsert(
+        {
+          external_id: f.leagueExternalId,
+          name: f.leagueName,
+          slug: slugify(f.leagueName),
+          country: f.country,
+          season: f.season,
+          is_active: true,
+        },
+        { onConflict: "external_id" },
+      )
+      .select("id")
+      .single();
+
+    if (!league) continue;
+
+    const teamIds: Record<"home" | "away", string | null> = { home: null, away: null };
+    for (const side of ["home", "away"] as const) {
+      const t = f[side];
+      const { data: team } = await db
+        .from("teams")
+        .upsert(
+          {
+            external_id: t.externalId,
+            league_id: league.id,
+            name: t.name,
+            short_name: t.shortName,
+            slug: slugify(t.name),
+          },
+          { onConflict: "external_id" },
+        )
+        .select("id")
+        .single();
+      teamIds[side] = team?.id ?? null;
+    }
+
+    if (!teamIds.home || !teamIds.away) continue;
+
+    const { error } = await db.from("fixtures").upsert(
+      {
+        external_id: f.externalId,
+        league_id: league.id,
+        home_team_id: teamIds.home,
+        away_team_id: teamIds.away,
+        slug: `${slugify(f.home.name)}-v-${slugify(f.away.name)}-${f.externalId}`,
+        fixture_date: f.kickoff,
+        status: f.status,
+        venue: f.venue,
+        referee: f.referee,
+        round: f.round,
+        home_goals: f.homeGoals,
+        away_goals: f.awayGoals,
+        ht_home_goals: f.htHomeGoals,
+        ht_away_goals: f.htAwayGoals,
+      },
+      { onConflict: "external_id" },
+    );
+
+    if (!error) inserted++;
+  }
+
+  return { date, leagues: leagueIds.length, fixtures: raw.length, upserted: inserted };
+}
+
+/** Generate today's picks with the active engine config. */
+export async function runDailyPicks() {
+  const db = createServiceClient();
+  const { ai } = getProviders();
+
+  const { data: config } = await db
+    .from("ai_engine_config")
+    .select("*")
+    .eq("status", "active")
+    .maybeSingle();
+
+  if (!config) return { skipped: "no active engine config" };
+
+  const now = new Date();
+  const endOfDay = new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1),
+  );
+
+  const { data: fixtures } = await db
+    .from("fixtures")
+    .select("id, fixture_date, venue, leagues(name, country), home:teams!fixtures_home_team_id_fkey(name), away:teams!fixtures_away_team_id_fkey(name)")
+    .eq("status", "scheduled")
+    .gte("fixture_date", now.toISOString())
+    .lt("fixture_date", endOfDay.toISOString())
+    .order("fixture_date")
+    .limit(config.api_budget?.maxFixturesPerSession ?? 30);
+
+  if (!fixtures?.length) return { skipped: "no upcoming fixtures today" };
+
+  const thresholds = config.confidence_thresholds ?? {};
+  const minConfidence = thresholds.primarySlipFloor ?? 8.5;
+  const floor = thresholds.absoluteMinimumFloor ?? 7;
+
+  const briefs = fixtures.map((f, i) => {
+    const league = asOne(f.leagues);
+    return `[${i}] ${asOne(f.home)?.name} vs ${asOne(f.away)?.name} | ${league?.name} (${league?.country}) | ${f.fixture_date} | ${f.venue ?? "Unknown"}`;
+  });
+
+  const userPrompt = `## ACTIVE WEIGHTS (v${config.version})
+${JSON.stringify(config.ranking_weights)}
+
+Confidence thresholds: ${JSON.stringify(thresholds)}
+Filter thresholds: ${JSON.stringify(config.filter_thresholds)}
+Market pivots: ${JSON.stringify(config.market_pivots)}
+
+Analyse these ${fixtures.length} fixtures for ${now.toISOString().slice(0, 10)}.
+Minimum confidence: ${minConfidence} on the 0-10 scale.
+Apply every filter from the system prompt and report which ones triggered.
+
+Fixtures:
+${briefs.join("\n")}`;
+
+  const picks = await ai.generatePicks({
+    systemPrompt: config.system_prompt,
+    userPrompt,
+    maxPicks: 10,
+  });
+
+  const qualifying = picks.filter((p) => p.confidenceScore >= minConfidence);
+  if (!qualifying.length) {
+    return { generated: 0, considered: picks.length, note: "none cleared the floor" };
+  }
+
+  const { data: tipster } = await db
+    .from("tipsters")
+    .select("id")
+    .eq("is_active", true)
+    .limit(1)
+    .maybeSingle();
+
+  const modelVersion = `moonodds-quant-v${config.version}`;
+  const { data: run } = await db
+    .from("prediction_runs")
+    .insert({ num_picks: qualifying.length, model_version: modelVersion })
+    .select("id")
+    .single();
+
+  let written = 0;
+  for (const p of qualifying) {
+    const fixture = fixtures[p.fixtureIndex];
+    if (!fixture || !tipster) continue;
+
+    const confidence = Math.min(Math.max(p.confidenceScore, floor), 9.8);
+    const { error } = await db.from("predictions").insert({
+      fixture_id: fixture.id,
+      tipster_id: tipster.id,
+      prediction_run_id: run?.id ?? null,
+      prediction_type: p.predictionType,
+      predicted_value: p.predictedValue,
+      confidence_score: confidence,
+      staking_unit: stakingUnit(confidence, thresholds),
+      frontier_explanation: p.reasoning,
+      model_version: modelVersion,
+      reasoning_tags: p.reasoningTags?.slice(0, 3) ?? [],
+      alt_market: p.altMarket ?? null,
+      alt_predicted_value: p.altPredictedValue ?? null,
+      alt_confidence: p.altConfidence ?? null,
+      mra_signal_home: p.mraSignalHome ?? null,
+      mra_signal_away: p.mraSignalAway ?? null,
+      filters_applied: p.filtersApplied ?? {},
+    });
+    if (!error) written++;
+  }
+
+  // Fan-out goes through the outbox, so a slow mail provider can't fail the run.
+  // Written directly rather than via app.enqueue(): that helper lives in the
+  // private schema PostgREST can't see, and the service role can insert here
+  // regardless.
+  await db.from("jobs").insert({
+    kind: "daily_picks_ready",
+    payload: { count: written },
+  });
+
+  return { generated: written, considered: picks.length };
+}
+
+/** Find overdue fixtures, fetch their results, grade the predictions. */
+export async function runAutoGrade() {
+  const db = createServiceClient();
+  const { football } = getProviders();
+
+  const cutoff = new Date(Date.now() - 2.5 * 60 * 60 * 1000).toISOString();
+
+  const { data: overdue } = await db
+    .from("fixtures")
+    .select("id, external_id")
+    .neq("status", "finished")
+    .lt("fixture_date", cutoff)
+    .limit(50);
+
+  if (!overdue?.length) return { graded: 0, fixtures: 0 };
+
+  const withIds = overdue.filter((f) => f.external_id != null);
+  const results = await football.fetchResults(
+    withIds.map((f) => f.external_id as number),
+  );
+  const byExternal = new Map(results.map((r) => [r.externalId, r]));
+
+  let graded = 0;
+  let finished = 0;
+
+  for (const fixture of withIds) {
+    const result = byExternal.get(fixture.external_id as number);
+    if (!result || result.status !== "finished") continue;
+    if (result.homeGoals == null || result.awayGoals == null) continue;
+
+    await db
+      .from("fixtures")
+      .update({
+        status: "finished",
+        home_goals: result.homeGoals,
+        away_goals: result.awayGoals,
+        ht_home_goals: result.htHomeGoals,
+        ht_away_goals: result.htAwayGoals,
+        ended_at: new Date().toISOString(),
+      })
+      .eq("id", fixture.id);
+    finished++;
+
+    const { data: preds } = await db
+      .from("predictions")
+      .select("id, prediction_type, predicted_value")
+      .eq("fixture_id", fixture.id)
+      .eq("status", "pending");
+
+    for (const p of preds ?? []) {
+      const outcome = gradePrediction(
+        p.prediction_type as Market,
+        p.predicted_value,
+        result.homeGoals,
+        result.awayGoals,
+        result.htHomeGoals,
+        result.htAwayGoals,
+      );
+
+      await db
+        .from("predictions")
+        .update({
+          status: outcome,
+          settled_at: new Date().toISOString(),
+          actual_result: {
+            homeGoals: result.homeGoals,
+            awayGoals: result.awayGoals,
+            htHomeGoals: result.htHomeGoals,
+            htAwayGoals: result.htAwayGoals,
+          },
+          void_reason:
+            outcome === "void" ? "Draw on draw-no-bet — stake refunded" : null,
+        })
+        .eq("id", p.id);
+      graded++;
+    }
+  }
+
+  return { fixtures: finished, graded };
+}
+
+/** Drain the jobs outbox. Called every minute by pg_cron. */
+export async function runDrainJobs(batchSize = 20) {
+  const db = createServiceClient();
+  const { messaging } = getProviders();
+
+  const { data: claimed } = await db.rpc("claim_jobs", { batch_size: batchSize });
+  const jobs = (claimed ?? []) as Array<{
+    id: string;
+    kind: string;
+    payload: Record<string, unknown>;
+  }>;
+
+  let done = 0;
+  let failed = 0;
+
+  for (const job of jobs) {
+    try {
+      await handleJob(job, messaging, db);
+      await db.rpc("complete_job", { job_id: job.id });
+      done++;
+    } catch (err) {
+      await db.rpc("fail_job", {
+        job_id: job.id,
+        err: err instanceof Error ? err.message : String(err),
+      });
+      failed++;
+    }
+  }
+
+  return { claimed: jobs.length, done, failed };
+}
+
+async function handleJob(
+  job: { kind: string; payload: Record<string, unknown> },
+  messaging: ReturnType<typeof getProviders>["messaging"],
+  db: ReturnType<typeof createServiceClient>,
+) {
+  switch (job.kind) {
+    case "daily_picks_ready": {
+      const { data: recipients } = await db
+        .from("notification_preferences")
+        .select("user_id, email_enabled, sms_enabled, profiles(email, phone)")
+        .eq("daily_picks_alert", true);
+
+      for (const r of recipients ?? []) {
+        const profile = asOne(r.profiles) as { email: string | null; phone: string | null } | null;
+        if (r.email_enabled && profile?.email) {
+          await messaging.sendEmail({
+            to: profile.email,
+            subject: `Today's picks are ready`,
+            html: `<p>${job.payload.count} new picks are live on MoonOdds.</p>`,
+          });
+        }
+        if (r.sms_enabled && profile?.phone) {
+          await messaging.sendSms({
+            to: profile.phone,
+            message: `MoonOdds: ${job.payload.count} new picks are live.`,
+          });
+        }
+      }
+      return;
+    }
+
+    default:
+      throw new Error(`Unknown job kind: ${job.kind}`);
+  }
+}
+
+/* ----------------------------- helpers ----------------------------- */
+
+function slugify(s: string): string {
+  return s
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "");
+}
+
+function stakingUnit(
+  confidence: number,
+  t: Record<string, number>,
+): number {
+  if (confidence >= (t.stakingUnit5Threshold ?? 9.5)) return 5;
+  if (confidence >= (t.stakingUnit4Threshold ?? 9.0)) return 4;
+  if (confidence >= (t.stakingUnit3Threshold ?? 8.5)) return 3;
+  if (confidence >= (t.stakingUnit2Threshold ?? 8.0)) return 2;
+  return 1;
+}
+
+/** PostgREST returns embedded relations as an array or object depending on shape. */
+function asOne<T>(v: T | T[] | null): T | null {
+  if (Array.isArray(v)) return v[0] ?? null;
+  return v ?? null;
+}

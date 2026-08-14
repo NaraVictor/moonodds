@@ -1,0 +1,236 @@
+/* ---------------------------------------------------------------------------
+ * MoonOdds theme
+ *
+ * HeroUI v3 ships a semantic CSS-variable theme (--background, --surface,
+ * --accent, --success, ...). We import it, then override those variables with
+ * the MoonOdds palette. Component styling therefore flows through HeroUI's own
+ * tokens — we never restyle its internals.
+ *
+ * Palette sampled from adipredictstreet.com:
+ *   ground        #010820   surface       #0D142B   elevated  #1A2136 / #34394D
+ *   teal (win)    #00D4BF   red (loss)    #F2404C
+ *   blue          #658BFF / #2E64FF / #013CFF        orange    #FF710A
+ *   CTA gradient  linear-gradient(90deg, #013CFF, #FF710A)
+ *
+ * The product is dark-first — the palette is built for the dark ground and the
+ * light theme is a considered companion, not an inversion.
+ * ------------------------------------------------------------------------- */
+
+@import "@heroui/react/styles";
+
+@source "../../node_modules/@heroui/react/dist";
+
+@layer base {
+  /* ---------------- dark: the primary theme ---------------- */
+  :root,
+  .dark,
+  [data-theme="dark"] {
+    color-scheme: dark;
+
+    --radius: 0.625rem;
+    --border-width: 1px;
+
+    /* Grounds */
+    --background: #010820;
+    --foreground: #ffffff;
+
+    --surface: #0d142b;
+    --surface-foreground: #ffffff;
+    --surface-secondary: #131a33;
+    --surface-secondary-foreground: #ffffff;
+    --surface-tertiary: #1a2136;
+    --surface-tertiary-foreground: #ffffff;
+
+    --overlay: #0d142b;
+    --overlay-foreground: #ffffff;
+
+    --muted: #999ca6;
+
+    /* Neutral fill */
+    --default: #1a2136;
+    --default-foreground: #ffffff;
+
+    /* Accent — the interactive blue. The gradient is reserved for CTAs. */
+    --accent: #2e64ff;
+    --accent-foreground: #ffffff;
+
+    /* Outcome semantics: teal wins, red loses, orange warns. */
+    --success: #00d4bf;
+    --success-foreground: #01131a;
+    --danger: #f2404c;
+    --danger-foreground: #ffffff;
+    --warning: #ff710a;
+    --warning-foreground: #1a0c00;
+
+    /* Structure */
+    --border: #1a2136;
+    --separator: #151c33;
+    --focus: #658bff;
+    --link: #658bff;
+
+    --segment: #1a2136;
+    --segment-foreground: #ffffff;
+
+    /* Form fields sit slightly above the card ground */
+    --field-background: #131a33;
+    --field-foreground: #ffffff;
+    --field-placeholder: #6d7385;
+    --field-border: #232b45;
+    --field-border-width: 1px;
+
+    --backdrop: rgba(1, 8, 32, 0.72);
+
+    --scrollbar-thumb: #232b45;
+    --scrollbar-track: transparent;
+
+    /* App-level tokens (not part of HeroUI's contract) */
+    --brand-from: #013cff;
+    --brand-to: #ff710a;
+    --brand-gradient: linear-gradient(90deg, #013cff 0%, #ff710a 100%);
+    --elevated: #34394d;
+    --grid-line: rgba(255, 255, 255, 0.04);
+  }
+
+  /* ---------------- light: a considered companion ---------------- */
+  .light,
+  [data-theme="light"] {
+    color-scheme: light;
+
+    --background: #f4f6fb;
+    --foreground: #010820;
+
+    --surface: #ffffff;
+    --surface-foreground: #010820;
+    --surface-secondary: #eef1f8;
+    --surface-secondary-foreground: #010820;
+    --surface-tertiary: #e4e9f4;
+    --surface-tertiary-foreground: #010820;
+
+    --overlay: #ffffff;
+    --overlay-foreground: #010820;
+
+    --muted: #5c6379;
+
+    --default: #e4e9f4;
+    --default-foreground: #010820;
+
+    --accent: #1b47d6;
+    --accent-foreground: #ffffff;
+
+    /* Teal is lightened-ground-hostile at #00D4BF, so it darkens here. */
+    --success: #067d70;
+    --success-foreground: #ffffff;
+    --danger: #cf2233;
+    --danger-foreground: #ffffff;
+    --warning: #b34d00;
+    --warning-foreground: #ffffff;
+
+    --border: #d7dded;
+    --separator: #e4e9f4;
+    --focus: #2e64ff;
+    --link: #1b47d6;
+
+    --segment: #ffffff;
+    --segment-foreground: #010820;
+
+    --field-background: #ffffff;
+    --field-foreground: #010820;
+    --field-placeholder: #8a90a3;
+    --field-border: #d7dded;
+
+    --backdrop: rgba(1, 8, 32, 0.45);
+
+    --scrollbar-thumb: #c8d0e4;
+
+    --brand-from: #013cff;
+    --brand-to: #ff710a;
+    --brand-gradient: linear-gradient(90deg, #013cff 0%, #ff710a 100%);
+    --elevated: #c8d0e4;
+    --grid-line: rgba(1, 8, 32, 0.05);
+  }
+}
+
+/* Expose the app tokens to Tailwind so `bg-elevated` etc. resolve. */
+@theme inline {
+  --color-elevated: var(--elevated);
+  --color-brand-from: var(--brand-from);
+  --color-brand-to: var(--brand-to);
+
+  --font-sans: var(--font-body), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-display), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-mono-figures), ui-monospace, monospace;
+}
+
+@layer base {
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    background-color: var(--background);
+    color: var(--foreground);
+    font-family: var(--font-sans);
+  }
+
+  /* Figures line up in every table, stat strip and odds column. */
+  table,
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+@layer utilities {
+  /* The signature CTA treatment — used sparingly, on primary actions only. */
+  .bg-brand-gradient {
+    background-image: var(--brand-gradient);
+  }
+
+  .text-brand-gradient {
+    background-image: var(--brand-gradient);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  .border-gradient {
+    border: 1px solid transparent;
+    background:
+      linear-gradient(var(--surface), var(--surface)) padding-box,
+      var(--brand-gradient) border-box;
+  }
+
+  /* Faint field grid behind hero sections — echoes a betting board. */
+  .bg-grid {
+    background-image:
+      linear-gradient(to right, var(--grid-line) 1px, transparent 1px),
+      linear-gradient(to bottom, var(--grid-line) 1px, transparent 1px);
+    background-size: 56px 56px;
+  }
+
+  .display {
+    font-family: var(--font-display);
+    font-weight: 700;
+    letter-spacing: -0.03em;
+    text-wrap: balance;
+  }
+
+  .eyebrow {
+    font-family: var(--font-mono);
+    font-size: 0.6875rem;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

@@ -1,0 +1,149 @@
+# MoonOdds — build status
+
+Migration of the Oddstar app (Convex + Hercules) to Next.js 16 + Supabase +
+HeroUI v3, with dummy data and mocked providers.
+
+Run `pnpm dev` (port 3100) with local Supabase up (`npx supabase start`).
+
+---
+
+## Done and verified
+
+### Platform
+- Next.js 16.3.1 App Router, React 19.2.8, TypeScript strict — `tsc --noEmit` clean.
+- HeroUI **v3.2.4**. Worth knowing: v3 is a ground-up rewrite — no provider,
+  compound components (`Card.Header`), React Aria underneath, and it requires
+  Tailwind v4, which your stack already had. API extracted from the installed
+  package into `docs/heroui-v3-reference.md` rather than guessed at.
+- Palette sampled from adipredictstreet.com by reading computed styles across
+  all 3,226 elements: ground `#010820`, surface `#0D142B`, teal `#00D4BF`
+  (win), red `#F2404C` (loss), blue `#658BFF`, orange `#FF710A`, CTA gradient
+  `#013CFF → #FF710A`. Applied through HeroUI's semantic variables, so
+  components are themed rather than overridden.
+- Type: Archivo (display), Manrope (body), JetBrains Mono (figures).
+
+### Database — all 18 Convex tables ported
+`supabase/migrations/`:
+- `..._schema.sql` — tables, enums, FKs, deliberate indexes. Convex forced an
+  index per query; Postgres doesn't, so these were chosen against real access
+  patterns.
+- `..._rls.sql` — RLS, policies, gated RPCs.
+- `..._triggers_and_jobs.sql` — auth→profile trigger, jobs outbox with
+  `FOR UPDATE SKIP LOCKED`, exponential-backoff retries, dead-lettering.
+- `..._cron.sql` — pg_cron + pg_net replacing convex/crons.ts.
+
+Two schema additions beyond a straight port:
+- **`payments`** — binds a Paystack reference to its buyer at initialise time.
+  The Convex `verifyPass` never checked that a reference belonged to the caller.
+- **`jobs`** — durable replacement for `ctx.scheduler.runAfter`, which had no
+  retries or audit trail.
+
+### Security — 20/20 checks pass (`pnpm verify:security`)
+`predictions` is granted to **no client role**. Picks come only from
+SECURITY DEFINER RPCs that reproduce `getAccessState`. Verified against the
+running database as a real client:
+
+```
+anon cannot SELECT predictions directly                   blocked: 42501
+signed-in non-payer cannot SELECT predictions directly    blocked: 42501
+signed-in non-payer cannot read pick reasoning column     blocked: 42501
+locked-out user gets 0 picks but a true total             picks=0 total=12
+first-day user gets exactly 2 free picks                  picks=2
+pass holder gets every pick                               picks=12 total=12
+suspended user is blocked despite holding an active pass  picks=0
+guest gets 0 picks                                        picks=0
+guest can read settled results, and only settled ones     rows=50
+user cannot promote themselves to super-admin             blocked
+suspended user cannot lift their own suspension           is_suspended=true
+non-admin cannot read the engine system prompt            rows=0
+admin CAN read the engine system prompt                   rows=1
+user cannot see another user's passes                     rows=0
+user sees only their own payments                         ownOnly=true
+unauthenticated cannot trigger Office actions             HTTP 401
+cron endpoints reject a bad bearer secret                 HTTP 401
+non-admin cannot read the job queue                       rows=0
+non-admin cannot claim jobs from the queue                blocked: 42501
+user cannot self-activate a pass via RPC                  blocked: 42501
+```
+
+`is_super_admin` lives in `profiles`, never `user_metadata` (which is
+user-writable and would hand anyone the Office panel). A trigger freezes the
+privilege columns against self-promotion.
+
+### Seed
+60 settled picks over 30 days (~63% strike), 3 live fixtures, 14 for today
+across all twelve markets, 10 awaiting the pipeline, full engine config with
+real weights, a pending tuning report, passes/orders/slips, and five demo
+accounts — one per access tier, password `moonodds`.
+
+### App surfaces
+- Guest landing — hero, live stats, pricing, track record gated after 10 rows.
+  **Server-rendered, so it's crawlable** (the Vite version wasn't).
+- Authenticated picks home — stat tiles, status/league/market filters, pick
+  grid, paywall, extra-picks section.
+- Pick detail modal with reasoning, tags, triggered filters, alt market.
+- Sign in / sign up with server actions.
+- Dev-only role switcher for jumping between access tiers.
+
+### Verified end to end
+- `pnpm build` — production build clean, 14 routes.
+- `pnpm verify:security` — 20/20.
+- Cron chain: pg_cron → pg_net → route handler, with bearer-secret rejection.
+- Jobs outbox: enqueue → claim → run → complete.
+
+### Environment
+`.env.example` maps every Hercules-era variable to its replacement with notes.
+`.env.local` is populated for local Supabase.
+
+---
+
+### Backend — done
+Provider abstraction (`src/lib/providers/`) with mock and live implementations
+behind one `MOCK_PROVIDERS` switch. Six cron routes, all exercised end to end:
+
+```
+fetch-fixtures   {"ok":true,"leagues":6,"fixtures":8,"upserted":8}
+clv-check        {"ok":true,"reviewed":40,"flagged":19}
+drain-jobs       {"ok":true,"claimed":1,"done":1,"failed":0}
+```
+
+Anthropic port drops the gateway prefix, removes `temperature` (rejected on
+current models), and replaces the JSON-coaxing retry loop with structured
+outputs. Grading was fixed rather than ported verbatim — see below.
+
+### Office admin panel — done
+All 7 tabs: pipeline (run any stage, live job queue), predictions (paginated
+through the same gated RPC), grade (with a "needs review" queue), catalog,
+AI engine (weights with sum validation, system prompt editor), reports
+(approve/reject with server-side application), users (suspend/reinstate).
+Guarded server-side before any admin UI reaches the browser.
+
+## Not done
+
+1. **`/slips` and `/profile` pages** — query hooks exist (`useSlips`,
+   `useProfile`, `useNotificationPreferences`), pages don't.
+2. **Checkout pages** — `/api/checkout/day-pass` works (POST init, PATCH
+   verify); the `/checkout/*` pages that call it aren't built. Extra-picks
+   checkout route is also unbuilt, though `activate_extra_picks` RPC exists.
+3. **OTP flow for system-prompt edits** — the original gated prompt changes
+   behind an emailed code. Here it's admin-guarded but not OTP-gated.
+
+## Known issues
+
+- **Authenticated UI not visually confirmed.** Browser automation couldn't
+  submit the sign-in form (no POST reached the server), so the signed-in views
+  are unverified in a browser. The data layer behind them is proven by the 15
+  checks above, but the rendering is not. Sign in manually with
+  `new@moonodds.test` / `moonodds` to confirm.
+- **ROI reads ~118%**, which is not believable. The formula is ported verbatim
+  from the Convex `getEngineStats` (`(wins × 1.8 − losses) / staked`), which
+  assumes flat 1.8 odds on every winner. Inherited, not introduced — worth
+  replacing with real odds from `odds_snapshots`.
+- **Grading was corrected, not ported verbatim.** The Convex original returned
+  `false` for markets it couldn't evaluate, so corners and half-goals picks were
+  written as LOSSES despite the code comments saying they should be flagged for
+  review; draw-no-bet draws were also graded as losses instead of voiding. Here
+  half-time markets grade properly (we store the HT score), draw-no-bet and
+  handicap push both void, and genuinely ungradeable markets return
+  `review_needed` and surface in the Office. This is a deliberate deviation from
+  a straight port — flagging it because it changes settled outcomes.
