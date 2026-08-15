@@ -235,6 +235,40 @@ export function useLeagueOptions(enabled: boolean) {
 }
 
 /** The user's saved slips, with legs. */
+/**
+ * Discard a whole slip.
+ *
+ * Goes through an RPC rather than a PostgREST delete so ownership is checked in
+ * one place and the legs cascade predictably.
+ */
+export function useDeleteSlip() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (slipId: string) => {
+      const supabase = createClient();
+      const { error } = await supabase.rpc("delete_slip", { p_slip_id: slipId });
+      if (error) throw new Error(error.message);
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: keys.slips }),
+  });
+}
+
+/**
+ * Drop one leg. The RPC re-derives the parent's leg count, combined odds and
+ * type, and removes the slip entirely if that was the last leg.
+ */
+export function useRemoveSlipLeg() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (legId: string) => {
+      const supabase = createClient();
+      const { error } = await supabase.rpc("remove_slip_leg", { p_leg_id: legId });
+      if (error) throw new Error(error.message);
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: keys.slips }),
+  });
+}
+
 export function useSlips() {
   return useQuery({
     queryKey: keys.slips,

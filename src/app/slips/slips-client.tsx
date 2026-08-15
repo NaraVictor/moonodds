@@ -1,7 +1,9 @@
 "use client";
 
-import { Receipt, Check, X, Clock } from "@/components/ui/icons";
-import { useSlips } from "@/lib/queries";
+import { useState } from "react";
+import Link from "next/link";
+import { Receipt, Check, X, Clock, Trash2 } from "@/components/ui/icons";
+import { useSlips, useDeleteSlip, useRemoveSlipLeg } from "@/lib/queries";
 import { LinkButton } from "@/components/ui/link-button";
 
 type Leg = {
@@ -33,6 +35,9 @@ const SLIP_STATE = {
 
 export function SlipsClient() {
   const { data, isPending } = useSlips();
+  const deleteSlip = useDeleteSlip();
+  const removeLeg = useRemoveSlipLeg();
+  const [confirmingDelete, setConfirmingDelete] = useState<string | null>(null);
   const slips = (data ?? []) as unknown as Slip[];
 
   const settled = slips.filter((s) => s.status === "won" || s.status === "lost");
@@ -88,6 +93,10 @@ export function SlipsClient() {
             const st = SLIP_STATE[slip.status];
             const legs = slip.slip_legs ?? [];
             const wonLegs = legs.filter((l) => l.status === "won").length;
+            // Editable only while the whole slip is untouched by results.
+            const editable =
+              (slip.status === "open" || slip.status === "confirmed") &&
+              legs.every((l) => l.status === "pending");
 
             return (
               <article
@@ -150,9 +159,13 @@ export function SlipsClient() {
                       key={l.id}
                       className="flex items-center justify-between gap-3 px-6 py-3"
                     >
-                      <span className="truncate font-mono text-[11px] text-muted">
-                        {l.prediction_id.slice(0, 8)}
-                      </span>
+                      <Link
+                        href={`/predictions/${l.prediction_id}`}
+                        className="min-w-0 flex-1 truncate text-[12px] underline-offset-2 hover:underline"
+                        style={{ color: "var(--link)" }}
+                      >
+                        View prediction
+                      </Link>
                       <div className="flex items-center gap-3">
                         <span className="numeral text-sm">
                           {Number(l.odds).toFixed(2)}
@@ -170,16 +183,66 @@ export function SlipsClient() {
                         >
                           {l.status}
                         </span>
+
+                        {/* Legs can only be dropped while nothing has settled —
+                            editing a slip after a result would rewrite your own
+                            history. The server enforces it; this just hides a
+                            control that would always fail. */}
+                        {editable && (
+                          <button
+                            type="button"
+                            disabled={removeLeg.isPending}
+                            onClick={() => removeLeg.mutate(l.id)}
+                            aria-label="Remove this leg"
+                            className="press flex h-6 w-6 flex-none items-center justify-center rounded-full text-muted hover:bg-surface-secondary hover:text-foreground disabled:opacity-40"
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        )}
                       </div>
                     </div>
                   ))}
                 </div>
 
-                {legs.length > 0 && (
-                  <p className="px-6 py-3 text-[11px] text-muted">
-                    {wonLegs} of {legs.length} legs landed
-                  </p>
-                )}
+                <div className="flex items-center justify-between gap-3 px-6 py-3">
+                  {legs.length > 0 ? (
+                    <p className="text-[11px] text-muted">
+                      {wonLegs} of {legs.length} legs landed
+                    </p>
+                  ) : (
+                    <span />
+                  )}
+
+                  {confirmingDelete === slip.id ? (
+                    <span className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        disabled={deleteSlip.isPending}
+                        onClick={() => deleteSlip.mutate(slip.id)}
+                        className="press rounded-full px-3 py-1.5 text-[11px] font-semibold disabled:opacity-40"
+                        style={{ background: "var(--lost-wash)", color: "var(--lost-ink)" }}
+                      >
+                        Really delete
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setConfirmingDelete(null)}
+                        className="press rounded-full px-3 py-1.5 text-[11px] font-semibold text-muted"
+                      >
+                        Cancel
+                      </button>
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setConfirmingDelete(slip.id)}
+                      className="press inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-semibold text-muted hover:text-foreground"
+                    >
+                      <Trash2 className="h-3 w-3" />
+                      Delete slip
+                    </button>
+                  )}
+                </div>
               </article>
             );
           })}
