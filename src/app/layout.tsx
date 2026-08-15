@@ -3,6 +3,7 @@ import { Sora, Plus_Jakarta_Sans } from "next/font/google";
 import { Providers } from "./providers";
 import { BypassBanner } from "@/components/dev/bypass-banner";
 import { AgeGate } from "@/components/legal/age-gate";
+import { THEME_INIT_SCRIPT } from "@/lib/theme";
 import { BetSlipFab, BetSlipSheet } from "@/components/slip/bet-slip";
 import "./globals.css";
 
@@ -43,7 +44,6 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   themeColor: "#f8faf8",
-  colorScheme: "light",
 };
 
 export default function RootLayout({
@@ -52,12 +52,18 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
+    /* No data-theme here: the inline script below sets it from the stored
+       preference before first paint, and leaves it off entirely for "system"
+       so prefers-color-scheme decides. Hard-coding light was what made the
+       dark palette unreachable. */
     <html
       lang="en"
-      data-theme="light"
       className={`${display.variable} ${body.variable} h-full`}
       suppressHydrationWarning
     >
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
+      </head>
       <body className="min-h-full flex flex-col bg-background text-foreground">
         <BypassBanner />
         <AgeGate />

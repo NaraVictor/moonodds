@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { Toggle } from "@/components/ui/toggle";
 import { Alert } from "@/components/ui/alert";
-import { Bell, Mail, MessageSquare, ShieldCheck, Check } from "@/components/ui/icons";
+import { Bell, Mail, MessageSquare, ShieldCheck, Check, Sun, Moon, Monitor } from "@/components/ui/icons";
+import { useTheme, type ThemePref } from "@/lib/theme";
 import {
   useAccessState,
   useNotificationPreferences,
@@ -24,12 +25,19 @@ const ALERTS = [
   { key: "high_confidence_alert", label: "High confidence", detail: "When a call clears 95%" },
 ] as const;
 
+const THEMES: { v: ThemePref; label: string; Icon: typeof Sun }[] = [
+  { v: "light", label: "Light", Icon: Sun },
+  { v: "dark", label: "Dark", Icon: Moon },
+  { v: "system", label: "System", Icon: Monitor },
+];
+
 export function ProfileClient() {
   const { data: profile, isPending } = useProfile();
   const { data: prefs } = useNotificationPreferences();
   const { data: access } = useAccessState();
   const updatePrefs = useUpdateNotificationPreferences();
   const updatePhone = useUpdatePhone();
+  const { theme, choose: chooseTheme } = useTheme();
 
   const [phone, setPhone] = useState<string | null>(null);
   const prefsRow = prefs as Record<string, boolean> | null;
@@ -163,6 +171,49 @@ export function ProfileClient() {
                 {updatePhone.isSuccess && phone === null ? "Saved" : "Save"}
               </button>
             </div>
+          </div>
+        </section>
+
+        {/* --------------------- appearance --------------------- */}
+        <section className="rounded-[1.75rem] border border-border bg-surface p-6">
+          <h2 className="flex items-center gap-2 text-[15px] font-semibold">
+            <Sun className="h-4 w-4 text-muted" />
+            Appearance
+          </h2>
+          <p className="mt-1 text-[13px] text-muted">
+            Saved on this device — a phone at night and a desk at noon can differ.
+          </p>
+
+          <div
+            className="mt-4 flex gap-2"
+            role="radiogroup"
+            aria-label="Colour theme"
+          >
+            {THEMES.map(({ v, label, Icon }) => {
+              const on = theme === v;
+              return (
+                <button
+                  key={v}
+                  type="button"
+                  role="radio"
+                  aria-checked={on}
+                  onClick={() => chooseTheme(v)}
+                  className="press flex flex-1 cursor-pointer flex-col items-center gap-1.5 rounded-xl border px-3 py-3 text-xs font-medium transition-colors"
+                  style={
+                    on
+                      ? {
+                          borderColor: "transparent",
+                          background: "var(--accent-wash)",
+                          color: "var(--accent)",
+                        }
+                      : { borderColor: "var(--border)", color: "var(--muted)" }
+                  }
+                >
+                  <Icon className="h-5 w-5" />
+                  {label}
+                </button>
+              );
+            })}
           </div>
         </section>
 
