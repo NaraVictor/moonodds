@@ -46,7 +46,25 @@ Here the Catalog tab lists leagues and teams and nothing else.
 fetch covers. Right now that's only editable by writing to
 `ai_engine_config.selected_league_ids` directly in SQL.
 
-## 3. Manual prediction management
+## ~~3 + 4. Manual prediction management & result entry~~ — DONE
+
+Two Office actions, both audited:
+
+- **`setFixtureResult`** — enter a score; it settles the fixture and re-grades
+  every pending pick on it **through the same `gradePrediction()` the cron
+  uses**, so a manual correction can never diverge from automatic grading.
+  Stamps `manual_override` and the operator's identity.
+- **`overridePrediction`** — force won/lost/void. Requires a reason of at least
+  3 characters (server-enforced) and records it with the actor. An override with
+  no audit trail is worse than no override, because nobody can judge it later.
+
+Verified: entry settled a fixture and graded its pick to `won` with
+`override=true`; a 1-character reason was rejected; a real one recorded
+`void | Fixture abandoned at 70 minutes — <actor>`.
+
+Also added **Fetch stats** as a pipeline stage button.
+
+## ~~3b. Original gap description (kept for context)~~
 
 Original: `createPrediction` `updatePrediction` `deletePrediction`
 `insertPrediction` and `prediction-form-dialog.tsx`.
@@ -146,9 +164,9 @@ clearing 9.5. Verified: job claimed and completed.
 
 ## Suggested order
 
-1. **Bet slip builder** — restores a core loop; the backend is already done.
-2. **Fixture stats fetching** — without it the engine reasons on nothing real.
-3. **Manual result entry + prediction override** — the operator escape hatches.
-4. **Catalog CRUD**, starting with `setSelectedLeagues`.
+1. ~~Bet slip builder~~ — done.
+2. ~~Fixture stats fetching~~ — done.
+3. ~~Manual result entry + prediction override~~ — done.
+4. **Catalog CRUD**, starting with `setSelectedLeagues` — NEXT.
 5. Age gate (compliance).
 6. Config lifecycle, pass grant/revoke, personal stats, league performance.

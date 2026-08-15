@@ -217,6 +217,7 @@ export function OfficeClient({
 
 const STAGES = [
   { action: "fetchFixtures", label: "Fetch fixtures", hint: "Pull today's matches from the feed" },
+  { action: "fetchStats", label: "Fetch stats", hint: "Form, H2H and season numbers the engine reads" },
   { action: "generatePicks", label: "Generate picks", hint: "Run the engine over today's board" },
   { action: "gradeResults", label: "Grade results", hint: "Settle anything that has finished" },
   { action: "clvCheck", label: "CLV check", hint: "Flag lines that moved against us" },
@@ -435,6 +436,25 @@ function GradePanel() {
   const { data, isPending } = useAdminPredictions(0);
   const rows = (data?.rows ?? []) as Pick[];
   const needsReview = rows.filter((p) => p.status === "review_needed");
+  const unsettled = rows.filter(
+    (p) => p.status === "pending" || p.status === "review_needed",
+  );
+
+  const [target, setTarget] = useState<Pick | null>(null);
+  const [hg, setHg] = useState("");
+  const [ag, setAg] = useState("");
+  const [reason, setReason] = useState("");
+
+  function submitResult() {
+    if (!target) return;
+    action.mutate({
+      action: "setFixtureResult",
+      fixtureId: target.fixture.id,
+      homeGoals: Number(hg),
+      awayGoals: Number(ag),
+    });
+    setTarget(null); setHg(""); setAg("");
+  }
 
   return (
     <div className="space-y-4">
@@ -457,6 +477,120 @@ function GradePanel() {
           handicap pushes void rather than losing. Anything genuinely
           ungradeable is flagged below instead of being written off.
         </p>
+      </Panel>
+
+      <Panel
+        title="Enter a result manually"
+        description="When the feed is wrong or a market can't settle itself. The score re-grades every pending pick on that fixture through the same grader the cron uses, so a manual fix can't diverge from automatic grading."
+      >
+        {isPending ? (
+          <Loading rows={2} />
+        ) : !unsettled.length ? (
+          <Empty>Nothing unsettled.</Empty>
+        ) : (
+          <div className="space-y-3">
+            <select
+              value={target?.id ?? ""}
+              onChange={(e) =>
+                setTarget(unsettled.find((p) => p.id === e.target.value) ?? null)
+              }
+              aria-label="Fixture to settle"
+              className="h-11 w-full rounded-xl border border-field-border bg-field px-3 text-sm"
+            >
+              <option value="">Choose a fixture…</option>
+              {unsettled.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {teamShort(p.homeTeam)} v {teamShort(p.awayTeam)} — {p.league.name}
+                </option>
+              ))}
+            </select>
+
+            {target && (
+              <div className="rise flex flex-wrap items-end gap-3 rounded-2xl bg-surface-secondary p-4">
+                <label className="space-y-1.5">
+                  <span className="label">{teamShort(target.homeTeam)}</span>
+                  <input
+                    type="number" min="0" max="30" value={hg}
+                    onChange={(e) => setHg(e.target.value)}
+                    className="h-11 w-20 rounded-xl border border-field-border bg-field px-3 text-center font-mono"
+                  />
+                </label>
+                <label className="space-y-1.5">
+                  <span className="label">{teamShort(target.awayTeam)}</span>
+                  <input
+                    type="number" min="0" max="30" value={ag}
+                    onChange={(e) => setAg(e.target.value)}
+                    className="h-11 w-20 rounded-xl border border-field-border bg-field px-3 text-center font-mono"
+                  />
+                </label>
+                <button
+                  type="button"
+                  disabled={hg === "" || ag === "" || action.isPending}
+                  onClick={submitResult}
+                  className="press ml-auto h-11 rounded-full bg-accent px-5 text-[13px] font-semibold text-accent-foreground disabled:opacity-40"
+                >
+                  Settle &amp; grade
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+      </Panel>
+
+      <Panel
+        title="Override a prediction"
+        description="Force an outcome when grading got it wrong. Every override records who did it and why."
+      >
+        {!unsettled.length && !rows.length ? (
+          <Empty>Nothing to override.</Empty>
+        ) : (
+          <div className="space-y-3">
+            <input
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              placeholder="Why is this being overridden?"
+              aria-label="Override reason"
+              className="h-11 w-full rounded-xl border border-field-border bg-field px-4 text-sm placeholder:text-field-placeholder"
+            />
+            <ul className="divide-y divide-separator">
+              {rows.slice(0, 8).map((p) => (
+                <li key={p.id} className="flex flex-wrap items-center gap-2 py-3 first:pt-0">
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-[13px] font-semibold">
+                      {teamShort(p.homeTeam)} v {teamShort(p.awayTeam)}
+                    </p>
+                    <p className="truncate text-[11px] text-muted">
+                      {formatMarket(p.predictionType, p.predictedValue)} · {p.status}
+                    </p>
+                  </div>
+                  {(["won", "lost", "void"] as const).map((st) => (
+                    <button
+                      key={st}
+                      type="button"
+                      disabled={reason.trim().length < 3 || action.isPending}
+                      onClick={() =>
+                        action.mutate({
+                          action: "overridePrediction",
+                          predictionId: p.id,
+                          status: st,
+                          reason: reason.trim(),
+                        })
+                      }
+                      className="press rounded-full border border-border px-3 py-1.5 text-[11px] font-semibold capitalize disabled:opacity-30"
+                    >
+                      {st}
+                    </button>
+                  ))}
+                </li>
+              ))}
+            </ul>
+            {reason.trim().length < 3 && (
+              <p className="text-[11px] text-muted">
+                Enter a reason to enable the override buttons.
+              </p>
+            )}
+          </div>
+        )}
       </Panel>
 
       <Panel
