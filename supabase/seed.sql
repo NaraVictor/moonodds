@@ -143,6 +143,27 @@ insert into teams (league_id, name, short_name, slug, external_id) values
   ('a0000001-0000-4000-8000-000000000006', 'AZ Alkmaar',        'AZ',  'az-alkmaar',         201)
 on conflict (slug) do nothing;
 
+-- ---------------------------------------------------------------------------
+-- Crest and badge artwork
+--
+-- Derived from the API-Football id rather than written out 43 times, so any
+-- row added above gets its artwork for free.
+--
+-- This lives in the seed, not in a migration, because `supabase db reset` runs
+-- every migration BEFORE the seed: the one-off backfill in
+-- 20260815140000_crest_backfill.sql therefore executes against empty tables and
+-- can only ever help rows that predate it. Anything the seed creates has to
+-- populate its own.
+-- ---------------------------------------------------------------------------
+
+update leagues
+   set logo = 'https://media.api-sports.io/football/leagues/' || external_id || '.png'
+ where external_id is not null and logo is null;
+
+update teams
+   set logo = 'https://media.api-sports.io/football/teams/' || external_id || '.png'
+ where external_id is not null and logo is null;
+
 insert into tipsters (id, display_name, slug, is_active) values
   ('b0000001-0000-4000-8000-000000000001', 'MoonOdds Quant', 'moonodds-quant', true)
 on conflict (id) do nothing;

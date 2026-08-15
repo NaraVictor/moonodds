@@ -58,7 +58,7 @@ function Row({ pick }: { pick: Pick }) {
     <li>
       <Link
         href={`/predictions/${pick.id}`}
-        className="flex items-center gap-2.5 rounded-xl px-2 py-2 transition-colors hover:bg-surface-secondary"
+        className="flex items-center gap-2.5 rounded-xl px-2 py-3.5 transition-colors hover:bg-surface-secondary"
       >
         <span className="flex flex-none items-center -space-x-1.5">
           <TeamCrest name={teamShort(pick.homeTeam)} logo={pick.homeTeam?.logo} size={20} />
@@ -79,15 +79,29 @@ function Row({ pick }: { pick: Pick }) {
   );
 }
 
-export function ActivityPanel({ picks }: { picks: Pick[] }) {
+export function ActivityPanel({
+  picks,
+  excludeIds = [],
+}: {
+  picks: Pick[];
+  /**
+   * Picks already shown in the hero slider beside this panel. Repeating them
+   * here would spend a third of the column restating what's immediately to its
+   * left.
+   */
+  excludeIds?: string[];
+}) {
+  const skip = new Set(excludeIds);
+
   // Live first, then most recently kicked off. A finished match that ended an
   // hour ago is more interesting than one from this morning.
   const rows = [...picks]
     .filter(
       (p) =>
-        p.fixture.status === "live" ||
-        p.status === "won" ||
-        p.status === "lost",
+        !skip.has(p.id) &&
+        (p.fixture.status === "live" ||
+          p.status === "won" ||
+          p.status === "lost"),
     )
     .sort((a, b) => {
       const liveDelta =
@@ -95,7 +109,7 @@ export function ActivityPanel({ picks }: { picks: Pick[] }) {
       if (liveDelta !== 0) return liveDelta;
       return new Date(b.fixture.date).getTime() - new Date(a.fixture.date).getTime();
     })
-    .slice(0, 8);
+    .slice(0, 5);
 
   const liveCount = rows.filter((p) => p.fixture.status === "live").length;
 

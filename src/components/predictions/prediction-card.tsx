@@ -166,7 +166,7 @@ export function PredictionCard({
           py matches the crest block's py-6, so the panel sits on the same
           vertical rhythm as the match above it rather than looking pinched. */}
       <div
-        className="mx-3 flex items-center justify-between gap-4 rounded-2xl px-4 py-6"
+        className="mx-auto flex w-[90%] items-center justify-between gap-4 rounded-2xl px-4 py-[1.425rem]"
         style={{
           background: feature
             ? "rgba(255,255,255,0.06)"

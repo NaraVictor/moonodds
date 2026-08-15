@@ -230,20 +230,6 @@ export function PicksHome() {
         </div>
       </header>
 
-      {/* ------------------------- hero row -------------------------
-          Two thirds of the width for the day's shortlist, one third for what's
-          already happening. Side by side because they answer different
-          questions — "what should I look at" and "how are we doing" — and a
-          visitor forms a view of the product from both at once. */}
-      {hero.length > 0 && (
-        <div className="mb-8 grid gap-4 xl:grid-cols-3 xl:items-stretch">
-          <div className="xl:col-span-2">
-            <HeroSlider picks={hero} onSummary={setSummary} />
-          </div>
-          <ActivityPanel picks={all} />
-        </div>
-      )}
-
       {/* Mobile: the rail collapses behind a button rather than eating the fold. */}
       <button
         type="button"
@@ -273,6 +259,22 @@ export function PicksHome() {
         </aside>
 
         <div>
+          {/* ------------------------- hero row -------------------------
+              Lives inside the content column, not above it, so the filter rail
+              runs the full height of the page beside everything it filters.
+              Two thirds for the day's shortlist, one third for what's already
+              happening: they answer different questions — "what should I look
+              at" and "how are we doing" — and a visitor forms a view of the
+              product from both at once. */}
+          {hero.length > 0 && (
+            <div className="mb-8 grid gap-4 xl:grid-cols-3 xl:items-stretch">
+              <div className="xl:col-span-2">
+                <HeroSlider picks={hero} onSummary={setSummary} />
+              </div>
+              <ActivityPanel picks={all} excludeIds={hero.map((p) => p.id)} />
+            </div>
+          )}
+
           <p className="mb-3 text-[13px] text-muted">
             Showing <span className="numeral font-semibold">{visible.length}</span>
             {visible.length !== all.length && ` of ${all.length}`}{" "}
