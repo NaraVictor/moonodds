@@ -301,6 +301,26 @@ ${briefs.join("\n")}`;
     payload: { count: written },
   });
 
+  // High-confidence calls get their own alert, matching the profile toggle.
+  const standout = qualifying.filter((p) => p.confidenceScore >= 9.5);
+  if (standout.length) {
+    await db.from("jobs").insert(
+      standout.map((p) => {
+        const f = fixtures[p.fixtureIndex];
+        return {
+          kind: "high_confidence_pick",
+          payload: {
+            home: asOne(f?.home)?.name ?? "Home",
+            away: asOne(f?.away)?.name ?? "Away",
+            league: asOne(f?.leagues)?.name ?? "",
+            market: p.predictionType,
+            confidence: p.confidenceScore,
+          },
+        };
+      }),
+    );
+  }
+
   return { generated: written, considered: picks.length };
 }
 
@@ -444,6 +464,60 @@ async function handleJob(
             message: `MoonOdds: ${job.payload.count} new picks are live.`,
           });
         }
+      }
+      return;
+    }
+
+    case "high_confidence_pick": {
+      const { data: recipients } = await db
+        .from("notification_preferences")
+        .select("user_id, email_enabled, sms_enabled, profiles(email, phone)")
+        .eq("high_confidence_alert", true);
+
+      const p = job.payload as {
+        home: string; away: string; league: string; market: string; confidence: number;
+      };
+
+      for (const r of recipients ?? []) {
+        const profile = asOne(r.profiles) as { email: string | null; phone: string | null } | null;
+        const line = `${p.home} v ${p.away} · ${p.market} · ${Math.round(p.confidence * 10)}% confidence`;
+        if (r.email_enabled && profile?.email) {
+          await messaging.sendEmail({
+            to: profile.email,
+            subject: `High-confidence call: ${p.home} v ${p.away}`,
+            html: `<p>${line}</p><p>${p.league}</p>`,
+          });
+        }
+        if (r.sms_enabled && profile?.phone) {
+          await messaging.sendSms({ to: profile.phone, message: `MoonOdds: ${line}` });
+        }
+      }
+      return;
+    }
+
+    case "slip_settled": {
+      const p = job.payload as { userId: string; slipId: string; status: string; legs: number };
+
+      const { data: pref } = await db
+        .from("notification_preferences")
+        .select("email_enabled, sms_enabled, profiles(email, phone)")
+        .eq("user_id", p.userId)
+        .eq("slip_result_alert", true)
+        .maybeSingle();
+
+      if (!pref) return;
+      const profile = asOne(pref.profiles) as { email: string | null; phone: string | null } | null;
+      const line = `Your ${p.legs}-leg slip settled: ${p.status.toUpperCase()}`;
+
+      if (pref.email_enabled && profile?.email) {
+        await messaging.sendEmail({
+          to: profile.email,
+          subject: line,
+          html: `<p>${line}</p>`,
+        });
+      }
+      if (pref.sms_enabled && profile?.phone) {
+        await messaging.sendSms({ to: profile.phone, message: `MoonOdds: ${line}` });
       }
       return;
     }
