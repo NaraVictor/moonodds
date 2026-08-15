@@ -258,17 +258,27 @@ export function PicksHome() {
           />
         </aside>
 
-        <div>
+        {/* min-w-0 again, and for the same reason as the slider: the table
+            declares min-w-[52rem], which without this becomes the grid column's
+            minimum and drags the whole page wider than the phone. With it, the
+            column stays put and the table scrolls inside its own
+            overflow-x-auto wrapper, which is what that wrapper was for. */}
+        <div className="min-w-0">
           {/* ------------------------- hero row -------------------------
               Lives inside the content column, not above it, so the filter rail
               runs the full height of the page beside everything it filters.
               Two thirds for the day's shortlist, one third for what's already
               happening: they answer different questions — "what should I look
               at" and "how are we doing" — and a visitor forms a view of the
-              product from both at once. */}
+              product from both at once.
+
+              min-w-0 on the slider column is load-bearing, not decoration:
+              grid and flex children default to min-width:auto, so the three
+              `flex-none` slides inside the slider set a min-content width of
+              three viewports and force the whole page sideways on a phone. */}
           {hero.length > 0 && (
             <div className="mb-8 grid gap-4 xl:grid-cols-3 xl:items-stretch">
-              <div className="xl:col-span-2">
+              <div className="min-w-0 xl:col-span-2">
                 <HeroSlider picks={hero} onSummary={setSummary} />
               </div>
               <ActivityPanel picks={all} excludeIds={hero.map((p) => p.id)} />

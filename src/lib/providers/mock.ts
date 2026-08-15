@@ -1,6 +1,5 @@
 import type {
   AiProvider,
-  RawFixtureStats,
   EnginePick,
   FootballProvider,
   MessagingProvider,
@@ -95,7 +94,7 @@ export const mockFootball: FootballProvider = {
       const used = new Set<number>();
 
       for (let i = 0; i < count; i++) {
-        let h = Math.floor(rand() * teams.length);
+        const h = Math.floor(rand() * teams.length);
         let a = Math.floor(rand() * teams.length);
         while (a === h) a = (a + 1) % teams.length;
         if (used.has(h) || used.has(a)) continue;

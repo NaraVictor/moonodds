@@ -49,14 +49,32 @@ export function BetSlipFab() {
   );
 }
 
+/**
+ * Gate and body are separate components on purpose.
+ *
+ * The body used to live here behind an `if (!isOpen) return null`, which meant
+ * it stayed mounted across opens and needed an effect to clear the "saved"
+ * confirmation each time the sheet closed — a setState during an effect, and a
+ * cascading render to undo the previous one.
+ *
+ * Splitting it means the body mounts fresh on every open, so that state starts
+ * false because it is new rather than because something reset it. The
+ * escape-key and scroll-lock effects come along for the ride and no longer need
+ * to test `isOpen` themselves.
+ */
 export function BetSlipSheet() {
-  const { entries, remove, clear, combinedOdds, isOpen, setOpen } = useBetSlip();
+  const { isOpen } = useBetSlip();
+  if (!isOpen) return null;
+  return <SlipSheetBody />;
+}
+
+function SlipSheetBody() {
+  const { entries, remove, clear, combinedOdds, setOpen } = useBetSlip();
   const confirm = useConfirmSlip();
   const router = useRouter();
   const [done, setDone] = useState(false);
 
   useEffect(() => {
-    if (!isOpen) return;
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
     document.addEventListener("keydown", onKey);
     document.body.style.overflow = "hidden";
@@ -64,13 +82,7 @@ export function BetSlipSheet() {
       document.removeEventListener("keydown", onKey);
       document.body.style.overflow = "";
     };
-  }, [isOpen, setOpen]);
-
-  useEffect(() => {
-    if (!isOpen) setDone(false);
-  }, [isOpen]);
-
-  if (!isOpen) return null;
+  }, [setOpen]);
 
   async function save() {
     await confirm.mutateAsync({
@@ -213,7 +225,7 @@ export function BetSlipSheet() {
                     <p className="numeral mt-1 text-3xl">{combinedOdds.toFixed(2)}</p>
                   </div>
                   <p className="max-w-[11rem] text-right text-[11px] leading-snug text-muted">
-                    Indicative prices. MoonOdds doesn't take bets.
+                    Indicative prices. MoonOdds doesn&rsquo;t take bets.
                   </p>
                 </div>
 

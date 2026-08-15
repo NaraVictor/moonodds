@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Search, X, Lock } from "@/components/ui/icons";
 import { TeamCrest } from "@/components/predictions/team-crest";
@@ -52,6 +52,14 @@ export function SiteSearch() {
   const boxRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  /**
+   * The header mounts this twice — once inline for desktop, once as its own row
+   * for mobile — with CSS deciding which is shown. A hard-coded element id would
+   * therefore appear twice in the document, which is invalid and leaves
+   * aria-controls pointing at whichever the browser found first.
+   */
+  const listId = useId();
+
   // Only fetched once something is typed — the header shouldn't pull the whole
   // board on every page just in case.
   const { data } = usePicksByStatus("all");
@@ -66,13 +74,16 @@ export function SiteSearch() {
       .slice(0, 8);
   }, [data, query]);
 
-  // Cmd/Ctrl-K from anywhere.
+  // Cmd/Ctrl-K from anywhere. Both instances hear it, so each checks whether
+  // it's the one currently on screen before grabbing focus — otherwise the
+  // shortcut would focus a display:none input and appear to do nothing.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        if (!inputRef.current?.offsetParent) return;
         e.preventDefault();
         setOpen(true);
-        inputRef.current?.focus();
+        inputRef.current.focus();
       }
     };
     window.addEventListener("keydown", onKey);
@@ -118,7 +129,7 @@ export function SiteSearch() {
   const showList = open && query.trim().length >= 2;
 
   return (
-    <div ref={boxRef} className="relative w-full max-w-md">
+    <div ref={boxRef} className="relative w-full md:max-w-md">
       <div className="relative">
         <Search
           className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2"
@@ -129,7 +140,7 @@ export function SiteSearch() {
           type="search"
           role="combobox"
           aria-expanded={showList}
-          aria-controls="site-search-results"
+          aria-controls={listId}
           aria-label="Search teams, leagues and markets"
           placeholder="Search teams, leagues…"
           value={query}
@@ -169,7 +180,7 @@ export function SiteSearch() {
 
       {showList && (
         <div
-          id="site-search-results"
+          id={listId}
           role="listbox"
           className="rise absolute left-0 right-0 top-12 z-50 overflow-hidden rounded-[1rem] border border-border bg-surface py-1.5"
           style={{ boxShadow: "var(--shadow-lift)" }}

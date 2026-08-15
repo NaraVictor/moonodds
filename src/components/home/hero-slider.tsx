@@ -30,7 +30,11 @@ export function HeroSlider({
   const go = (next: number) => setI(((next % count) + count) % count);
 
   return (
-    <section className="mb-8" aria-roledescription="carousel" aria-label="Top predictions today">
+    <section
+      className="mb-8 min-w-0"
+      aria-roledescription="carousel"
+      aria-label="Top predictions today"
+    >
       <div className="mb-3 flex items-end justify-between gap-4">
         <div>
           <span className="label flex items-center gap-1.5">

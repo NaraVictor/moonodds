@@ -4,9 +4,9 @@ import {
   createContext,
   useCallback,
   useContext,
-  useEffect,
   useMemo,
   useState,
+  useSyncExternalStore,
   type ReactNode,
 } from "react";
 import type { Pick } from "./types";
@@ -56,38 +56,69 @@ export function legOdds(pick: Pick): number {
   return pick.odds && pick.odds > 1 ? pick.odds : 1.9;
 }
 
+/* ---------------------- localStorage as the store ---------------------- */
+
+/**
+ * The slip lives in localStorage, and React subscribes to it.
+ *
+ * It used to be React state mirrored INTO storage by a pair of effects: one to
+ * restore on mount, one to write on every change. That needed a `hydrated` flag
+ * to stop the write effect clobbering storage before the read had run, and the
+ * restore was a setState during an effect — a cascading render, and the thing
+ * the lint rule is right to complain about.
+ *
+ * Inverting it removes all three problems. Storage is the single source of
+ * truth, useSyncExternalStore handles the server/client split properly (the
+ * server snapshot is empty, so there's no hydration mismatch), and persistence
+ * is no longer a separate step that can fall out of sync with the state.
+ */
+
+const EMPTY: SlipEntry[] = [];
+
+let cache: SlipEntry[] | null = null;
+const listeners = new Set<() => void>();
+
+const today = () => new Date().toISOString().slice(0, 10);
+
+function read(): SlipEntry[] {
+  if (cache) return cache;
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    const saved = raw ? (JSON.parse(raw) as { day: string; entries: SlipEntry[] }) : null;
+    // Anything from a previous day is stale: those fixtures have kicked off.
+    cache = saved?.day === today() ? (saved.entries ?? EMPTY) : EMPTY;
+  } catch {
+    // Corrupt storage shouldn't break the app; start empty.
+    cache = EMPTY;
+  }
+  return cache;
+}
+
+/** No storage on the server, so SSR renders an empty slip. */
+function readServer(): SlipEntry[] {
+  return EMPTY;
+}
+
+function write(next: SlipEntry[]) {
+  cache = next;
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ day: today(), entries: next }));
+  } catch {
+    // Private mode / quota — the slip just won't survive a refresh.
+  }
+  for (const fn of listeners) fn();
+}
+
+function subscribe(fn: () => void) {
+  listeners.add(fn);
+  return () => {
+    listeners.delete(fn);
+  };
+}
+
 export function BetSlipProvider({ children }: { children: ReactNode }) {
-  const [entries, setEntries] = useState<SlipEntry[]>([]);
+  const entries = useSyncExternalStore(subscribe, read, readServer);
   const [isOpen, setOpen] = useState(false);
-  const [hydrated, setHydrated] = useState(false);
-
-  // Restore, discarding anything from a previous day.
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) {
-        const saved = JSON.parse(raw) as { day: string; entries: SlipEntry[] };
-        if (saved.day === new Date().toISOString().slice(0, 10)) {
-          setEntries(saved.entries ?? []);
-        }
-      }
-    } catch {
-      // Corrupt storage shouldn't break the app; start empty.
-    }
-    setHydrated(true);
-  }, []);
-
-  useEffect(() => {
-    if (!hydrated) return;
-    try {
-      localStorage.setItem(
-        STORAGE_KEY,
-        JSON.stringify({ day: new Date().toISOString().slice(0, 10), entries }),
-      );
-    } catch {
-      // Private mode / quota — the slip just won't survive a refresh.
-    }
-  }, [entries, hydrated]);
 
   /**
    * Adding does NOT open the sheet.
@@ -99,18 +130,17 @@ export function BetSlipProvider({ children }: { children: ReactNode }) {
    * an add belongs on the counter, not in a takeover.
    */
   const add = useCallback((pick: Pick) => {
-    setEntries((prev) => {
-      if (prev.some((e) => e.pick.id === pick.id)) return prev;
-      if (prev.length >= MAX_LEGS) return prev;
-      return [...prev, { pick, odds: legOdds(pick) }];
-    });
+    const prev = read();
+    if (prev.some((e) => e.pick.id === pick.id)) return;
+    if (prev.length >= MAX_LEGS) return;
+    write([...prev, { pick, odds: legOdds(pick) }]);
   }, []);
 
   const remove = useCallback((predictionId: string) => {
-    setEntries((prev) => prev.filter((e) => e.pick.id !== predictionId));
+    write(read().filter((e) => e.pick.id !== predictionId));
   }, []);
 
-  const clear = useCallback(() => setEntries([]), []);
+  const clear = useCallback(() => write(EMPTY), []);
 
   const has = useCallback(
     (predictionId: string) => entries.some((e) => e.pick.id === predictionId),

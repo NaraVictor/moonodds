@@ -87,6 +87,15 @@ export function SiteHeader({ signedIn }: { signedIn: boolean }) {
           )}
         </div>
       </div>
+
+      {/* On a phone the header bar has no room for search beside the logo and
+          the sign-in button, so it gets its own full-width row rather than
+          being hidden — search is how you reach a specific fixture, and a
+          marketplace that only offers it on desktop has hidden its index from
+          the majority of its traffic. */}
+      <div className="border-t border-separator px-5 py-2.5 md:hidden">
+        <SiteSearch />
+      </div>
     </header>
   );
 }
