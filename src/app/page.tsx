@@ -1,15 +1,21 @@
 import { createClient } from "@/lib/supabase/server";
-import { Landing } from "@/components/home/landing";
 import { PicksHome } from "@/components/home/picks-home";
 import { SiteHeader } from "@/components/layout/site-header";
+import { SiteFooter } from "@/components/layout/site-footer";
 import { BottomNav } from "@/components/layout/bottom-nav";
-import { BetSlipFab, BetSlipSheet } from "@/components/slip/bet-slip";
 import { RoleSwitcher } from "@/components/dev/role-switcher";
 
 /**
- * One route, two experiences — the marketing page for signed-out visitors and
- * the product for everyone else. Rendered on the server so the landing page is
- * crawlable, which the client-rendered Vite version never was.
+ * The board, for everyone.
+ *
+ * There is no marketing page any more. A visitor lands on the actual market —
+ * the Polymarket and Kalshi pattern — and sees every fixture we cover, with the
+ * AI call locked until they have access. Selling the product by showing it beats
+ * describing it, and it means the page a stranger arrives on is the same page a
+ * subscriber uses.
+ *
+ * Rendered on the server so the board is crawlable, which matters a great deal
+ * more now that it is the front door.
  */
 export default async function HomePage() {
   const supabase = await createClient();
@@ -20,9 +26,8 @@ export default async function HomePage() {
   return (
     <>
       <SiteHeader signedIn={!!user} />
-      {user ? <PicksHome /> : <Landing />}
-      <BetSlipFab />
-      <BetSlipSheet />
+      <PicksHome />
+      <SiteFooter />
       <BottomNav />
       {process.env.NODE_ENV !== "production" && <RoleSwitcher />}
     </>

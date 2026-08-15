@@ -1,10 +1,22 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Lock, TrendingUp, Sparkles, SlidersHorizontal } from "lucide-react";
+import {
+  LayoutGrid,
+  List,
+  Lock,
+  SlidersHorizontal,
+  Sparkles,
+  TrendingUp,
+  X,
+} from "lucide-react";
 import { PredictionCard } from "@/components/predictions/prediction-card";
-import { ReasoningSheet } from "@/components/predictions/reasoning-sheet";
+import { PredictionSummary } from "@/components/predictions/prediction-summary";
+import { HeroSlider } from "./hero-slider";
+import { PicksTable } from "./picks-table";
+import { EMPTY_FILTERS, FilterRail, type Filters } from "./filter-rail";
 import { LinkButton } from "@/components/ui/link-button";
+import { Alert } from "@/components/ui/alert";
 import {
   useAccessState,
   useEngineStats,
@@ -13,79 +25,116 @@ import {
   useStatusCounts,
   useTodaysPicks,
 } from "@/lib/queries";
-import { MARKET_LABELS, formatPercent } from "@/lib/format";
-import type { Market, Pick, StatusFilter } from "@/lib/types";
+import { useBoardView } from "@/lib/view-preference";
+import { formatPercent } from "@/lib/format";
+import { isUnlocked, type Market, type Pick, type UnlockedPick } from "@/lib/types";
 
-const FILTERS: { key: StatusFilter; label: string }[] = [
-  { key: "all", label: "All" },
-  { key: "upcoming", label: "Upcoming" },
-  { key: "live", label: "Live" },
-  { key: "settled", label: "Settled" },
-];
+/**
+ * The board.
+ *
+ * A marketplace, laid out like one: filters pinned left, inventory right, full
+ * width. The previous centred column was a feed — fine for a handful of picks a
+ * day, wrong for something you're meant to shop. Narrowing is the primary verb
+ * here, so the controls that narrow never leave the screen.
+ *
+ * Two readings of the same data. Cards are for browsing, the table for
+ * comparing, and which one you prefer is remembered on your profile.
+ */
 
 export function PicksHome() {
-  const [filter, setFilter] = useState<StatusFilter>("all");
-  const [market, setMarket] = useState<Market | "all">("all");
-  const [league, setLeague] = useState("all");
-  const [reasoning, setReasoning] = useState<Pick | null>(null);
-  const [showFilters, setShowFilters] = useState(false);
+  const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
+  const [summary, setSummary] = useState<UnlockedPick | null>(null);
+  const [railOpen, setRailOpen] = useState(false);
 
+  const { view, choose } = useBoardView();
   const { data: access } = useAccessState();
   const { data: stats } = useEngineStats();
   const { data: counts } = useStatusCounts();
   const today = useTodaysPicks();
-  const filtered = usePicksByStatus(filter);
+  const byStatus = usePicksByStatus(filters.status);
   const extra = useExtraPicks(access?.hasFullAccess === true);
 
-  const source = filter === "all" ? today.data : filtered.data;
-  const isPending = filter === "all" ? today.isPending : filtered.isPending;
+  const source = filters.status === "all" ? today.data : byStatus.data;
+  const isPending = filters.status === "all" ? today.isPending : byStatus.isPending;
+  const all = useMemo(() => source?.picks ?? [], [source]);
 
+  // Facet counts come from the status-filtered set, not the fully filtered one:
+  // a league's count shouldn't drop to zero because you ticked another league.
   const leagues = useMemo(() => {
-    const names = (source?.picks ?? [])
-      .map((p) => p.league.name)
-      .filter((n): n is string => Boolean(n));
-    return [...new Set(names)].sort();
-  }, [source]);
+    const m = new Map<string, number>();
+    for (const p of all) {
+      const n = p.league.name;
+      if (n) m.set(n, (m.get(n) ?? 0) + 1);
+    }
+    return [...m.entries()]
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+  }, [all]);
+
+  const markets = useMemo(() => {
+    const m = new Map<Market, number>();
+    for (const p of all) m.set(p.predictionType, (m.get(p.predictionType) ?? 0) + 1);
+    return [...m.entries()]
+      .map(([key, count]) => ({ key, count }))
+      .sort((a, b) => b.count - a.count);
+  }, [all]);
 
   const visible = useMemo(() => {
-    let list = source?.picks ?? [];
-    if (market !== "all") list = list.filter((p) => p.predictionType === market);
-    if (league !== "all") list = list.filter((p) => p.league.name === league);
-    return list;
-  }, [source, market, league]);
+    const now = Date.now();
+    return all.filter((p) => {
+      if (filters.leagues.length && !filters.leagues.includes(p.league.name ?? "")) return false;
+      if (filters.markets.length && !filters.markets.includes(p.predictionType)) return false;
+      if (filters.minConfidence > 0) {
+        // A locked pick has no confidence to compare, so a confidence filter
+        // necessarily excludes it rather than silently treating it as zero.
+        if (p.confidenceScore === undefined) return false;
+        if (p.confidenceScore < filters.minConfidence) return false;
+      }
+      if (filters.kickoff !== "any") {
+        const t = new Date(p.fixture.date).getTime();
+        if (t < now) return false;
+        if (filters.kickoff === "next3h" && t > now + 3 * 3600_000) return false;
+      }
+      return true;
+    });
+  }, [all, filters]);
 
-  const hidden = Math.max(
-    (source?.totalCount ?? 0) - (source?.picks.length ?? 0),
-    0,
+  // The hero shortlist ignores the filters on purpose — it's the day's headline,
+  // not a view of the current query.
+  const hero = useMemo(
+    () =>
+      all
+        .filter((p) => isUnlocked(p) && p.status === "pending")
+        .slice(0, 3),
+    [all],
   );
-  const showPaywall = !access?.hasFullAccess && hidden > 0;
 
-  const [hero, ...rest] = visible;
+  const lockedCount = all.filter((p) => p.locked).length;
+  const showPaywall = !access?.hasFullAccess && lockedCount > 0;
 
   return (
-    <main className="mx-auto w-full max-w-5xl px-5 py-8">
-      <ReasoningSheet
-        pick={reasoning}
-        isOpen={reasoning !== null}
-        onClose={() => setReasoning(null)}
+    <main className="mx-auto w-full max-w-[110rem] px-5 py-6 sm:px-8">
+      <PredictionSummary
+        pick={summary}
+        isOpen={summary !== null}
+        onClose={() => setSummary(null)}
       />
 
       {access?.isSuspended && (
-        <div className="mb-6 rounded-2xl border border-lost-edge bg-lost-wash p-5">
-          <p className="text-sm font-semibold" style={{ color: "var(--lost-ink)" }}>
-            Your account is suspended
-          </p>
-          <p className="mt-1 text-[13px] leading-relaxed text-muted">
-            Pick access is blocked while your account is suspended, including
-            days you have already paid for. Contact support to resolve it.
-          </p>
-        </div>
+        <Alert status="danger" title="Your account is suspended" className="mb-6">
+          Pick access is blocked while your account is suspended, including days
+          you have already paid for. Contact support to resolve it.
+        </Alert>
       )}
 
       {/* ------------------------- header ------------------------- */}
       <header className="mb-6 flex flex-wrap items-end justify-between gap-4">
         <div>
-          <span className="label flex items-center gap-1.5">
+          {/* The server and the browser disagree about locale and timezone, so
+              this string legitimately differs between the two renders. Telling
+              React to expect that is correct here; the alternative is a
+              placeholder that shifts layout on mount. */}
+          <span className="label flex items-center gap-1.5" suppressHydrationWarning>
             <Sparkles className="h-3 w-3" />
             {new Date().toLocaleDateString(undefined, {
               weekday: "long",
@@ -98,186 +147,169 @@ export function PicksHome() {
           </h1>
         </div>
 
-        {stats && stats.totalPicks > 0 && (
-          <dl className="flex items-center divide-x divide-border">
-            <div className="pr-5">
-              <dd className="numeral text-xl" style={{ color: "var(--success)" }}>
-                {formatPercent(stats.winRate, 0)}
-              </dd>
-              <dt className="label mt-0.5">Win rate</dt>
-            </div>
-            <div className="px-5">
-              <dd className="numeral text-xl">{stats.totalPicks}</dd>
-              <dt className="label mt-0.5">Settled</dt>
-            </div>
-          </dl>
-        )}
+        <div className="flex flex-wrap items-center gap-4">
+          {stats && stats.totalPicks > 0 && (
+            <dl className="flex items-center divide-x divide-border">
+              <div className="pr-5">
+                <dd className="numeral text-xl" style={{ color: "var(--success)" }}>
+                  {formatPercent(stats.winRate, 0)}
+                </dd>
+                <dt className="label mt-0.5">Win rate</dt>
+              </div>
+              <div className="px-5">
+                <dd className="numeral text-xl">{stats.totalPicks}</dd>
+                <dt className="label mt-0.5">Settled</dt>
+              </div>
+            </dl>
+          )}
+
+          {/* View toggle */}
+          <div
+            className="flex gap-0.5 rounded-full border border-border p-1"
+            role="group"
+            aria-label="Board layout"
+          >
+            {([
+              { v: "cards", Icon: LayoutGrid, label: "Card view" },
+              { v: "table", Icon: List, label: "Table view" },
+            ] as const).map(({ v, Icon, label }) => {
+              const on = view === v;
+              return (
+                <button
+                  key={v}
+                  type="button"
+                  onClick={() => choose(v)}
+                  aria-pressed={on}
+                  aria-label={label}
+                  title={label}
+                  className="press flex h-8 w-8 items-center justify-center rounded-full transition-colors"
+                  style={
+                    on
+                      ? { background: "var(--accent)", color: "var(--accent-foreground)" }
+                      : { color: "var(--muted)" }
+                  }
+                >
+                  <Icon className="h-4 w-4" />
+                </button>
+              );
+            })}
+          </div>
+        </div>
       </header>
 
-      {/* ------------------------- filters ------------------------- */}
-      <div className="mb-6 flex flex-wrap items-center gap-2">
-        <div className="flex flex-1 gap-1.5 overflow-x-auto">
-          {FILTERS.map((f) => {
-            const on = filter === f.key;
-            return (
+      {hero.length > 0 && <HeroSlider picks={hero} onSummary={setSummary} />}
+
+      {/* Mobile: the rail collapses behind a button rather than eating the fold. */}
+      <button
+        type="button"
+        onClick={() => setRailOpen((v) => !v)}
+        aria-expanded={railOpen}
+        className="press mb-4 flex items-center gap-1.5 rounded-full border border-border bg-surface px-4 py-2 text-[13px] font-semibold text-muted lg:hidden"
+      >
+        <SlidersHorizontal className="h-3.5 w-3.5" />
+        Filters
+      </button>
+
+      <div className="grid gap-6 lg:grid-cols-[17rem_1fr] lg:items-start">
+        <aside className={`${railOpen ? "" : "hidden"} lg:sticky lg:top-20 lg:block`}>
+          <FilterRail
+            filters={filters}
+            onChange={setFilters}
+            leagues={leagues}
+            markets={markets}
+            statusCounts={counts}
+          />
+        </aside>
+
+        <div>
+          <p className="mb-3 text-[13px] text-muted">
+            Showing <span className="numeral font-semibold">{visible.length}</span>
+            {visible.length !== all.length && ` of ${all.length}`}{" "}
+            {visible.length === 1 ? "prediction" : "predictions"}
+          </p>
+
+          {isPending ? (
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <div key={i} className="shimmer h-[22rem] rounded-[1.5rem] bg-surface" />
+              ))}
+            </div>
+          ) : visible.length === 0 ? (
+            <div className="rounded-[1.5rem] border border-border bg-surface p-14 text-center">
+              <p className="font-semibold">Nothing matches</p>
+              <p className="mx-auto mt-1.5 max-w-sm text-sm leading-relaxed text-muted">
+                No predictions fit those filters. Try widening them.
+              </p>
               <button
-                key={f.key}
                 type="button"
-                onClick={() => setFilter(f.key)}
-                aria-pressed={on}
-                className={`press flex-none rounded-full border px-4 py-2 text-[13px] font-semibold ${
-                  on
-                    ? "border-transparent bg-feature text-feature-foreground"
-                    : "border-border bg-surface text-muted hover:text-foreground"
-                }`}
+                onClick={() => setFilters(EMPTY_FILTERS)}
+                className="press mt-5 inline-flex items-center gap-1.5 rounded-full border border-border px-4 py-2 text-[13px] font-semibold"
               >
-                {f.label}
-                {counts && (
-                  <span className="ml-1.5 opacity-60">{counts[f.key]}</span>
-                )}
+                <X className="h-3.5 w-3.5" />
+                Clear filters
               </button>
-            );
-          })}
-        </div>
-
-        <button
-          type="button"
-          onClick={() => setShowFilters((v) => !v)}
-          aria-expanded={showFilters}
-          className={`press flex flex-none items-center gap-1.5 rounded-full border px-4 py-2 text-[13px] font-semibold ${
-            market !== "all" || league !== "all"
-              ? "border-accent-edge bg-accent-wash text-accent"
-              : "border-border bg-surface text-muted hover:text-foreground"
-          }`}
-        >
-          <SlidersHorizontal className="h-3.5 w-3.5" />
-          Filter
-        </button>
-      </div>
-
-      {showFilters && (
-        <div className="rise mb-6 grid gap-3 rounded-2xl border border-border bg-surface p-4 sm:grid-cols-2">
-          <label className="space-y-1.5">
-            <span className="label">League</span>
-            <select
-              value={league}
-              onChange={(e) => setLeague(e.target.value)}
-              className="w-full cursor-pointer rounded-xl border border-field-border bg-field px-3 py-2.5 text-sm"
-            >
-              <option value="all">All leagues</option>
-              {leagues.map((l) => (
-                <option key={l} value={l}>
-                  {l}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="space-y-1.5">
-            <span className="label">Market</span>
-            <select
-              value={market}
-              onChange={(e) => setMarket(e.target.value as Market | "all")}
-              className="w-full cursor-pointer rounded-xl border border-field-border bg-field px-3 py-2.5 text-sm"
-            >
-              <option value="all">All markets</option>
-              {Object.entries(MARKET_LABELS).map(([k, v]) => (
-                <option key={k} value={k}>
-                  {v}
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
-      )}
-
-      {/* ------------------------- feed ------------------------- */}
-      {isPending ? (
-        <div className="grid gap-4 lg:grid-cols-2">
-          <div className="shimmer h-[26rem] rounded-[1.75rem] bg-surface lg:col-span-2" />
-          <div className="shimmer h-[24rem] rounded-[1.75rem] bg-surface" />
-          <div className="shimmer h-[24rem] rounded-[1.75rem] bg-surface" />
-        </div>
-      ) : visible.length === 0 ? (
-        <div className="rounded-[1.75rem] border border-border bg-surface p-14 text-center">
-          <p className="font-semibold">
-            {showPaywall ? "Today's board is ready" : "Nothing here"}
-          </p>
-          <p className="mx-auto mt-1.5 max-w-sm text-sm leading-relaxed text-muted">
-            {showPaywall
-              ? `${hidden} predictions are waiting behind the day pass.`
-              : market !== "all" || league !== "all"
-                ? "No predictions match those filters. Try widening them."
-                : "Today's predictions are still being built — check back shortly."}
-          </p>
-        </div>
-      ) : (
-        <div className="grid gap-4 lg:grid-cols-2">
-          {/* The strongest call of the day gets the dark feature treatment. */}
-          {hero && (
-            <div className="lg:col-span-2">
-              <PredictionCard pick={hero} feature onReasoning={setReasoning} />
             </div>
-          )}
-          {rest.map((p) => (
-            <PredictionCard key={p.id} pick={p} onReasoning={setReasoning} />
-          ))}
-        </div>
-      )}
-
-      {/* ------------------------- paywall ------------------------- */}
-      {showPaywall && (
-        <div className="mt-6 rounded-[1.75rem] border border-accent-edge bg-accent-wash p-8 text-center">
-          <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-surface">
-            <Lock className="h-5 w-5 text-accent" />
-          </span>
-          <h2 className="display mt-4 text-2xl">
-            {hidden} more {hidden === 1 ? "prediction" : "predictions"} today
-          </h2>
-          <p className="mx-auto mt-2 max-w-sm text-sm leading-relaxed text-muted">
-            {access?.isFirstDay
-              ? "You're seeing your free picks. The day pass unlocks the rest — and the full board tomorrow."
-              : "One pass, one day, every prediction. No subscription."}
-          </p>
-          <LinkButton
-            href="/checkout/day-pass"
-            size="lg"
-            variant="primary"
-            className="mt-5"
-          >
-            Unlock today · $3
-          </LinkButton>
-        </div>
-      )}
-
-      {/* ------------------------- extra picks ------------------------- */}
-      {access?.hasFullAccess && (
-        <section className="mt-12">
-          <div className="mb-5 flex items-end justify-between gap-4">
-            <div>
-              <span className="label flex items-center gap-1.5">
-                <TrendingUp className="h-3 w-3" />
-                Pass-holder perk
-              </span>
-              <h2 className="display mt-1.5 text-2xl">Extra league picks</h2>
-            </div>
-            <LinkButton href="/checkout/extra-picks" variant="secondary" size="sm">
-              Add leagues
-            </LinkButton>
-          </div>
-
-          {extra.data?.length ? (
-            <div className="grid gap-4 lg:grid-cols-2">
-              {extra.data.map((p) => (
-                <PredictionCard key={p.id} pick={p} onReasoning={setReasoning} />
-              ))}
-            </div>
+          ) : view === "table" ? (
+            <PicksTable picks={visible} />
           ) : (
-            <div className="rounded-[1.75rem] border border-border bg-surface p-10 text-center text-sm text-muted">
-              Pick up to 3 games from any league we cover — $2 per group of 3.
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+              {visible.map((p: Pick) => (
+                <PredictionCard key={p.id} pick={p} onSummary={setSummary} />
+              ))}
             </div>
           )}
-        </section>
-      )}
+
+          {/* ------------------------- paywall ------------------------- */}
+          {showPaywall && (
+            <div className="mt-6 rounded-[1.5rem] border border-accent-edge bg-accent-wash p-8 text-center">
+              <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-surface">
+                <Lock className="h-5 w-5 text-accent" />
+              </span>
+              <h2 className="display mt-4 text-2xl">
+                {lockedCount} {lockedCount === 1 ? "prediction" : "predictions"} locked
+              </h2>
+              <p className="mx-auto mt-2 max-w-sm text-sm leading-relaxed text-muted">
+                {access?.isFirstDay
+                  ? "You're seeing your free picks. The day pass unlocks the rest — and the full board tomorrow."
+                  : "One pass, one day, every prediction. No subscription."}
+              </p>
+              <LinkButton href="/checkout/day-pass" size="lg" variant="primary" className="mt-5">
+                Unlock today · $3
+              </LinkButton>
+            </div>
+          )}
+
+          {/* ------------------------- extra picks ------------------------- */}
+          {access?.hasFullAccess && (
+            <section className="mt-12">
+              <div className="mb-5 flex items-end justify-between gap-4">
+                <div>
+                  <span className="label flex items-center gap-1.5">
+                    <TrendingUp className="h-3 w-3" />
+                    Pass-holder perk
+                  </span>
+                  <h2 className="display mt-1.5 text-2xl">Extra league picks</h2>
+                </div>
+                <LinkButton href="/checkout/extra-picks" variant="secondary" size="sm">
+                  Add leagues
+                </LinkButton>
+              </div>
+
+              {extra.data?.length ? (
+                <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                  {extra.data.map((p) => (
+                    <PredictionCard key={p.id} pick={p} onSummary={setSummary} />
+                  ))}
+                </div>
+              ) : (
+                <div className="rounded-[1.5rem] border border-border bg-surface p-10 text-center text-sm text-muted">
+                  Pick up to 3 games from any league we cover — $2 per group of 3.
+                </div>
+              )}
+            </section>
+          )}
+        </div>
+      </div>
     </main>
   );
 }

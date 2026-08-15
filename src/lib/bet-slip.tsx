@@ -89,13 +89,21 @@ export function BetSlipProvider({ children }: { children: ReactNode }) {
     }
   }, [entries, hydrated]);
 
+  /**
+   * Adding does NOT open the sheet.
+   *
+   * It used to, and that was the bug behind "the slip button never appears":
+   * the sheet covered the screen the instant you added anything, and the FAB
+   * hides itself while the sheet is open — so the affordance was never seen.
+   * Worse, it interrupted the browsing you were in the middle of. Feedback for
+   * an add belongs on the counter, not in a takeover.
+   */
   const add = useCallback((pick: Pick) => {
     setEntries((prev) => {
       if (prev.some((e) => e.pick.id === pick.id)) return prev;
       if (prev.length >= MAX_LEGS) return prev;
       return [...prev, { pick, odds: legOdds(pick) }];
     });
-    setOpen(true);
   }, []);
 
   const remove = useCallback((predictionId: string) => {

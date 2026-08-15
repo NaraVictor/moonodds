@@ -44,7 +44,47 @@ export const keys = {
   slips: ["slips"] as const,
   profile: ["profile"] as const,
   notifications: ["notifications"] as const,
+  predictionDetail: (id: string) => ["picks", "detail", id] as const,
 };
+
+/** Match statistics behind the detail page. Public — these aren't ours. */
+export type FixtureStats = {
+  homeForm: string | null;
+  awayForm: string | null;
+  h2hHomeWins: number | null;
+  h2hAwayWins: number | null;
+  h2hDraws: number | null;
+  h2hAvgGoals: number | null;
+  h2hBttsRate: number | null;
+  homeSeason: Record<string, number>;
+  awaySeason: Record<string, number>;
+  h2hMatches: unknown[];
+  homeRecentMatches: unknown[];
+  awayRecentMatches: unknown[];
+};
+
+export type PredictionDetail = {
+  pick: Pick;
+  stats: FixtureStats | null;
+  hasFullAccess: boolean;
+  isFirstDay: boolean;
+};
+
+export function usePredictionDetail(id: string) {
+  return useQuery({
+    queryKey: keys.predictionDetail(id),
+    // The summary modal mounts before a pick is chosen and passes "".
+    enabled: id.length > 0,
+    queryFn: async (): Promise<PredictionDetail | null> => {
+      const supabase = createClient();
+      const { data, error } = await supabase.rpc("get_prediction_detail", {
+        p_id: id,
+      });
+      if (error) throw error;
+      return (data as PredictionDetail | null) ?? null;
+    },
+  });
+}
 
 /** Access state drives paywall copy and admin nav. Never a gate by itself. */
 export function useAccessState() {

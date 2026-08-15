@@ -1,24 +1,28 @@
 "use client";
 
-import { Check, X, Clock, MapPin, ArrowRight, Plus } from "lucide-react";
+import Link from "next/link";
+import { Check, X, Clock, ArrowUpRight, Plus, Lock } from "lucide-react";
 import { useBetSlip } from "@/lib/bet-slip";
 import { ConfidenceRing } from "./confidence-ring";
 import { TeamCrest } from "./team-crest";
-import type { Pick } from "@/lib/types";
+import { isUnlocked, type Pick, type UnlockedPick } from "@/lib/types";
 import { formatMarket, teamName } from "@/lib/format";
 
 /**
- * The prediction card — the hero component of MoonOdds.
+ * The prediction card.
  *
- * Scannable in 2–3 seconds, answering in this order:
- *   what match → what do we predict → how confident → when/what happened
+ * Kalshi's restraint, not its semantics. Their market cards work because almost
+ * everything is quiet — one number carries the weight and the rest recedes — so
+ * the borrowing here is the calm, the generous whitespace and the way actions
+ * sit present but unshouted. What is NOT borrowed is the language of a traded
+ * market: no price ticks, no payout multiples, no order book. A confidence
+ * score is a model's opinion, and dressing it as a tradeable probability would
+ * imply a market we don't run.
  *
- * Layout is mobile-first and genuinely re-laid-out at width rather than
- * shrunk: crests sit either side of the scoreline on every size, and the
- * prediction band spans full width so it can never be missed.
- *
- * Outcome state is carried by a tinted wash plus a 1px edge — never by
- * saturating the whole card, which would fight the team names and score.
+ * The whole card is a link to the detail page, via a stretched overlay rather
+ * than by wrapping everything in an anchor — that keeps the two CTAs as real
+ * buttons instead of nesting interactive elements inside a link, which breaks
+ * both keyboard nav and the accessibility tree.
  */
 
 type Status = "won" | "lost" | "pending";
@@ -30,27 +34,9 @@ function resolveStatus(pick: Pick): Status {
 }
 
 const STATE = {
-  won: {
-    cls: "state-won",
-    ink: "var(--won-ink)",
-    Icon: Check,
-    label: "Won",
-    tone: "won" as const,
-  },
-  lost: {
-    cls: "state-lost",
-    ink: "var(--lost-ink)",
-    Icon: X,
-    label: "Lost",
-    tone: "lost" as const,
-  },
-  pending: {
-    cls: "state-pending",
-    ink: "var(--pending-ink)",
-    Icon: Clock,
-    label: "Pending",
-    tone: "accent" as const,
-  },
+  won: { cls: "state-won", ink: "var(--won-ink)", Icon: Check, label: "Won", tone: "won" as const },
+  lost: { cls: "state-lost", ink: "var(--lost-ink)", Icon: X, label: "Lost", tone: "lost" as const },
+  pending: { cls: "state-pending", ink: "var(--pending-ink)", Icon: Clock, label: "Pending", tone: "accent" as const },
 };
 
 function StatusPill({ status }: { status: Status }) {
@@ -58,10 +44,7 @@ function StatusPill({ status }: { status: Status }) {
   return (
     <span
       className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.1em]"
-      style={{
-        color: s.ink,
-        background: "color-mix(in oklab, currentColor 10%, transparent)",
-      }}
+      style={{ color: s.ink, background: "color-mix(in oklab, currentColor 10%, transparent)" }}
     >
       <s.Icon className="h-3 w-3" strokeWidth={3} />
       {s.label}
@@ -69,155 +52,121 @@ function StatusPill({ status }: { status: Status }) {
   );
 }
 
-/** Kickoff, or the window the match actually ran. */
 function timing(pick: Pick): string {
   const d = new Date(pick.fixture.date);
-  const start = d.toLocaleTimeString([], {
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  });
-
-  if (pick.fixture.status === "finished") {
-    const end = new Date(d.getTime() + 105 * 60_000).toLocaleTimeString([], {
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: false,
-    });
-    return `${start} — ${end}`;
-  }
+  const start = d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit", hour12: true });
+  if (pick.fixture.status === "finished") return "Full time";
   if (pick.fixture.status === "live") return `Kicked off ${start}`;
   return `Starts ${start}`;
 }
 
 export function PredictionCard({
   pick,
-  onReasoning,
+  onSummary,
   feature = false,
 }: {
   pick: Pick;
-  onReasoning?: (p: Pick) => void;
-  /** The dark treatment used for the single hero card. */
+  /** Opens the summary modal. Only ever called with an unlocked pick. */
+  onSummary?: (p: UnlockedPick) => void;
+  /** The dark treatment used by the hero slider. */
   feature?: boolean;
 }) {
   const status = resolveStatus(pick);
   const s = STATE[status];
   const settled = status !== "pending";
   const live = pick.fixture.status === "live";
+  const unlocked = isUnlocked(pick);
+
   const slip = useBetSlip();
   const inSlip = slip.has(pick.id);
-  // Only an unsettled, not-yet-kicked-off call can be added.
-  const addable = !settled && pick.fixture.status === "scheduled";
+  // Only an unlocked, unsettled, not-yet-started call can go on a slip: you
+  // can't take a pre-match price on a match already running.
+  const addable = unlocked && !settled && pick.fixture.status === "scheduled";
 
   const shell = feature
     ? "bg-feature text-feature-foreground border-transparent"
     : `${s.cls} border`;
-
   const subtleInk = feature ? "var(--feature-muted)" : "var(--muted)";
+  const strongInk = feature ? "#fff" : "var(--foreground)";
 
   return (
     <article
-      className={`lift group relative flex flex-col overflow-hidden rounded-[1.75rem] ${shell}`}
-      style={{ boxShadow: feature ? "var(--shadow-lift)" : "var(--shadow-card)" }}
+      className={`lift group relative flex flex-col overflow-hidden rounded-[1.5rem] transition-colors ${shell}`}
     >
-      {/* ---------- header: league · location ---------- */}
-      <div className="flex items-start justify-between gap-3 px-5 pt-5">
-        <div className="min-w-0">
-          <p
-            className="truncate text-[13px] font-semibold"
-            style={{ color: feature ? "#fff" : "var(--foreground)" }}
-          >
-            {pick.league.name}
-          </p>
-          <p
-            className="mt-0.5 flex items-center gap-1 truncate text-[11px]"
-            style={{ color: subtleInk }}
-          >
-            <MapPin className="h-3 w-3 flex-none" />
-            {pick.league.country}
-            {pick.fixture.venue ? ` · ${pick.fixture.venue}` : ""}
-          </p>
-        </div>
+      {/* Stretched link: the card body navigates, the CTAs below opt out. */}
+      <Link
+        href={`/predictions/${pick.id}`}
+        className="absolute inset-0 z-0"
+        aria-label={`${teamName(pick.homeTeam)} versus ${teamName(pick.awayTeam)} — full analysis`}
+      />
 
-        <div className="flex flex-none items-center gap-2">
-          {live && (
-            <span
-              className="inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.1em]"
-              style={{ color: "var(--danger)", background: "color-mix(in oklab, currentColor 12%, transparent)" }}
-            >
-              <span className="ping-soft relative inline-block h-1.5 w-1.5 rounded-full bg-current" />
-              Live
-            </span>
+      {/* ---------- header ---------- */}
+      <div className="flex items-center justify-between gap-3 px-5 pt-5">
+        <div className="flex min-w-0 items-center gap-2">
+          {pick.league.logo && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={pick.league.logo} alt="" width={16} height={16} className="h-4 w-4 flex-none object-contain" />
           )}
-          {!live && <StatusPill status={status} />}
-        </div>
-      </div>
-
-      {/* ---------- match: crests dominate ---------- */}
-      <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 px-5 py-6">
-        <div className="flex flex-col items-center gap-2.5 text-center">
-          <TeamCrest
-            name={teamName(pick.homeTeam)}
-            logo={pick.homeTeam?.logo}
-            size={64}
-            onFeature={feature}
-          />
-          <span
-            className="line-clamp-2 text-[13px] font-semibold leading-tight"
-            style={{ color: feature ? "#fff" : "var(--foreground)" }}
-          >
-            {teamName(pick.homeTeam)}
+          <span className="truncate text-[12px] font-semibold" style={{ color: subtleInk }}>
+            {pick.league.name}
           </span>
         </div>
 
-        <div className="flex min-w-[5rem] flex-col items-center gap-1.5">
-          {settled || live ? (
+        {live ? (
+          <span
+            className="inline-flex flex-none items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.1em]"
+            style={{ color: "var(--danger)", background: "color-mix(in oklab, currentColor 12%, transparent)" }}
+          >
+            <span className="ping-soft relative inline-block h-1.5 w-1.5 rounded-full bg-current" />
+            Live
+          </span>
+        ) : (
+          <StatusPill status={status} />
+        )}
+      </div>
+
+      {/* ---------- match ---------- */}
+      <div className="grid grid-cols-[1fr_auto_1fr] items-start gap-2 px-5 py-6">
+        {[pick.homeTeam, pick.awayTeam].map((team, i) => (
+          <div
+            key={i}
+            className={`flex flex-col items-center gap-2.5 text-center ${i === 1 ? "order-3" : ""}`}
+          >
+            <TeamCrest name={teamName(team)} logo={team?.logo} size={52} onFeature={feature} />
             <span
-              className="numeral text-[2.75rem]"
-              style={{ color: feature ? "#fff" : "var(--foreground)" }}
+              className="line-clamp-2 text-[13px] font-semibold leading-tight"
+              style={{ color: strongInk }}
             >
+              {teamName(team)}
+            </span>
+          </div>
+        ))}
+
+        <div className="order-2 flex min-w-[4.5rem] flex-col items-center gap-1 pt-3">
+          {settled || live ? (
+            <span className="numeral text-[2rem] leading-none" style={{ color: strongInk }}>
               {pick.fixture.homeGoals ?? 0}
-              <span style={{ color: subtleInk }} className="mx-1.5 font-normal">
+              <span style={{ color: subtleInk }} className="mx-1 font-normal">
                 :
               </span>
               {pick.fixture.awayGoals ?? 0}
             </span>
           ) : (
-            <span
-              className="numeral text-[1.6rem]"
-              style={{ color: feature ? "#fff" : "var(--foreground)" }}
-            >
-              VS
+            <span className="text-[11px] font-bold uppercase tracking-[0.12em]" style={{ color: subtleInk }}>
+              vs
             </span>
           )}
-
-          <span
-            className="whitespace-nowrap text-[10px] font-medium"
-            style={{ color: subtleInk }}
-          >
+          <span className="whitespace-nowrap text-[10px] font-medium" style={{ color: subtleInk }}>
             {timing(pick)}
-          </span>
-        </div>
-
-        <div className="flex flex-col items-center gap-2.5 text-center">
-          <TeamCrest
-            name={teamName(pick.awayTeam)}
-            logo={pick.awayTeam?.logo}
-            size={64}
-            onFeature={feature}
-          />
-          <span
-            className="line-clamp-2 text-[13px] font-semibold leading-tight"
-            style={{ color: feature ? "#fff" : "var(--foreground)" }}
-          >
-            {teamName(pick.awayTeam)}
           </span>
         </div>
       </div>
 
-      {/* ---------- the call + confidence ---------- */}
+      {/* ---------- the call ----------
+          py matches the crest block's py-6, so the panel sits on the same
+          vertical rhythm as the match above it rather than looking pinched. */}
       <div
-        className="mx-3 flex items-center justify-between gap-4 rounded-2xl px-4 py-3.5"
+        className="mx-3 flex items-center justify-between gap-4 rounded-2xl px-4 py-6"
         style={{
           background: feature
             ? "rgba(255,255,255,0.06)"
@@ -229,61 +178,79 @@ export function PredictionCard({
             className="text-[10px] font-bold uppercase tracking-[0.12em]"
             style={{ color: feature ? "var(--feature-muted)" : "var(--accent)" }}
           >
-            AI prediction
+            {unlocked ? "AI prediction" : "Locked"}
           </p>
-          <p
-            className="display mt-1 truncate text-[1.35rem]"
-            style={{ color: feature ? "#fff" : "var(--foreground)" }}
-          >
+          <p className="display mt-1.5 truncate text-[1.25rem]" style={{ color: strongInk }}>
             {formatMarket(pick.predictionType, pick.predictedValue)}
           </p>
+          {!unlocked && (
+            <p className="mt-1 text-[11px]" style={{ color: subtleInk }}>
+              Unlock to see the call
+            </p>
+          )}
         </div>
 
-        <ConfidenceRing
-          value={pick.confidenceScore}
-          tone={feature ? "feature" : s.tone}
-          size={56}
-        />
-      </div>
-
-      {/* ---------- actions ---------- */}
-      <div
-        className="mt-3 flex items-stretch border-t"
-        style={{ borderColor: feature ? "var(--feature-border)" : "var(--separator)" }}
-      >
-        <button
-          type="button"
-          onClick={() => onReasoning?.(pick)}
-          className="press flex flex-1 items-center justify-between gap-2 px-5 py-4 text-left"
-        >
+        {unlocked ? (
+          <ConfidenceRing
+            value={pick.confidenceScore}
+            tone={feature ? "feature" : s.tone}
+            size={54}
+          />
+        ) : (
           <span
-            className="text-[13px] font-semibold"
-            style={{ color: feature ? "#fff" : "var(--foreground)" }}
-          >
-            Why this prediction?
-          </span>
-          <span
-            className="flex h-7 w-7 items-center justify-center rounded-full transition-transform duration-200 group-hover:translate-x-0.5"
+            className="flex h-[54px] w-[54px] flex-none items-center justify-center rounded-full"
             style={{
-              background: feature ? "rgba(255,255,255,0.1)" : "var(--accent-wash)",
+              background: feature ? "rgba(255,255,255,0.08)" : "var(--accent-wash)",
               color: feature ? "#fff" : "var(--accent)",
             }}
           >
-            <ArrowRight className="h-3.5 w-3.5" strokeWidth={2.5} />
+            <Lock className="h-4 w-4" strokeWidth={2.5} />
           </span>
-        </button>
+        )}
+      </div>
+
+      {/* ---------- actions ----------
+          Present but quiet at rest; they gain contrast on hover and always on
+          keyboard focus, so they never become a hover-only affordance. */}
+      <div
+        className="relative z-10 mt-3 flex items-stretch border-t"
+        style={{ borderColor: feature ? "var(--feature-border)" : "var(--separator)" }}
+      >
+        {unlocked ? (
+          <button
+            type="button"
+            onClick={() => onSummary?.(pick)}
+            className="press flex flex-1 items-center justify-center gap-1.5 px-4 py-3.5 text-[12px] font-semibold transition-colors"
+            style={{ color: subtleInk }}
+          >
+            Summary
+            <ArrowUpRight className="h-3.5 w-3.5 opacity-0 transition-opacity duration-200 group-hover:opacity-100" />
+          </button>
+        ) : (
+          <Link
+            href="/checkout/day-pass"
+            className="press flex flex-1 items-center justify-center gap-1.5 px-4 py-3.5 text-[12px] font-semibold"
+            style={{ color: feature ? "#fff" : "var(--accent)" }}
+          >
+            <Lock className="h-3.5 w-3.5" />
+            Unlock
+          </Link>
+        )}
 
         {addable && (
           <button
             type="button"
             onClick={() => (inSlip ? slip.remove(pick.id) : slip.add(pick))}
             aria-pressed={inSlip}
-            className="press flex flex-none items-center gap-1.5 border-l px-5 text-[13px] font-semibold"
+            className="press flex flex-1 items-center justify-center gap-1.5 border-l px-4 py-3.5 text-[12px] font-semibold transition-colors"
             style={{
               borderColor: feature ? "var(--feature-border)" : "var(--separator)",
-              color: inSlip
-                ? feature ? "#fff" : "var(--accent)"
-                : feature ? "var(--feature-muted)" : "var(--muted)",
+              color: inSlip ? (feature ? "#fff" : "var(--accent)") : subtleInk,
+              background: inSlip
+                ? feature
+                  ? "rgba(255,255,255,0.06)"
+                  : "var(--accent-wash)"
+                : "transparent",
             }}
           >
             {inSlip ? (
@@ -294,79 +261,12 @@ export function PredictionCard({
             ) : (
               <>
                 <Plus className="h-3.5 w-3.5" strokeWidth={2.5} />
-                Add
+                Add to slip
               </>
             )}
           </button>
         )}
       </div>
-    </article>
-  );
-}
-
-/**
- * The locked variant.
- *
- * Renders the real card SHAPE so a visitor can see the substance they're
- * missing — but from placeholder geometry, not real data. Nothing about the
- * hidden predictions is sent to the browser, so this can't be lifted by
- * opening devtools the way a CSS blur over real content could.
- */
-export function LockedPredictionCard({ seed = 0 }: { seed?: number }) {
-  const bars = [
-    [58, 40],
-    [46, 52],
-  ][seed % 2];
-
-  return (
-    <article
-      aria-hidden
-      className="relative flex select-none flex-col overflow-hidden rounded-[1.75rem] border state-pending"
-      style={{ boxShadow: "var(--shadow-card)" }}
-    >
-      <div className="pointer-events-none blur-[7px] saturate-50" aria-hidden>
-        <div className="flex items-start justify-between gap-3 px-5 pt-5">
-          <div className="space-y-1.5">
-            <div className="h-3 rounded-full bg-surface-tertiary" style={{ width: `${bars[0]}px` }} />
-            <div className="h-2.5 w-20 rounded-full bg-surface-secondary" />
-          </div>
-          <div className="h-5 w-16 rounded-full bg-surface-tertiary" />
-        </div>
-
-        <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 px-5 py-6">
-          {[0, 1].map((i) => (
-            <div key={i} className="flex flex-col items-center gap-2.5">
-              <div className="h-16 w-16 rounded-full bg-surface-tertiary" />
-              <div className="h-3 rounded-full bg-surface-secondary" style={{ width: `${bars[i]}px` }} />
-            </div>
-          ))}
-          <div
-            className="order-2 flex flex-col items-center gap-1.5"
-            style={{ gridColumn: 2, gridRow: 1 }}
-          >
-            <div className="h-8 w-20 rounded-lg bg-surface-tertiary" />
-            <div className="h-2 w-14 rounded-full bg-surface-secondary" />
-          </div>
-        </div>
-
-        <div className="mx-3 flex items-center justify-between gap-4 rounded-2xl bg-surface-secondary px-4 py-3.5">
-          <div className="space-y-2">
-            <div className="h-2.5 w-16 rounded-full bg-surface-tertiary" />
-            <div className="h-5 w-40 rounded-lg bg-surface-tertiary" />
-          </div>
-          <div className="h-14 w-14 rounded-full bg-surface-tertiary" />
-        </div>
-
-        <div className="mt-3 border-t border-separator px-5 py-4">
-          <div className="h-3 w-36 rounded-full bg-surface-secondary" />
-        </div>
-      </div>
-
-      {/* A veil, not an opaque block — the shape stays legible underneath. */}
-      <div
-        className="absolute inset-0"
-        style={{ background: "var(--lock-veil)" }}
-      />
     </article>
   );
 }

@@ -93,7 +93,6 @@ export function SlipsClient() {
               <article
                 key={slip.id}
                 className={`lift overflow-hidden rounded-[1.75rem] border ${st.cls}`}
-                style={{ boxShadow: "var(--shadow-card)" }}
               >
                 <div className="flex items-start justify-between gap-4 px-6 pt-6">
                   <div>

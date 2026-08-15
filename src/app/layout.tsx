@@ -2,6 +2,8 @@ import type { Metadata, Viewport } from "next";
 import { Sora, Plus_Jakarta_Sans } from "next/font/google";
 import { Providers } from "./providers";
 import { BypassBanner } from "@/components/dev/bypass-banner";
+import { AgeGate } from "@/components/legal/age-gate";
+import { BetSlipFab, BetSlipSheet } from "@/components/slip/bet-slip";
 import "./globals.css";
 
 /**
@@ -40,7 +42,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#f6f7f9",
+  themeColor: "#f8faf8",
   colorScheme: "light",
 };
 
@@ -58,7 +60,14 @@ export default function RootLayout({
     >
       <body className="min-h-full flex flex-col bg-background text-foreground">
         <BypassBanner />
-        <Providers>{children}</Providers>
+        <AgeGate />
+        {/* Slip lives at the root so it survives navigation — it has to follow
+            you from the board to a detail page and back. */}
+        <Providers>
+          {children}
+          <BetSlipFab />
+          <BetSlipSheet />
+        </Providers>
       </body>
     </html>
   );

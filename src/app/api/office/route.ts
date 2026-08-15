@@ -2,9 +2,29 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireSuperAdmin } from "@/lib/api-auth";
 import { createServiceClient } from "@/lib/supabase/server";
-import { runAutoGrade, runDailyPicks, runFetchFixtures, runFetchStats, gradePrediction } from "@/lib/pipeline";
+import {
+  runAutoGrade,
+  runDailyPicks,
+  runFetchFixtures,
+  runFetchStats,
+  gradePrediction,
+  slugify,
+} from "@/lib/pipeline";
+import { getProviders } from "@/lib/providers";
 import type { Market } from "@/lib/types";
 import { runClvCheck, runRecalibration } from "@/lib/tuning";
+
+/** Initials when the catalogue gives us no team code. */
+function autoShortName(name: string): string {
+  const words = name
+    .replace(/\b(FC|CF|SC|AC|AS|SS|US|CD)\b/gi, "")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+  if (words.length >= 3) return words.slice(0, 3).map((w) => w[0]).join("");
+  if (words.length === 2) return words[0].slice(0, 2) + words[1][0];
+  return name.slice(0, 3);
+}
 
 /**
  * Office actions.
@@ -52,6 +72,59 @@ const Body = z.discriminatedUnion("action", [
     configId: z.uuid(),
     rankingWeights: z.record(z.string(), z.number()),
     confidenceThresholds: z.record(z.string(), z.number()).optional(),
+  }),
+
+  /* ------------------------------ catalog ------------------------------ */
+
+  z.object({ action: z.literal("searchLeagues"), query: z.string().min(3).max(60) }),
+  z.object({ action: z.literal("searchTeams"), query: z.string().min(3).max(60) }),
+  z.object({
+    action: z.literal("importLeague"),
+    externalId: z.number().int().positive(),
+    name: z.string().min(1).max(120),
+    country: z.string().min(1).max(80),
+    season: z.number().int().min(1900).max(2200),
+    logo: z.string().max(500).nullable().optional(),
+  }),
+  z.object({
+    action: z.literal("importTeams"),
+    leagueId: z.uuid(),
+    leagueExternalId: z.number().int().positive(),
+    season: z.number().int().min(1900).max(2200),
+  }),
+  z.object({
+    action: z.literal("createLeague"),
+    name: z.string().min(1).max(120),
+    country: z.string().min(1).max(80),
+    season: z.number().int().min(1900).max(2200).nullable().optional(),
+  }),
+  z.object({
+    action: z.literal("updateLeague"),
+    leagueId: z.uuid(),
+    name: z.string().min(1).max(120).optional(),
+    country: z.string().min(1).max(80).optional(),
+    season: z.number().int().min(1900).max(2200).nullable().optional(),
+    isActive: z.boolean().optional(),
+  }),
+  z.object({
+    action: z.literal("createTeam"),
+    leagueId: z.uuid(),
+    name: z.string().min(1).max(120),
+    shortName: z.string().min(1).max(8).optional(),
+  }),
+  z.object({
+    action: z.literal("updateTeam"),
+    teamId: z.uuid(),
+    name: z.string().min(1).max(120).optional(),
+    shortName: z.string().min(1).max(8).optional(),
+    leagueId: z.uuid().optional(),
+    isActive: z.boolean().optional(),
+  }),
+  z.object({ action: z.literal("deleteTeam"), teamId: z.uuid() }),
+  z.object({
+    action: z.literal("setSelectedLeagues"),
+    configId: z.uuid(),
+    leagueExternalIds: z.array(z.number().int().positive()).max(60),
   }),
 ]);
 
@@ -236,6 +309,168 @@ export async function POST(request: Request) {
           .eq("id", body.configId);
         if (error) throw new Error(error.message);
         return NextResponse.json({ updated: true });
+      }
+
+      /* ---------------------------- catalog ---------------------------- */
+
+      case "searchLeagues":
+        return NextResponse.json({
+          results: await getProviders().football.searchLeagues(body.query.trim()),
+        });
+
+      case "searchTeams":
+        return NextResponse.json({
+          results: await getProviders().football.searchTeams(body.query.trim()),
+        });
+
+      case "importLeague": {
+        const { data, error } = await db
+          .from("leagues")
+          .upsert(
+            {
+              external_id: body.externalId,
+              name: body.name.trim(),
+              slug: slugify(body.name),
+              country: body.country.trim(),
+              season: body.season,
+              logo: body.logo ?? null,
+              is_active: true,
+            },
+            { onConflict: "external_id" },
+          )
+          .select("id, name")
+          .single();
+        if (error) throw new Error(error.message);
+        return NextResponse.json({ league: data });
+      }
+
+      case "importTeams": {
+        // Composes the catalogue lookup with the upsert, because importing one
+        // team at a time is not a thing anyone wants to do 20 times.
+        const teams = await getProviders().football.fetchTeamsByLeague(
+          body.leagueExternalId,
+          body.season,
+        );
+        if (!teams.length) {
+          return NextResponse.json({ imported: 0, found: 0 });
+        }
+
+        const { error } = await db.from("teams").upsert(
+          teams.map((t) => ({
+            external_id: t.externalId,
+            league_id: body.leagueId,
+            name: t.name,
+            short_name: (t.shortName || autoShortName(t.name)).toUpperCase(),
+            slug: slugify(t.name),
+            logo: t.logo,
+            is_active: true,
+          })),
+          { onConflict: "external_id" },
+        );
+        if (error) throw new Error(error.message);
+        return NextResponse.json({ imported: teams.length, found: teams.length });
+      }
+
+      case "createLeague": {
+        const { data, error } = await db
+          .from("leagues")
+          .insert({
+            name: body.name.trim(),
+            slug: slugify(body.name),
+            country: body.country.trim(),
+            season: body.season ?? null,
+            is_active: true,
+          })
+          .select("id, name")
+          .single();
+        if (error) throw new Error(error.message);
+        return NextResponse.json({ league: data });
+      }
+
+      case "updateLeague": {
+        const patch: Record<string, unknown> = {};
+        if (body.name !== undefined) {
+          patch.name = body.name.trim();
+          patch.slug = slugify(body.name);
+        }
+        if (body.country !== undefined) patch.country = body.country.trim();
+        if (body.season !== undefined) patch.season = body.season;
+        if (body.isActive !== undefined) patch.is_active = body.isActive;
+
+        const { error } = await db.from("leagues").update(patch).eq("id", body.leagueId);
+        if (error) throw new Error(error.message);
+        return NextResponse.json({ updated: true });
+      }
+
+      case "createTeam": {
+        const { data, error } = await db
+          .from("teams")
+          .insert({
+            league_id: body.leagueId,
+            name: body.name.trim(),
+            short_name: (body.shortName?.trim() || autoShortName(body.name)).toUpperCase(),
+            slug: slugify(body.name),
+            is_active: true,
+          })
+          .select("id, name")
+          .single();
+        if (error) throw new Error(error.message);
+        return NextResponse.json({ team: data });
+      }
+
+      case "updateTeam": {
+        const patch: Record<string, unknown> = {};
+        if (body.name !== undefined) {
+          patch.name = body.name.trim();
+          patch.slug = slugify(body.name);
+        }
+        if (body.shortName !== undefined) {
+          patch.short_name = body.shortName.trim().toUpperCase();
+        }
+        if (body.leagueId !== undefined) patch.league_id = body.leagueId;
+        if (body.isActive !== undefined) patch.is_active = body.isActive;
+
+        const { error } = await db.from("teams").update(patch).eq("id", body.teamId);
+        if (error) throw new Error(error.message);
+        return NextResponse.json({ updated: true });
+      }
+
+      case "deleteTeam": {
+        // Fixtures reference teams with no ON DELETE rule, so a team with
+        // history can't be removed. Say that plainly instead of letting a raw
+        // foreign-key violation reach the operator.
+        const { count } = await db
+          .from("fixtures")
+          .select("id", { count: "exact", head: true })
+          .or(`home_team_id.eq.${body.teamId},away_team_id.eq.${body.teamId}`);
+
+        if (count && count > 0) {
+          return NextResponse.json(
+            {
+              error: `This team has ${count} fixture${count === 1 ? "" : "s"} on record. Deactivate it instead — deleting would take that history with it.`,
+            },
+            { status: 409 },
+          );
+        }
+
+        const { error } = await db.from("teams").delete().eq("id", body.teamId);
+        if (error) throw new Error(error.message);
+        return NextResponse.json({ deleted: true });
+      }
+
+      case "setSelectedLeagues": {
+        // These are API-Football league ids, not our uuids — the daily fetch
+        // passes them straight through to the provider.
+        const { error } = await db
+          .from("ai_engine_config")
+          .update({
+            selected_league_ids: body.leagueExternalIds,
+            last_updated_at: new Date().toISOString(),
+            approved_by: actor,
+          })
+          .eq("id", body.configId);
+        if (error) throw new Error(error.message);
+        return NextResponse.json({ updated: true, count: body.leagueExternalIds.length });
       }
     }
   } catch (err) {

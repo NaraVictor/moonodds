@@ -6,7 +6,9 @@ import type {
   MessagingProvider,
   PaymentProvider,
   RawFixture,
+  RawTeam,
 } from "./types";
+import { leagueBadgeUrl, teamCrestUrl } from "./types";
 import { MARKETS } from "@/lib/types";
 
 /* -------------------------------------------------------------------------
@@ -27,13 +29,31 @@ type ApiFixture = {
     country: string;
     season: number;
     round: string;
+    logo: string | null;
   };
   teams: {
-    home: { id: number; name: string };
-    away: { id: number; name: string };
+    home: { id: number; name: string; logo: string | null };
+    away: { id: number; name: string; logo: string | null };
   };
   goals: { home: number | null; away: number | null };
   score: { halftime: { home: number | null; away: number | null } };
+};
+
+type ApiLeague = {
+  league: { id: number; name: string; type: string | null; logo: string | null };
+  country: { name: string } | null;
+  seasons: Array<{ year: number; current: boolean }>;
+};
+
+type ApiTeam = {
+  team: {
+    id: number;
+    name: string;
+    code: string | null;
+    country: string | null;
+    logo: string | null;
+  };
+  venue?: { name: string | null } | null;
 };
 
 const LIVE_CODES = ["1H", "HT", "2H", "ET", "BT", "P", "SUSP", "INT", "LIVE"];
@@ -55,11 +75,23 @@ function shortName(name: string): string {
   return name.slice(0, 3).toUpperCase();
 }
 
+function toRawTeam(t: ApiTeam): RawTeam {
+  return {
+    externalId: t.team.id,
+    name: t.team.name,
+    shortName: t.team.code || null,
+    country: t.team.country ?? null,
+    logo: t.team.logo || null,
+    venue: t.venue?.name ?? null,
+  };
+}
+
 function toRaw(f: ApiFixture): RawFixture {
   return {
     externalId: f.fixture.id,
     leagueExternalId: f.league.id,
     leagueName: f.league.name,
+    leagueLogo: f.league.logo ?? leagueBadgeUrl(f.league.id),
     country: f.league.country,
     season: f.league.season,
     round: f.league.round ?? null,
@@ -75,16 +107,26 @@ function toRaw(f: ApiFixture): RawFixture {
       externalId: f.teams.home.id,
       name: f.teams.home.name,
       shortName: shortName(f.teams.home.name),
+      logo: f.teams.home.logo ?? teamCrestUrl(f.teams.home.id),
     },
     away: {
       externalId: f.teams.away.id,
       name: f.teams.away.name,
       shortName: shortName(f.teams.away.name),
+      logo: f.teams.away.logo ?? teamCrestUrl(f.teams.away.id),
     },
   };
 }
 
-async function apiFootball(path: string): Promise<ApiFixture[]> {
+/**
+ * One transport for every API-Football endpoint.
+ *
+ * The `errors` check is not decoration: this API answers a bad key, an expired
+ * plan or an exhausted quota with **HTTP 200** and an errors object alongside
+ * an empty `response`. Trusting `res.ok` alone turns "your key is dead" into
+ * "no leagues matched", which is the kind of failure you chase for an hour.
+ */
+async function apiFootball<T>(path: string): Promise<T[]> {
   const key = process.env.API_FOOTBALL_KEY;
   if (!key) throw new Error("API_FOOTBALL_KEY is not set.");
 
@@ -98,7 +140,19 @@ async function apiFootball(path: string): Promise<ApiFixture[]> {
     throw new Error(`API-Football ${res.status}: ${(await res.text()).slice(0, 200)}`);
   }
 
-  const json = (await res.json()) as { response: ApiFixture[] };
+  const json = (await res.json()) as {
+    response: T[];
+    errors?: Record<string, string> | unknown[];
+  };
+
+  // No errors is `[]`; an actual problem is a keyed object.
+  if (json.errors && !Array.isArray(json.errors)) {
+    const detail = Object.entries(json.errors)
+      .map(([k, v]) => `${k}: ${v}`)
+      .join("; ");
+    if (detail) throw new Error(`API-Football: ${detail}`);
+  }
+
   return json.response ?? [];
 }
 
@@ -122,7 +176,7 @@ export const liveFootball: FootballProvider = {
     for (const leagueId of leagueIds) {
       for (const season of seasonsFor(date)) {
         try {
-          const rows = await apiFootball(
+          const rows = await apiFootball<ApiFixture>(
             `/fixtures?date=${date}&league=${leagueId}&season=${season}`,
           );
           for (const row of rows) {
@@ -160,7 +214,7 @@ export const liveFootball: FootballProvider = {
     for (let i = 0; i < externalIds.length; i += 20) {
       const chunk = externalIds.slice(i, i + 20);
       try {
-        const rows = await apiFootball(`/fixtures?ids=${chunk.join("-")}`);
+        const rows = await apiFootball<ApiFixture>(`/fixtures?ids=${chunk.join("-")}`);
         out.push(...rows.map(toRaw));
       } catch (err) {
         console.error("[football] results chunk failed:", err);
@@ -168,6 +222,40 @@ export const liveFootball: FootballProvider = {
     }
 
     return out;
+  },
+
+  async searchLeagues(query) {
+    const rows = await apiFootball<ApiLeague>(
+      `/leagues?search=${encodeURIComponent(query)}`,
+    );
+    return rows.map((entry) => {
+      // Prefer the season the API flags as current; fall back to the newest it
+      // knows about, so an off-season competition still imports usefully.
+      const current = entry.seasons?.find((s) => s.current);
+      const latest = entry.seasons?.[entry.seasons.length - 1];
+      return {
+        externalId: entry.league.id,
+        name: entry.league.name,
+        type: entry.league.type ?? null,
+        country: entry.country?.name ?? "—",
+        logo: entry.league.logo || null,
+        currentSeason: current?.year ?? latest?.year ?? null,
+      };
+    });
+  },
+
+  async searchTeams(query) {
+    const rows = await apiFootball<ApiTeam>(
+      `/teams?search=${encodeURIComponent(query)}`,
+    );
+    return rows.map(toRawTeam);
+  },
+
+  async fetchTeamsByLeague(leagueExternalId, season) {
+    const rows = await apiFootball<ApiTeam>(
+      `/teams?league=${leagueExternalId}&season=${season}`,
+    );
+    return rows.map(toRawTeam);
   },
 };
 

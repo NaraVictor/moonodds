@@ -1,5 +1,7 @@
 "use client";
 
+import { useState } from "react";
+
 /**
  * Team crest.
  *
@@ -35,6 +37,11 @@ export function TeamCrest({
   size?: number;
   onFeature?: boolean;
 }) {
+  // Crest URLs are derived from an id, so a team the CDN doesn't carry yields a
+  // 404. Falling back to the monogram keeps the card intact; a broken-image
+  // glyph would not.
+  const [failed, setFailed] = useState(false);
+
   const initials = name
     .split(/\s+/)
     .slice(0, 2)
@@ -42,7 +49,7 @@ export function TeamCrest({
     .join("")
     .toUpperCase();
 
-  if (logo) {
+  if (logo && !failed) {
     return (
       // eslint-disable-next-line @next/next/no-img-element
       <img
@@ -50,7 +57,9 @@ export function TeamCrest({
         alt=""
         width={size}
         height={size}
-        className="object-contain"
+        loading="lazy"
+        onError={() => setFailed(true)}
+        className="flex-none object-contain"
         style={{ width: size, height: size }}
       />
     );

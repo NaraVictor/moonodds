@@ -4,7 +4,16 @@ import type { Market, Pick } from "./types";
  * Turn a market + selection into something a person reads without decoding.
  * "over_under_2_5" + "over" is a database row; "Over 2.5 goals" is a pick.
  */
-export function formatMarket(market: Market, value: string): string {
+/**
+ * The call, in words.
+ *
+ * `value` is optional because a locked pick carries the market but not the
+ * selection — we advertise which question was answered without answering it.
+ * With no value this returns the market's own name, which is exactly the
+ * teaser a locked card wants.
+ */
+export function formatMarket(market: Market, value?: string): string {
+  if (value === undefined) return MARKET_LABELS[market] ?? "Prediction";
   const v = value.toLowerCase();
 
   switch (market) {
@@ -126,9 +135,9 @@ export function formatKickoff(iso: string): string {
 
   return date.toLocaleString(undefined, {
     weekday: "short",
-    hour: "2-digit",
+    hour: "numeric",
     minute: "2-digit",
-    hour12: false,
+    hour12: true,
   });
 }
 

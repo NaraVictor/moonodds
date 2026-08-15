@@ -38,23 +38,33 @@ export type TeamRef = {
   logo: string | null;
 };
 
+/**
+ * A prediction as the board sees it.
+ *
+ * Since the board went public, a row can arrive in one of two shapes. An
+ * unlocked pick has everything. A locked one carries the fixture facts and the
+ * market, and the AI fields are genuinely absent from the payload — not blanked
+ * client-side, not hidden with CSS. `locked` discriminates the two, and the
+ * AI fields are optional because for a locked row they do not exist.
+ */
 export type Pick = {
   id: string;
+  locked?: boolean;
   predictionType: Market;
-  predictedValue: string;
-  confidenceScore: number;
-  stakingUnit: number;
+  predictedValue?: string;
+  confidenceScore?: number;
+  stakingUnit?: number;
   /** Book price where we have one, else a market-shaped estimate. */
-  odds: number;
-  reasoning: string;
+  odds?: number;
+  reasoning?: string;
   status: PredictionStatus;
-  reasoningTags: string[] | null;
-  altMarket: Market | null;
-  altPredictedValue: string | null;
-  altConfidence: number | null;
-  filtersApplied: Record<string, boolean> | null;
-  actualResult: { homeGoals: number; awayGoals: number } | null;
-  settledAt: string | null;
+  reasoningTags?: string[] | null;
+  altMarket?: Market | null;
+  altPredictedValue?: string | null;
+  altConfidence?: number | null;
+  filtersApplied?: Record<string, boolean> | null;
+  actualResult?: { homeGoals: number; awayGoals: number } | null;
+  settledAt?: string | null;
   fixture: {
     id: string;
     date: string;
@@ -68,6 +78,26 @@ export type Pick = {
   awayTeam: TeamRef;
   league: { name: string | null; country: string | null; logo: string | null };
 };
+
+/**
+ * A pick with its AI content present.
+ *
+ * Anything that renders the call, the confidence or the reasoning — the slip,
+ * the summary, the Office — operates on this rather than on `Pick`, so the
+ * compiler refuses code that would read a field a locked payload never carries.
+ * That is the point of the optionality above: it turns "did you handle the
+ * locked case?" into a build error instead of a runtime `undefined`.
+ */
+export type UnlockedPick = Pick & {
+  predictedValue: string;
+  confidenceScore: number;
+  odds: number;
+  reasoning: string;
+};
+
+export function isUnlocked(p: Pick): p is UnlockedPick {
+  return !p.locked && p.predictedValue !== undefined;
+}
 
 /**
  * What every pick-returning RPC hands back. `totalCount` always reflects the

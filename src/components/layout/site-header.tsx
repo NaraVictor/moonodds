@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { Button } from "@heroui/react/button";
 import { LinkButton } from "@/components/ui/link-button";
 import { Chip } from "@heroui/react/chip";
-import { LogOut, ShieldCheck } from "lucide-react";
+import { LogOut } from "lucide-react";
 import { Logo } from "@/components/brand/logo";
 import { useAccessState } from "@/lib/queries";
 import { signOut } from "@/lib/auth-actions";
@@ -49,20 +49,6 @@ export function SiteHeader({ signedIn }: { signedIn: boolean }) {
                 </Link>
               );
             })}
-            {access?.isSuperAdmin && (
-              <Link
-                href="/office"
-                aria-current={pathname.startsWith("/office") ? "page" : undefined}
-                className={`ml-1 flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm transition-colors ${
-                  pathname.startsWith("/office")
-                    ? "bg-surface-secondary text-foreground"
-                    : "text-muted hover:text-foreground"
-                }`}
-              >
-                <ShieldCheck className="h-3.5 w-3.5" />
-                Office
-              </Link>
-            )}
           </nav>
         )}
 

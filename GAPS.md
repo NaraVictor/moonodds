@@ -33,18 +33,46 @@ shows saved slips read-only, and there is no way to create one.
 
 This is the biggest user-facing hole: a core product loop is unreachable.
 
-## 2. Office catalog is read-only
+## ~~2. Office catalog is read-only~~ — DONE
 
-Original: `createLeague` `updateLeague` `upsertLeague` `importLeague`
-`searchLeagues` `createTeam` `updateTeam` `deleteTeam` `importTeam`
-`searchTeams` `fetchTeamsByLeague` `setSelectedLeagues`, plus
-`edit-league-dialog` / `edit-team-dialog` / `setup-data-panel`.
+The Catalog tab now has four panels: **Engine coverage**, Leagues, Teams, and
+Find & import. Eleven new Office actions back them — `searchLeagues`
+`searchTeams` `importLeague` `importTeams` `createLeague` `updateLeague`
+`createTeam` `updateTeam` `deleteTeam` `setSelectedLeagues`, all behind the
+existing super-admin guard.
 
-Here the Catalog tab lists leagues and teams and nothing else.
+**Engine coverage is the one that mattered.** `selected_league_ids` decides
+which leagues the daily fetch pulls, and therefore the only matches the engine
+can ever pick from — it was previously editable only by writing SQL. It's now a
+toggle grid, and only leagues carrying an upstream `external_id` are
+selectable, because a hand-created league has nothing to fetch against.
 
-**`setSelectedLeagues` matters most** — it controls which leagues the daily
-fetch covers. Right now that's only editable by writing to
-`ai_engine_config.selected_league_ids` directly in SQL.
+Three things worth knowing about the implementation:
+
+- **The catalogue needed a provider surface.** `FootballProvider` had no search
+  or import methods at all, so `searchLeagues` / `searchTeams` /
+  `fetchTeamsByLeague` were added to the interface and implemented in both
+  live and mock. The mock catalogue is deliberately *wider* than the six
+  leagues that generate fixtures — importing a league you already have proves
+  nothing about the import path.
+- **`apiFootball` now checks the `errors` body.** API-Football answers a dead
+  key, an expired plan or an exhausted quota with **HTTP 200** plus an errors
+  object and an empty `response`. Trusting `res.ok` alone turns "your key is
+  dead" into "no leagues matched". The original Convex code checked this; the
+  port had dropped it.
+- **Team deletion is guarded rather than cascaded.** `fixtures` references
+  `teams` with no ON DELETE rule, so deleting a team with history raises a raw
+  foreign-key violation. The action counts fixtures first and returns *"This
+  team has 4 fixtures on record. Deactivate it instead"* — Convex had no
+  foreign keys, so the original simply orphaned the rows.
+
+Verified end to end against the running database: coverage saved through the UI
+persisted as `{39,140,135,78,61,88,94}` with `approved_by` stamped, and a
+subsequent fetch reported `leagues: 7` — up from 6, i.e. the setting reaches
+the pipeline. Import of a new league wrote a correctly slugified row
+(`Süper Lig` → `super-lig`); bulk team import upserted 6 by `external_id`
+without duplicating the 2 already present; delete was refused for a team with
+fixtures and succeeded for one without.
 
 ## ~~3 + 4. Manual prediction management & result entry~~ — DONE
 
@@ -73,13 +101,6 @@ The Predictions tab here is read-only. The schema carries `manual_override` and
 `override_reason` columns — ported faithfully — but nothing writes them, so an
 admin cannot correct or withdraw a bad call.
 
-## 4. Manual result entry
-
-Original: `updateFixtureResult`, wired into `grade-results-panel`.
-
-Auto-grading works. But when the feed is wrong or a market needs a human (the
-`review_needed` queue), there is no way to type in a score and settle it.
-
 ## 5. Engine config lifecycle
 
 Original: `getAllConfigs` `getConfigById` `createConfig` `updateConfig`
@@ -90,12 +111,14 @@ Only the single active config is editable here. The schema supports
 UI to draft a new version, compare, or activate/roll back. Editing the live
 config is currently the only path.
 
-## 6. Admin pass grant / revoke
+## 6. Admin pass grant / revoke, and user management generally
 
-Original: `grantDailyPass` `revokeDailyPass` `deleteUser`.
+Original: `grantDailyPass` `revokeDailyPass` `deleteUser` `updateUserProfile`
+`searchUsers`, plus `edit-user-dialog`.
 
-Admins can suspend and reinstate. They cannot comp a pass to a complaining
-customer, revoke one, or delete an account.
+The Users panel offers exactly one control: suspend / reinstate. Admins cannot
+comp a pass to a complaining customer, revoke one, delete an account, edit a
+profile, or search across accounts.
 
 ## 7. Slip management
 
@@ -107,8 +130,15 @@ Slips are read-only for the user — no delete, no leg removal.
 
 Original: `getProfileStats` `getUserPicksReport` `getPredictionReport`.
 
-Profile shows access tier and settings but no personal performance history. The
-Office has no per-user or per-prediction report export.
+Profile shows access tier and settings but no personal performance history —
+the original had win rate, ROI, total picks, avg confidence, and a
+won/lost/pending/void breakdown.
+
+The Office **does** have a Reports tab, but it renders tuning reports (which
+lived under the original's AI Engine tab). The actual reporting is absent:
+`getPredictionReport` — win rate and W/L/pending/void with a per-league
+breakdown and date presets from all-time through a custom range — and
+`getUserPicksReport`, the per-user equivalent.
 
 ## ~~9. Fixture stats refresh~~ — DONE
 
@@ -149,6 +179,19 @@ compliance requirement, not a nicety.
 `getLeaguePerformance` + a leagues panel showing per-league accuracy and
 efficiency flags. Nothing reads it here.
 
+## 12. Theme switching
+
+The original profile carried a Light / Dark / System selector on `next-themes`.
+`layout.tsx` hard-codes `data-theme="light"`, while `globals.css` defines a
+complete dark palette that is currently unreachable. Most of the work is
+already done — what's missing is the control and its persistence.
+
+## 13. No 404 route
+
+The original had `NotFound.tsx`. There's no `src/app/not-found.tsx`, so
+unmatched routes fall through to the framework default. Minor, but it's the one
+page guaranteed to be seen out of context.
+
 ---
 
 ## Fixed in this pass
@@ -167,6 +210,9 @@ clearing 9.5. Verified: job claimed and completed.
 1. ~~Bet slip builder~~ — done.
 2. ~~Fixture stats fetching~~ — done.
 3. ~~Manual result entry + prediction override~~ — done.
-4. **Catalog CRUD**, starting with `setSelectedLeagues` — NEXT.
-5. Age gate (compliance).
-6. Config lifecycle, pass grant/revoke, personal stats, league performance.
+4. ~~Catalog CRUD, starting with `setSelectedLeagues`~~ — done.
+5. **Age gate** (compliance) — NEXT.
+6. Personal stats + league performance — the data is already in the tables;
+   this is read-and-render work, not new plumbing.
+7. Office reports, config lifecycle, pass grant/revoke, slip management.
+8. Theme toggle and 404 — small, and the theme tokens already exist.

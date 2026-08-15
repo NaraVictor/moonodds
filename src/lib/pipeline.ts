@@ -131,6 +131,7 @@ export async function runFetchFixtures(date: string) {
           slug: slugify(f.leagueName),
           country: f.country,
           season: f.season,
+          logo: f.leagueLogo,
           is_active: true,
         },
         { onConflict: "external_id" },
@@ -152,6 +153,7 @@ export async function runFetchFixtures(date: string) {
             name: t.name,
             short_name: t.shortName,
             slug: slugify(t.name),
+            logo: t.logo,
           },
           { onConflict: "external_id" },
         )
@@ -610,7 +612,7 @@ async function handleJob(
 
 /* ----------------------------- helpers ----------------------------- */
 
-function slugify(s: string): string {
+export function slugify(s: string): string {
   return s
     .toLowerCase()
     .normalize("NFD")

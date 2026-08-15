@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { Receipt, X, Trash2, Check, Info } from "lucide-react";
 import { useBetSlip } from "@/lib/bet-slip";
+import { Alert } from "@/components/ui/alert";
 import { useConfirmSlip } from "@/lib/queries";
 import { formatMarket, teamShort } from "@/lib/format";
 
@@ -12,23 +13,34 @@ import { formatMarket, teamShort } from "@/lib/format";
  *
  * The FAB only appears once there's something in the slip — an empty affordance
  * following you around the page is noise. It sits above the mobile bottom nav.
+ *
+ * The counter re-keys on every change so it replays the bump animation. That
+ * is the entire feedback for an add: enough to confirm the click landed,
+ * without the sheet takeover that used to hide this button the moment it
+ * became relevant.
  */
 export function BetSlipFab() {
   const { entries, setOpen, isOpen } = useBetSlip();
+  const pathname = usePathname();
 
+  // The Office is an internal tool; a punter's slip has no business floating
+  // over it.
+  if (pathname.startsWith("/office")) return null;
   if (!entries.length || isOpen) return null;
 
   return (
     <button
       type="button"
       onClick={() => setOpen(true)}
-      className="press fixed bottom-24 right-5 z-40 flex items-center gap-2.5 rounded-full bg-feature px-5 py-3.5 text-feature-foreground md:bottom-6"
+      aria-label={`Open slip, ${entries.length} ${entries.length === 1 ? "selection" : "selections"}`}
+      className="press rise fixed bottom-24 right-5 z-40 flex items-center gap-2.5 rounded-full bg-feature px-5 py-3.5 text-feature-foreground md:bottom-6"
       style={{ boxShadow: "var(--shadow-lift)" }}
     >
       <Receipt className="h-4 w-4" />
       <span className="text-sm font-semibold">Slip</span>
       <span
-        className="numeral flex h-6 min-w-6 items-center justify-center rounded-full px-1.5 text-xs"
+        key={entries.length}
+        className="numeral bump flex h-6 min-w-6 items-center justify-center rounded-full px-1.5 text-xs"
         style={{ background: "var(--accent)", color: "var(--accent-foreground)" }}
       >
         {entries.length}
@@ -206,11 +218,9 @@ export function BetSlipSheet() {
                 </div>
 
                 {confirm.error && (
-                  <div className="mt-4 rounded-2xl border border-lost-edge bg-lost-wash p-3">
-                    <p className="text-[13px]" style={{ color: "var(--lost-ink)" }}>
-                      {confirm.error.message}
-                    </p>
-                  </div>
+                  <Alert status="danger" className="mt-4">
+                    {confirm.error.message}
+                  </Alert>
                 )}
 
                 <button

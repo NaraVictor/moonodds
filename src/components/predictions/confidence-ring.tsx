@@ -1,11 +1,27 @@
 "use client";
 
+import {
+  ProgressCircleRoot,
+  ProgressCircleTrack,
+  ProgressCircleTrackCircle,
+  ProgressCircleFillCircle,
+} from "@heroui/react";
+
 /**
- * AI confidence, as a ring that draws itself on mount.
+ * AI confidence, as a ring.
  *
- * Prominent but deliberately smaller than the prediction itself — confidence
- * qualifies the call, it isn't the call. The label says "AI confidence" rather
- * than anything resembling a guarantee.
+ * Built on HeroUI's ProgressCircle rather than the hand-rolled SVG this
+ * replaces. The arithmetic was the same either way — circumference, dash
+ * offset, a rotation to start at twelve o'clock — but the component version
+ * carries the ARIA progressbar semantics and value announcements for free,
+ * which the bare `role="img"` did not.
+ *
+ * Prominent but deliberately smaller than the prediction itself: confidence
+ * qualifies the call, it isn't the call. The label reads "AI conf." rather than
+ * anything resembling a guarantee.
+ *
+ * The `feature` tone is ours, not HeroUI's — a white ring for the dark hero
+ * card, which no semantic colour in the system covers.
  */
 export function ConfidenceRing({
   value,
@@ -20,10 +36,6 @@ export function ConfidenceRing({
   showLabel?: boolean;
 }) {
   const pct = Math.round(value * 10);
-  const stroke = size < 48 ? 4 : 5;
-  const r = (size - stroke) / 2;
-  const circumference = 2 * Math.PI * r;
-  const offset = circumference * (1 - pct / 100);
 
   const color =
     tone === "won"
@@ -34,49 +46,27 @@ export function ConfidenceRing({
           ? "#fff"
           : "var(--accent)";
 
-  const track =
-    tone === "feature"
-      ? "rgba(255,255,255,0.16)"
-      : "color-mix(in oklab, currentColor 12%, transparent)";
-
   return (
-    <div className="flex flex-col items-center gap-1">
-      <div className="relative" style={{ width: size, height: size }}>
-        <svg
-          width={size}
-          height={size}
-          viewBox={`0 0 ${size} ${size}`}
-          className="-rotate-90"
-          role="img"
-          aria-label={`AI confidence ${pct} percent`}
-        >
-          <circle
-            cx={size / 2}
-            cy={size / 2}
-            r={r}
-            fill="none"
-            stroke={track}
-            strokeWidth={stroke}
+    <div className="flex flex-none flex-col items-center gap-1">
+      <ProgressCircleRoot
+        value={pct}
+        minValue={0}
+        maxValue={100}
+        aria-label={`AI confidence ${pct} percent`}
+        className="relative"
+        style={{ width: size, height: size, color }}
+      >
+        <ProgressCircleTrack className="h-full w-full">
+          <ProgressCircleTrackCircle
+            style={{
+              stroke:
+                tone === "feature"
+                  ? "rgba(255,255,255,0.16)"
+                  : "color-mix(in oklab, currentColor 14%, transparent)",
+            }}
           />
-          <circle
-            cx={size / 2}
-            cy={size / 2}
-            r={r}
-            fill="none"
-            stroke={color}
-            strokeWidth={stroke}
-            strokeLinecap="round"
-            strokeDasharray={circumference}
-            className="sweep"
-            style={
-              {
-                "--sweep-from": `${circumference}`,
-                "--sweep-to": `${offset}`,
-                strokeDashoffset: offset,
-              } as React.CSSProperties
-            }
-          />
-        </svg>
+          <ProgressCircleFillCircle style={{ stroke: color }} />
+        </ProgressCircleTrack>
 
         <span
           className="numeral absolute inset-0 flex items-center justify-center"
@@ -87,7 +77,7 @@ export function ConfidenceRing({
         >
           {pct}
         </span>
-      </div>
+      </ProgressCircleRoot>
 
       {showLabel && (
         <span

@@ -25,168 +25,206 @@
     --radius: 1rem;
     --border-width: 1px;
 
-    /* Grounds — near-white, not pure, so white cards read as raised. */
-    --background: #f6f7f9;
-    --foreground: #0b0d12;
+    /*
+     * Grounds — the Oddstar palette, carried over wholesale.
+     *
+     * Neutrals are not grey: they carry a trace of the brand green (hue 150),
+     * and the near-black leans blue (hue 250). That pairing is what stops a
+     * mostly-white marketplace reading as a generic dashboard.
+     */
+    --background: oklch(0.985 0.004 150);
+    --foreground: oklch(0.16 0.02 250);
 
-    --surface: #ffffff;
-    --surface-foreground: #0b0d12;
-    --surface-secondary: #f2f4f7;
-    --surface-secondary-foreground: #0b0d12;
-    --surface-tertiary: #e9ecf1;
-    --surface-tertiary-foreground: #0b0d12;
+    --surface: oklch(1 0 0);
+    --surface-foreground: oklch(0.16 0.02 250);
+    --surface-secondary: oklch(0.965 0.014 150);
+    --surface-secondary-foreground: oklch(0.24 0.07 150);
+    --surface-tertiary: oklch(0.935 0.014 150);
+    --surface-tertiary-foreground: oklch(0.16 0.02 250);
 
-    --overlay: #ffffff;
-    --overlay-foreground: #0b0d12;
+    --overlay: oklch(1 0 0);
+    --overlay-foreground: oklch(0.16 0.02 250);
 
-    --muted: #667085;
+    --muted: oklch(0.46 0.02 250);
 
-    --default: #f2f4f7;
-    --default-foreground: #0b0d12;
+    --default: oklch(0.965 0.014 150);
+    --default-foreground: oklch(0.24 0.07 150);
 
-    /* Brand: one accent, used for AI/confidence and primary actions. */
-    --accent: #6d5bff;
-    --accent-foreground: #ffffff;
+    /*
+     * Brand: green leads, blue is the informational second.
+     *
+     * Oddstar ran a green primary with a blue accent. Green carries primary
+     * actions and the AI call; blue carries links and secondary signal. Keeping
+     * both means the outcome system below can own green without colliding with
+     * every button on the page.
+     */
+    --accent: oklch(0.53 0.15 150);
+    --accent-foreground: oklch(0.99 0 0);
+    --info: oklch(0.5 0.16 252);
+    --info-foreground: oklch(0.99 0 0);
 
     /* Outcome system. Reserved — never decorative. */
-    --success: #0e9f6e;
-    --success-foreground: #ffffff;
-    --warning: #b54708;
-    --warning-foreground: #ffffff;
-    --danger: #e5484d;
-    --danger-foreground: #ffffff;
+    --success: oklch(0.53 0.15 150);
+    --success-foreground: oklch(0.99 0 0);
+    --warning: oklch(0.55 0.13 70);
+    --warning-foreground: oklch(0.99 0 0);
+    --danger: oklch(0.577 0.245 27.325);
+    --danger-foreground: oklch(0.99 0 0);
 
-    --border: #e4e7ec;
-    --separator: #eef0f3;
-    --focus: #6d5bff;
-    --link: #6d5bff;
+    --border: oklch(0.92 0.006 150);
+    --separator: oklch(0.955 0.005 150);
+    --focus: oklch(0.53 0.15 150);
+    --link: oklch(0.5 0.16 252);
 
-    --segment: #ffffff;
-    --segment-foreground: #0b0d12;
+    --segment: oklch(1 0 0);
+    --segment-foreground: oklch(0.16 0.02 250);
 
-    --field-background: #ffffff;
-    --field-foreground: #0b0d12;
-    --field-placeholder: #98a2b3;
-    --field-border: #d7dbe3;
+    --field-background: oklch(1 0 0);
+    --field-foreground: oklch(0.16 0.02 250);
+    --field-placeholder: oklch(0.62 0.015 250);
+    --field-border: oklch(0.88 0.008 150);
     --field-border-width: 1px;
 
-    --backdrop: rgba(11, 13, 18, 0.45);
-    --scrollbar-thumb: #d7dbe3;
+    --backdrop: oklch(0.16 0.02 250 / 0.45);
+    --scrollbar-thumb: oklch(0.88 0.008 150);
     --scrollbar-track: transparent;
 
     /* --- app tokens --------------------------------------------------- */
 
     /* The dark feature surface — the hero match card. */
-    --feature: #0e1116;
-    --feature-foreground: #ffffff;
-    --feature-muted: #8b93a3;
-    --feature-border: rgba(255, 255, 255, 0.08);
+    --feature: oklch(0.16 0.022 252);
+    --feature-foreground: oklch(0.99 0 0);
+    --feature-muted: oklch(0.68 0.015 250);
+    --feature-border: oklch(1 0 0 / 0.1);
 
     /* Outcome washes: tint, never saturate. Text must stay legible on them. */
-    --won-wash: #ecfdf3;
-    --won-edge: #a6f4c5;
-    --won-ink: #05603a;
+    --won-wash: oklch(0.965 0.03 155);
+    --won-edge: oklch(0.88 0.08 155);
+    --won-ink: oklch(0.43 0.13 155);
 
-    --lost-wash: #fef3f2;
-    --lost-edge: #fecdca;
-    --lost-ink: #912018;
+    --lost-wash: oklch(0.965 0.018 27);
+    --lost-edge: oklch(0.88 0.07 27);
+    --lost-ink: oklch(0.47 0.17 27);
 
-    --pending-wash: #ffffff;
-    --pending-edge: #e4e7ec;
-    --pending-ink: #475467;
+    --pending-wash: oklch(1 0 0);
+    --pending-edge: oklch(0.92 0.006 150);
+    --pending-ink: oklch(0.46 0.02 250);
 
-    --accent-wash: #f0edff;
-    --accent-edge: #d9d2ff;
+    --accent-wash: oklch(0.96 0.035 150);
+    --accent-edge: oklch(0.895 0.07 150);
 
-    --lock-veil: rgba(246, 247, 249, 0.55);
+    --lock-veil: oklch(0.985 0.004 150 / 0.55);
 
-    --shadow-card: 0 1px 2px rgba(11, 13, 18, 0.04),
-      0 12px 32px -20px rgba(11, 13, 18, 0.18);
-    --shadow-lift: 0 2px 4px rgba(11, 13, 18, 0.05),
-      0 20px 48px -24px rgba(11, 13, 18, 0.28);
+    --shadow-card: 0 1px 2px oklch(0.16 0.02 250 / 0.04),
+      0 12px 32px -20px oklch(0.16 0.02 250 / 0.18);
+    --shadow-lift: 0 2px 4px oklch(0.16 0.02 250 / 0.05),
+      0 20px 48px -24px oklch(0.16 0.02 250 / 0.28);
   }
 
   .dark,
   [data-theme="dark"] {
     color-scheme: dark;
 
-    --background: #0b0d12;
-    --foreground: #f5f7fa;
+    /* Oddstar's dark ground: blue-black at hue 252, green brand lifted for
+       contrast against it. */
+    --background: oklch(0.13 0.018 252);
+    --foreground: oklch(0.96 0.004 250);
 
-    --surface: #14171e;
-    --surface-foreground: #f5f7fa;
-    --surface-secondary: #1a1e27;
-    --surface-secondary-foreground: #f5f7fa;
-    --surface-tertiary: #222732;
-    --surface-tertiary-foreground: #f5f7fa;
+    --surface: oklch(0.17 0.02 252);
+    --surface-foreground: oklch(0.96 0.004 250);
+    --surface-secondary: oklch(0.22 0.03 252);
+    --surface-secondary-foreground: oklch(0.93 0.005 250);
+    --surface-tertiary: oklch(0.26 0.025 252);
+    --surface-tertiary-foreground: oklch(0.96 0.004 250);
 
-    --overlay: #14171e;
-    --overlay-foreground: #f5f7fa;
+    --overlay: oklch(0.17 0.02 252);
+    --overlay-foreground: oklch(0.96 0.004 250);
 
-    --muted: #98a2b3;
+    --muted: oklch(0.62 0.012 250);
 
-    --default: #1a1e27;
-    --default-foreground: #f5f7fa;
+    --default: oklch(0.22 0.03 252);
+    --default-foreground: oklch(0.93 0.005 250);
 
-    --accent: #8b7bff;
-    --accent-foreground: #0b0d12;
+    --accent: oklch(0.62 0.16 150);
+    --accent-foreground: oklch(0.12 0.03 150);
+    --info: oklch(0.6 0.16 252);
+    --info-foreground: oklch(0.99 0 0);
 
-    --success: #3ecf8e;
-    --success-foreground: #06281c;
-    --warning: #f79009;
-    --warning-foreground: #2b1503;
-    --danger: #ff6369;
-    --danger-foreground: #2d0709;
+    --success: oklch(0.62 0.16 150);
+    --success-foreground: oklch(0.12 0.03 150);
+    --warning: oklch(0.8 0.14 85);
+    --warning-foreground: oklch(0.2 0.05 85);
+    --danger: oklch(0.65 0.2 25);
+    --danger-foreground: oklch(0.15 0.04 25);
 
-    --border: #242936;
-    --separator: #1c212b;
-    --focus: #8b7bff;
-    --link: #8b7bff;
+    --border: oklch(0.27 0.02 252);
+    --separator: oklch(0.22 0.02 252);
+    --focus: oklch(0.62 0.16 150);
+    --link: oklch(0.6 0.16 252);
 
-    --segment: #1a1e27;
-    --segment-foreground: #f5f7fa;
+    --segment: oklch(0.22 0.03 252);
+    --segment-foreground: oklch(0.96 0.004 250);
 
-    --field-background: #14171e;
-    --field-foreground: #f5f7fa;
-    --field-placeholder: #667085;
-    --field-border: #2a3040;
+    --field-background: oklch(0.17 0.02 252);
+    --field-foreground: oklch(0.96 0.004 250);
+    --field-placeholder: oklch(0.5 0.015 250);
+    --field-border: oklch(0.29 0.02 252);
 
-    --backdrop: rgba(0, 0, 0, 0.7);
-    --scrollbar-thumb: #2a3040;
+    --backdrop: oklch(0.08 0.015 252 / 0.7);
+    --scrollbar-thumb: oklch(0.29 0.02 252);
 
-    --feature: #14171e;
-    --feature-foreground: #ffffff;
-    --feature-muted: #8b93a3;
-    --feature-border: rgba(255, 255, 255, 0.08);
+    --feature: oklch(0.17 0.02 252);
+    --feature-foreground: oklch(0.99 0 0);
+    --feature-muted: oklch(0.62 0.012 250);
+    --feature-border: oklch(1 0 0 / 0.08);
 
-    --won-wash: #0d2a1e;
-    --won-edge: #14603f;
-    --won-ink: #6ee7b0;
+    --won-wash: oklch(0.25 0.05 155);
+    --won-edge: oklch(0.38 0.09 155);
+    --won-ink: oklch(0.8 0.15 155);
 
-    --lost-wash: #2c1113;
-    --lost-edge: #6b1f22;
-    --lost-ink: #ff9b9e;
+    --lost-wash: oklch(0.25 0.05 25);
+    --lost-edge: oklch(0.38 0.1 25);
+    --lost-ink: oklch(0.78 0.13 25);
 
-    --pending-wash: #14171e;
-    --pending-edge: #242936;
-    --pending-ink: #98a2b3;
+    --pending-wash: oklch(0.17 0.02 252);
+    --pending-edge: oklch(0.27 0.02 252);
+    --pending-ink: oklch(0.62 0.012 250);
 
-    --accent-wash: #1b1735;
-    --accent-edge: #322a5e;
+    --accent-wash: oklch(0.24 0.05 150);
+    --accent-edge: oklch(0.34 0.08 150);
 
-    --lock-veil: rgba(11, 13, 18, 0.55);
+    --lock-veil: oklch(0.13 0.018 252 / 0.55);
 
-    --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4),
-      0 12px 32px -20px rgba(0, 0, 0, 0.8);
-    --shadow-lift: 0 2px 4px rgba(0, 0, 0, 0.5),
-      0 20px 48px -24px rgba(0, 0, 0, 0.9);
+    --shadow-card: 0 1px 2px oklch(0 0 0 / 0.4),
+      0 12px 32px -20px oklch(0 0 0 / 0.8);
+    --shadow-lift: 0 2px 4px oklch(0 0 0 / 0.5),
+      0 20px 48px -24px oklch(0 0 0 / 0.9);
   }
 }
 
 @theme inline {
+  /*
+   * Radius scale, tightened 10%.
+   *
+   * This affects inner geometry only — panels, fields, chips, stat tiles, the
+   * things that sit *inside* a card. Cards themselves are set with an explicit
+   * rounded-[1.5rem] and buttons with rounded-full, so neither reads from this
+   * scale and neither moves. The result is slightly crisper interior detail
+   * against unchanged outer silhouettes.
+   */
+  --radius-sm: 0.1125rem;
+  --radius-md: 0.3375rem;
+  --radius-lg: 0.45rem;
+  --radius-xl: 0.675rem;
+  --radius-2xl: 0.9rem;
+  --radius-3xl: 1.35rem;
+
   --color-feature: var(--feature);
   --color-feature-foreground: var(--feature-foreground);
   --color-feature-muted: var(--feature-muted);
+
+  --color-info: var(--info);
+  --color-info-foreground: var(--info-foreground);
 
   --color-won-wash: var(--won-wash);
   --color-won-edge: var(--won-edge);
@@ -317,15 +355,24 @@
     transform: scale(0.985);
   }
 
+  /*
+   * Card hover.
+   *
+   * Cards sit flat — no resting shadow — so the hover cue is a small rise plus
+   * a firmer border rather than a drop shadow appearing from nowhere. On a
+   * bordered, shadowless card a shadow on hover reads as the card lifting off
+   * the page; a border darkening reads as it becoming active, which is what a
+   * hover actually means here.
+   */
   .lift {
     transition:
       transform var(--dur-base) var(--ease-out-soft),
-      box-shadow var(--dur-base) var(--ease-out-soft);
+      border-color var(--dur-base) var(--ease-out-soft);
   }
   @media (hover: hover) {
     .lift:hover {
       transform: translateY(-2px);
-      box-shadow: var(--shadow-lift);
+      border-color: color-mix(in oklab, var(--foreground) 16%, transparent);
     }
   }
 
@@ -341,6 +388,24 @@
       opacity: 1;
       transform: none;
     }
+  }
+
+  /* Acknowledges a change in place — used by the slip counter, which has to
+     register an addition without stealing the screen the way opening the sheet
+     did. */
+  @keyframes bump {
+    0% {
+      transform: scale(1);
+    }
+    40% {
+      transform: scale(1.28);
+    }
+    100% {
+      transform: scale(1);
+    }
+  }
+  .bump {
+    animation: bump 380ms var(--ease-out-soft);
   }
 
   /* Confidence rings draw themselves in on mount. */

@@ -6,7 +6,10 @@ import type {
   MessagingProvider,
   PaymentProvider,
   RawFixture,
+  RawLeague,
+  RawTeam,
 } from "./types";
+import { leagueBadgeUrl, teamCrestUrl } from "./types";
 import type { Market } from "@/lib/types";
 
 /**
@@ -108,6 +111,7 @@ export const mockFootball: FootballProvider = {
           ),
           leagueExternalId: leagueId,
           leagueName: meta.name,
+          leagueLogo: leagueBadgeUrl(leagueId),
           country: meta.country,
           season: kickoff.getUTCFullYear(),
           round: `Regular Season - ${10 + Math.floor(rand() * 25)}`,
@@ -125,11 +129,13 @@ export const mockFootball: FootballProvider = {
             externalId: teams[h][0],
             name: teams[h][1],
             shortName: teams[h][2],
+            logo: teamCrestUrl(teams[h][0]),
           },
           away: {
             externalId: teams[a][0],
             name: teams[a][1],
             shortName: teams[a][2],
+            logo: teamCrestUrl(teams[a][0]),
           },
         });
       }
@@ -176,6 +182,7 @@ export const mockFootball: FootballProvider = {
         externalId: id,
         leagueExternalId: 0,
         leagueName: "",
+        leagueLogo: null,
         country: "",
         season: new Date().getUTCFullYear(),
         round: null,
@@ -187,12 +194,74 @@ export const mockFootball: FootballProvider = {
         awayGoals: ag,
         htHomeGoals: Math.min(hg, Math.floor(rand() * 2)),
         htAwayGoals: Math.min(ag, Math.floor(rand() * 2)),
-        home: { externalId: 0, name: "", shortName: "" },
-        away: { externalId: 0, name: "", shortName: "" },
+        home: { externalId: 0, name: "", shortName: "", logo: null },
+        away: { externalId: 0, name: "", shortName: "", logo: null },
       };
     });
   },
+
+  async searchLeagues(query) {
+    const term = query.trim().toLowerCase();
+    return SEARCHABLE_LEAGUES.filter(
+      (l) =>
+        l.name.toLowerCase().includes(term) ||
+        l.country.toLowerCase().includes(term),
+    );
+  },
+
+  async searchTeams(query) {
+    const term = query.trim().toLowerCase();
+    return SEARCHABLE_TEAMS.filter((t) => t.name.toLowerCase().includes(term));
+  },
+
+  async fetchTeamsByLeague(leagueExternalId) {
+    const teams = TEAM_POOL[leagueExternalId];
+    if (!teams) return [];
+    const country = LEAGUE_META[leagueExternalId]?.country ?? null;
+    return teams.map(([externalId, name, shortName]) => ({
+      externalId,
+      name,
+      shortName,
+      country,
+      logo: null,
+      venue: `${name} Stadium`,
+    }));
+  },
 };
+
+/**
+ * The searchable catalogue is deliberately wider than the six leagues that
+ * generate fixtures: importing a league you already have proves nothing about
+ * the import path. The extras carry no team pool, so a mock fixture fetch will
+ * return nothing for them — correct behaviour, not a bug.
+ */
+const SEARCHABLE_LEAGUES: RawLeague[] = [
+  ...Object.entries(LEAGUE_META).map(([id, meta]) => ({
+    externalId: Number(id),
+    name: meta.name,
+    type: "League",
+    country: meta.country,
+    logo: null,
+    currentSeason: new Date().getUTCFullYear(),
+  })),
+  { externalId: 94, name: "Primeira Liga", type: "League", country: "Portugal", logo: null, currentSeason: new Date().getUTCFullYear() },
+  { externalId: 203, name: "Süper Lig", type: "League", country: "Turkey", logo: null, currentSeason: new Date().getUTCFullYear() },
+  { externalId: 144, name: "Jupiler Pro League", type: "League", country: "Belgium", logo: null, currentSeason: new Date().getUTCFullYear() },
+  { externalId: 2, name: "UEFA Champions League", type: "Cup", country: "World", logo: null, currentSeason: new Date().getUTCFullYear() },
+  { externalId: 253, name: "Major League Soccer", type: "League", country: "USA", logo: null, currentSeason: new Date().getUTCFullYear() },
+];
+
+const SEARCHABLE_TEAMS: RawTeam[] = Object.entries(TEAM_POOL).flatMap(
+  ([leagueId, teams]) =>
+    teams.map(([externalId, name, shortName]) => ({
+      externalId,
+      name,
+      shortName,
+      country: LEAGUE_META[Number(leagueId)]?.country ?? null,
+      logo: null,
+      venue: `${name} Stadium`,
+    })),
+);
 
 const MARKETS: Market[] = [
   "1x2",

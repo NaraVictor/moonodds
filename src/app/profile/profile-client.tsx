@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Toggle } from "@/components/ui/toggle";
+import { Alert } from "@/components/ui/alert";
 import { Bell, Mail, MessageSquare, ShieldCheck, Check } from "lucide-react";
 import {
   useAccessState,
@@ -58,7 +59,7 @@ export function ProfileClient() {
 
       <div className="stagger space-y-4">
         {/* --------------------- identity + access --------------------- */}
-        <section className="overflow-hidden rounded-[1.75rem] border border-border bg-surface" style={{ boxShadow: "var(--shadow-card)" }}>
+        <section className="overflow-hidden rounded-[1.75rem] border border-border bg-surface">
           <div className="flex items-center gap-4 p-6">
             <span
               className="flex h-14 w-14 flex-none items-center justify-center rounded-full text-lg font-bold"
@@ -116,7 +117,7 @@ export function ProfileClient() {
         </section>
 
         {/* --------------------- channels --------------------- */}
-        <section className="rounded-[1.75rem] border border-border bg-surface p-6" style={{ boxShadow: "var(--shadow-card)" }}>
+        <section className="rounded-[1.75rem] border border-border bg-surface p-6">
           <h2 className="text-[15px] font-semibold">How we reach you</h2>
 
           <div className="mt-4 space-y-4">
@@ -166,7 +167,7 @@ export function ProfileClient() {
         </section>
 
         {/* --------------------- alerts --------------------- */}
-        <section className="rounded-[1.75rem] border border-border bg-surface p-6" style={{ boxShadow: "var(--shadow-card)" }}>
+        <section className="rounded-[1.75rem] border border-border bg-surface p-6">
           <h2 className="flex items-center gap-2 text-[15px] font-semibold">
             <Bell className="h-4 w-4 text-muted" />
             What we tell you about
@@ -191,11 +192,9 @@ export function ProfileClient() {
         </section>
 
         {(updatePrefs.error || updatePhone.error) && (
-          <div className="rounded-2xl border border-lost-edge bg-lost-wash p-4">
-            <p className="text-sm" style={{ color: "var(--lost-ink)" }}>
-              {(updatePrefs.error ?? updatePhone.error)?.message}
-            </p>
-          </div>
+          <Alert status="danger">
+            {(updatePrefs.error ?? updatePhone.error)?.message}
+          </Alert>
         )}
 
         <section className="flex gap-3 rounded-[1.75rem] border border-border bg-surface p-6">

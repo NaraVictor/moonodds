@@ -104,17 +104,45 @@ export function useJobQueue() {
   });
 }
 
+export type CatalogLeague = {
+  id: string;
+  name: string;
+  country: string;
+  season: number | null;
+  external_id: number | null;
+  is_active: boolean;
+};
+
+export type CatalogTeam = {
+  id: string;
+  name: string;
+  short_name: string;
+  league_id: string;
+  external_id: number | null;
+  is_active: boolean;
+};
+
 export function useCatalog() {
   return useQuery({
     queryKey: adminKeys.catalog,
     queryFn: async () => {
       const supabase = createClient();
       const [leagues, teams] = await Promise.all([
-        supabase.from("leagues").select("*").order("name"),
-        supabase.from("teams").select("id, name, short_name, league_id").order("name"),
+        supabase
+          .from("leagues")
+          .select("id, name, country, season, external_id, is_active")
+          .order("name"),
+        supabase
+          .from("teams")
+          .select("id, name, short_name, league_id, external_id, is_active")
+          .order("name"),
       ]);
       if (leagues.error) throw leagues.error;
-      return { leagues: leagues.data ?? [], teams: teams.data ?? [] };
+      if (teams.error) throw teams.error;
+      return {
+        leagues: (leagues.data ?? []) as CatalogLeague[],
+        teams: (teams.data ?? []) as CatalogTeam[],
+      };
     },
   });
 }

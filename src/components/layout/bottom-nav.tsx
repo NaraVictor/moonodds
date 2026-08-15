@@ -2,8 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, Receipt, User, ShieldCheck } from "lucide-react";
-import { useAccessState } from "@/lib/queries";
+import { Home, Receipt, User } from "lucide-react";
 
 /**
  * Mobile bottom navigation.
@@ -14,9 +13,13 @@ import { useAccessState } from "@/lib/queries";
  *
  * Deliberately shallow: MoonOdds is about finding and judging predictions, so
  * there is nothing else competing for space down here.
+ *
+ * /office is deliberately absent. It's an internal tool, not a destination —
+ * operators reach it by URL, and the route's own server-side super-admin guard
+ * is what actually protects it. A nav link would only advertise it.
  */
 
-const ITEMS = [
+const items = [
   { href: "/", label: "Predictions", Icon: Home },
   { href: "/slips", label: "Slips", Icon: Receipt },
   { href: "/profile", label: "Account", Icon: User },
@@ -24,11 +27,6 @@ const ITEMS = [
 
 export function BottomNav() {
   const pathname = usePathname();
-  const { data: access } = useAccessState();
-
-  const items = access?.isSuperAdmin
-    ? [...ITEMS, { href: "/office", label: "Office", Icon: ShieldCheck }]
-    : ITEMS;
 
   return (
     <nav

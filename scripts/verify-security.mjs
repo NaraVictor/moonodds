@@ -43,6 +43,11 @@ function check(name, passed, detail) {
   if (!passed) failures++;
 }
 
+/** Not run, and not counted either way — the reason is printed instead. */
+function skip(name, detail) {
+  results.push({ name, skipped: true, detail });
+}
+
 function anonClient() {
   return createClient(URL_, ANON, {
     auth: { persistSession: false, autoRefreshToken: false },
@@ -104,13 +109,39 @@ async function main() {
   // --- 2. The gated RPC returns the right slice per tier --------------------
   const w = dayWindow();
 
+  /**
+   * The board is public now, so "how many rows came back" stopped being the
+   * security question — every viewer gets a row per fixture. What matters is
+   * how many of them carry the thing we sell.
+   *
+   * An unlocked pick is one that exposes ANY AI output. Checking for the
+   * absence of each field individually (rather than trusting the `locked`
+   * flag) means a future edit that starts emitting, say, confidence on a
+   * locked payload fails this suite instead of shipping.
+   */
+  const AI_FIELDS = [
+    "predictedValue",
+    "confidenceScore",
+    "reasoning",
+    "stakingUnit",
+    "odds",
+    "altPredictedValue",
+    "filtersApplied",
+  ];
+  const exposesAi = (p) => AI_FIELDS.some((f) => p?.[f] !== undefined);
+  /** Unsettled picks only: a settled call is a public track record by design. */
+  const unlockedUnsettled = (data) =>
+    (data?.picks ?? []).filter(
+      (p) => !["won", "lost"].includes(p?.status) && exposesAi(p),
+    ).length;
+
   {
     const c = await signedIn(ACCOUNTS.lockedOut);
     const { data } = await c.rpc("get_todays_picks", w);
     check(
-      "locked-out user gets 0 picks but a true total",
-      data?.picks?.length === 0 && data?.totalCount > 0,
-      `picks=${data?.picks?.length} total=${data?.totalCount} fullAccess=${data?.hasFullAccess}`,
+      "locked-out user gets 0 unlocked picks but a true total",
+      unlockedUnsettled(data) === 0 && data?.totalCount > 0,
+      `unlocked=${unlockedUnsettled(data)} rows=${data?.picks?.length} total=${data?.totalCount} fullAccess=${data?.hasFullAccess}`,
     );
   }
 
@@ -118,19 +149,22 @@ async function main() {
     const c = await signedIn(ACCOUNTS.firstDay);
     const { data } = await c.rpc("get_todays_picks", w);
     check(
-      "first-day user gets exactly 2 free picks",
-      data?.picks?.length === 2 && data?.isFirstDay === true,
-      `picks=${data?.picks?.length} isFirstDay=${data?.isFirstDay} total=${data?.totalCount}`,
+      "first-day user gets exactly 2 free picks unlocked",
+      unlockedUnsettled(data) === 2 && data?.isFirstDay === true,
+      `unlocked=${unlockedUnsettled(data)} rows=${data?.picks?.length} isFirstDay=${data?.isFirstDay} total=${data?.totalCount}`,
     );
   }
 
   {
     const c = await signedIn(ACCOUNTS.passHolder);
     const { data } = await c.rpc("get_todays_picks", w);
+    const locked = (data?.picks ?? []).filter((p) => p?.locked).length;
     check(
-      "pass holder gets every pick",
-      data?.hasFullAccess === true && data?.picks?.length === data?.totalCount,
-      `picks=${data?.picks?.length} total=${data?.totalCount}`,
+      "pass holder gets every pick unlocked",
+      data?.hasFullAccess === true &&
+        locked === 0 &&
+        data?.picks?.length === data?.totalCount,
+      `rows=${data?.picks?.length} locked=${locked} total=${data?.totalCount}`,
     );
   }
 
@@ -140,8 +174,8 @@ async function main() {
     const { data } = await c.rpc("get_todays_picks", w);
     check(
       "suspended user is blocked despite holding an active pass",
-      data?.picks?.length === 0 && data?.hasFullAccess === false,
-      `picks=${data?.picks?.length} fullAccess=${data?.hasFullAccess}`,
+      unlockedUnsettled(data) === 0 && data?.hasFullAccess === false,
+      `unlocked=${unlockedUnsettled(data)} rows=${data?.picks?.length} fullAccess=${data?.hasFullAccess}`,
     );
   }
 
@@ -149,9 +183,24 @@ async function main() {
     const anon = anonClient();
     const { data } = await anon.rpc("get_todays_picks", w);
     check(
-      "guest gets 0 picks",
-      data?.picks?.length === 0,
-      `picks=${data?.picks?.length} total=${data?.totalCount}`,
+      "guest gets fixture facts but 0 unlocked picks",
+      unlockedUnsettled(data) === 0 && data?.picks?.length > 0,
+      `unlocked=${unlockedUnsettled(data)} rows=${data?.picks?.length} total=${data?.totalCount}`,
+    );
+  }
+
+  {
+    // The locked projection must carry the public football facts — otherwise
+    // the board is a wall of blank cards and the whole change was pointless.
+    const anon = anonClient();
+    const { data } = await anon.rpc("get_picks_by_status", { filter: "upcoming" });
+    const p = (data?.picks ?? []).find((x) => x?.locked);
+    check(
+      "locked picks still carry teams, league and kickoff",
+      !!p?.homeTeam?.name && !!p?.awayTeam?.name && !!p?.league?.name && !!p?.fixture?.date,
+      p
+        ? `${p.homeTeam?.name} v ${p.awayTeam?.name} · ${p.league?.name}`
+        : "no locked pick found",
     );
   }
 
@@ -253,31 +302,50 @@ async function main() {
   // --- 7. Office admin surface -------------------------------------------
   const APP = "http://localhost:3100";
 
-  {
-    const res = await fetch(`${APP}/api/office`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "generatePicks" }),
-      signal: AbortSignal.timeout(8000),
-    }).catch(() => null);
-    check(
-      "unauthenticated cannot trigger Office actions",
-      res ? res.status === 401 || res.status === 403 : false,
-      res ? `HTTP ${res.status}` : "app unreachable",
-    );
-  }
+  /**
+   * These two probe HTTP guards that DEV_BYPASS_AUTH deliberately switches off.
+   * Running them against a bypassed dev server reports a failure that is not
+   * one, and a suite that is expected to be red is a suite nobody reads — so
+   * they're skipped explicitly, and loudly, instead.
+   */
+  const bypassed = process.env.DEV_BYPASS_AUTH === "true";
 
-  {
-    const res = await fetch(`${APP}/api/cron/daily-picks`, {
-      method: "POST",
-      headers: { Authorization: "Bearer wrong-secret" },
-      signal: AbortSignal.timeout(8000),
-    }).catch(() => null);
-    check(
-      "cron endpoints reject a bad bearer secret",
-      res ? res.status === 401 : false,
-      res ? `HTTP ${res.status}` : "app unreachable",
+  if (bypassed) {
+    skip(
+      "unauthenticated cannot trigger Office actions",
+      "DEV_BYPASS_AUTH=true — guard intentionally off; unset it to test",
     );
+    skip(
+      "cron endpoints reject a bad bearer secret",
+      "DEV_BYPASS_AUTH=true — guard intentionally off; unset it to test",
+    );
+  } else {
+    {
+      const res = await fetch(`${APP}/api/office`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "generatePicks" }),
+        signal: AbortSignal.timeout(8000),
+      }).catch(() => null);
+      check(
+        "unauthenticated cannot trigger Office actions",
+        res ? res.status === 401 || res.status === 403 : false,
+        res ? `HTTP ${res.status}` : "app unreachable",
+      );
+    }
+
+    {
+      const res = await fetch(`${APP}/api/cron/daily-picks`, {
+        method: "POST",
+        headers: { Authorization: "Bearer wrong-secret" },
+        signal: AbortSignal.timeout(8000),
+      }).catch(() => null);
+      check(
+        "cron endpoints reject a bad bearer secret",
+        res ? res.status === 401 : false,
+        res ? `HTTP ${res.status}` : "app unreachable",
+      );
+    }
   }
 
   {
@@ -340,22 +408,32 @@ async function main() {
     const anon = anonClient();
     const w = dayWindow();
     const { data } = await anon.rpc("get_todays_picks", w);
+    const leaked = (data?.picks ?? []).filter(
+      (p) =>
+        !["won", "lost"].includes(p?.status) &&
+        (p?.predictedValue !== undefined ||
+          p?.confidenceScore !== undefined ||
+          p?.reasoning !== undefined),
+    ).length;
     check(
-      "guest still gets 0 from get_todays_picks (preview is separate)",
-      data?.picks?.length === 0,
-      `picks=${data?.picks?.length}`,
+      "guest still gets 0 unlocked from get_todays_picks (preview is separate)",
+      leaked === 0,
+      `unlocked=${leaked} rows=${data?.picks?.length}`,
     );
   }
 
   const pad = Math.max(...results.map((r) => r.name.length));
   for (const r of results) {
-    console.log(
-      `${r.passed ? "  PASS" : "  FAIL"}  ${r.name.padEnd(pad)}  ${r.detail}`,
-    );
+    const tag = r.skipped ? "  SKIP" : r.passed ? "  PASS" : "  FAIL";
+    console.log(`${tag}  ${r.name.padEnd(pad)}  ${r.detail}`);
   }
 
+  const skipped = results.filter((r) => r.skipped).length;
+  const ran = results.length - skipped;
   console.log(
-    `\n${results.length - failures}/${results.length} checks passed\n`,
+    `\n${ran - failures}/${ran} checks passed` +
+      (skipped ? ` (${skipped} skipped)` : "") +
+      "\n",
   );
   process.exit(failures === 0 ? 0 : 1);
 }
