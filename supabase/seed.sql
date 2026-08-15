@@ -337,8 +337,59 @@ begin
     );
   end loop;
 
+  -- ---------- settled earlier today ----------
+  --
+  -- The 60 above are dated across the last month, so they never appear on
+  -- today's board. Without these, a visitor's first view is a wall of pending
+  -- calls with no evidence any of them ever land. These kicked off this
+  -- morning, carry competitive confidence so they rank among the day's picks,
+  -- and settle both ways.
+  for i in 1..10 loop
+    select * into league from leagues where is_active order by random() limit 1;
+    select * into home from teams where league_id = league.id order by random() limit 1;
+    select * into away from teams where league_id = league.id and id <> home.id order by random() limit 1;
+
+    kickoff := date_trunc('day', now()) + (interval '1 hour' * (6 + floor(random() * 5)));
+    hg := floor(random() * 4)::smallint;
+    ag := floor(random() * 3)::smallint;
+
+    insert into fixtures (
+      league_id, home_team_id, away_team_id, slug, fixture_date,
+      started_at, ended_at, status, home_goals, away_goals,
+      ht_home_goals, ht_away_goals, venue, round
+    ) values (
+      league.id, home.id, away.id,
+      home.slug || '-v-' || away.slug || '-today-' || i::text,
+      kickoff, kickoff, kickoff + interval '105 minutes', 'finished', hg, ag,
+      least(hg, floor(random() * 2)::smallint), least(ag, floor(random() * 2)::smallint),
+      home.name || ' Stadium', 'Regular Season - 28'
+    ) returning id into f_id;
+
+    won := random() < 0.65;
+    conf := round((8.8 + random() * 1.0)::numeric, 2);
+
+    insert into predictions (
+      fixture_id, tipster_id, prediction_type, predicted_value, confidence_score,
+      staking_unit, frontier_explanation, status, model_version, reasoning_tags,
+      settled_at, actual_result, created_at
+    ) values (
+      f_id, 'b0000001-0000-4000-8000-000000000001',
+      'over_under_2_5',
+      case when (hg + ag) > 2 then 'over' else 'under' end,
+      conf,
+      case when conf >= 9.3 then 5 else 4 end,
+      format(reason_bank[1 + floor(random() * 4)], (55 + floor(random() * 30))::text),
+      (case when won then 'won' else 'lost' end)::prediction_status,
+      'moonodds-quant-v1.4.0',
+      array['xg-edge','form-swing'],
+      kickoff + interval '110 minutes',
+      jsonb_build_object('homeGoals', hg, 'awayGoals', ag),
+      kickoff - interval '6 hours'
+    );
+  end loop;
+
   -- ---------- in play ----------
-  for i in 1..3 loop
+  for i in 1..6 loop
     select * into league from leagues where is_active order by random() limit 1;
     select * into home from teams where league_id = league.id order by random() limit 1;
     select * into away from teams where league_id = league.id and id <> home.id order by random() limit 1;
@@ -357,7 +408,9 @@ begin
       home.name || ' Stadium', 'Regular Season - 28'
     ) returning id into f_id;
 
-    conf := round((8.4 + random() * 1.2)::numeric, 2);
+    -- High enough to rank among today's picks: a live match is the most
+    -- interesting row on the board and burying it under pending calls wastes it.
+    conf := round((9.0 + random() * 0.8)::numeric, 2);
     insert into predictions (
       fixture_id, tipster_id, prediction_type, predicted_value, confidence_score,
       staking_unit, frontier_explanation, status, model_version, reasoning_tags, created_at

@@ -65,11 +65,14 @@ function Group({ title, children }: { title: string; children: React.ReactNode }
 function CheckRow({
   label,
   count,
+  logo,
   checked,
   onChange,
 }: {
   label: string;
   count?: number;
+  /** League badge. Recognising a competition by crest is faster than reading. */
+  logo?: string | null;
   checked: boolean;
   onChange: () => void;
 }) {
@@ -86,6 +89,19 @@ function CheckRow({
       >
         {checked && <Check className="h-3 w-3" strokeWidth={3.5} />}
       </span>
+
+      {logo && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={logo}
+          alt=""
+          width={16}
+          height={16}
+          loading="lazy"
+          className="h-4 w-4 flex-none object-contain"
+        />
+      )}
+
       <span className="min-w-0 flex-1 truncate text-[13px]">{label}</span>
       {count !== undefined && (
         <span className="numeral flex-none text-[11px] text-muted">{count}</span>
@@ -141,7 +157,7 @@ export function FilterRail({
 }: {
   filters: Filters;
   onChange: (f: Filters) => void;
-  leagues: { name: string; count: number }[];
+  leagues: { name: string; count: number; logo: string | null }[];
   markets: { key: Market; count: number }[];
   statusCounts?: Record<StatusFilter, number>;
 }) {
@@ -205,12 +221,13 @@ export function FilterRail({
 
       {leagues.length > 0 && (
         <Group title="League">
-          <div className="max-h-56 overflow-y-auto pr-1">
+          <div className="pr-1">
             {leagues.map((l) => (
               <CheckRow
                 key={l.name}
                 label={l.name}
                 count={l.count}
+                logo={l.logo}
                 checked={filters.leagues.includes(l.name)}
                 onChange={() => set({ leagues: toggleIn(filters.leagues, l.name) })}
               />
@@ -221,7 +238,7 @@ export function FilterRail({
 
       {markets.length > 0 && (
         <Group title="Market">
-          <div className="max-h-56 overflow-y-auto pr-1">
+          <div className="pr-1">
             {markets.map((m) => (
               <CheckRow
                 key={m.key}

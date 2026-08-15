@@ -77,13 +77,18 @@ export function PicksHome() {
   // Facet counts come from the status-filtered set, not the fully filtered one:
   // a league's count shouldn't drop to zero because you ticked another league.
   const leagues = useMemo(() => {
-    const m = new Map<string, number>();
+    const m = new Map<string, { count: number; logo: string | null }>();
     for (const p of all) {
       const n = p.league.name;
-      if (n) m.set(n, (m.get(n) ?? 0) + 1);
+      if (!n) continue;
+      const prev = m.get(n);
+      m.set(n, {
+        count: (prev?.count ?? 0) + 1,
+        logo: prev?.logo ?? p.league.logo ?? null,
+      });
     }
     return [...m.entries()]
-      .map(([name, count]) => ({ name, count }))
+      .map(([name, v]) => ({ name, count: v.count, logo: v.logo }))
       .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
   }, [all]);
 
@@ -251,7 +256,13 @@ export function PicksHome() {
       </button>
 
       <div className="grid gap-6 lg:grid-cols-[17rem_1fr] lg:items-start">
-        <aside className={`${railOpen ? "" : "hidden"} lg:sticky lg:top-20 lg:block`}>
+        {/* The rail scrolls on its own rather than with the page: with a dozen
+            leagues and a dozen markets it is taller than the viewport, and a
+            sidebar you have to scroll the whole board to reach the bottom of
+            isn't pinned in any useful sense. */}
+        <aside
+          className={`${railOpen ? "" : "hidden"} lg:sticky lg:top-20 lg:block lg:max-h-[calc(100vh-6rem)] lg:overflow-y-auto lg:pb-4`}
+        >
           <FilterRail
             filters={filters}
             onChange={setFilters}
