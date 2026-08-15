@@ -235,6 +235,53 @@ export function useLeagueOptions(enabled: boolean) {
 }
 
 /** The user's saved slips, with legs. */
+export type ProfileStats = {
+  totalSlips: number;
+  won: number;
+  lost: number;
+  pending: number;
+  settled: number;
+  winRate: number | null;
+  roi: number | null;
+  avgConfidence: number | null;
+};
+
+export type LeagueRecord = {
+  leagueName: string;
+  country: string;
+  logo: string | null;
+  wins: number;
+  losses: number;
+  settled: number;
+  accuracyRate: number;
+};
+
+/** The signed-in user's own record. Null when signed out. */
+export function useProfileStats() {
+  return useQuery({
+    queryKey: ["profile", "stats"],
+    queryFn: async (): Promise<ProfileStats | null> => {
+      const supabase = createClient();
+      const { data, error } = await supabase.rpc("get_profile_stats");
+      if (error) throw error;
+      return (data as ProfileStats | null) ?? null;
+    },
+  });
+}
+
+/** Engine accuracy by league — public, and the same record as every settled pick. */
+export function useLeaguePerformance() {
+  return useQuery({
+    queryKey: ["stats", "leagues"],
+    queryFn: async (): Promise<LeagueRecord[]> => {
+      const supabase = createClient();
+      const { data, error } = await supabase.rpc("get_league_performance");
+      if (error) throw error;
+      return (data as LeagueRecord[]) ?? [];
+    },
+  });
+}
+
 /**
  * Which of the slip's picks still exist server-side.
  *

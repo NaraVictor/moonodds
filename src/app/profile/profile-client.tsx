@@ -11,7 +11,10 @@ import {
   useProfile,
   useUpdateNotificationPreferences,
   useUpdatePhone,
+  useProfileStats,
+  useLeaguePerformance,
 } from "@/lib/queries";
+import { formatPercent } from "@/lib/format";
 import { LinkButton } from "@/components/ui/link-button";
 
 const CHANNELS = [
@@ -38,6 +41,8 @@ export function ProfileClient() {
   const updatePrefs = useUpdateNotificationPreferences();
   const updatePhone = useUpdatePhone();
   const { theme, choose: chooseTheme } = useTheme();
+  const { data: stats } = useProfileStats();
+  const { data: leagues } = useLeaguePerformance();
 
   const [phone, setPhone] = useState<string | null>(null);
   const prefsRow = prefs as Record<string, boolean> | null;
@@ -123,6 +128,117 @@ export function ProfileClient() {
             )}
           </div>
         </section>
+
+        {/* --------------------- your record --------------------- */}
+        {stats && stats.totalSlips > 0 && (
+          <section className="rounded-[1.75rem] border border-border bg-surface p-6">
+            <h2 className="text-[15px] font-semibold">Your record</h2>
+            <p className="mt-1 text-[13px] text-muted">
+              Across the slips you&rsquo;ve saved. ROI assumes one unit staked
+              per slip — we never see what you actually staked.
+            </p>
+
+            <dl className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
+              {[
+                {
+                  label: "Win rate",
+                  value: stats.winRate === null ? "—" : formatPercent(stats.winRate, 0),
+                  tone: "var(--success)",
+                },
+                {
+                  label: "ROI",
+                  value:
+                    stats.roi === null
+                      ? "—"
+                      : `${stats.roi > 0 ? "+" : ""}${Math.round(stats.roi * 100)}%`,
+                  tone: stats.roi === null ? undefined : stats.roi >= 0 ? "var(--won-ink)" : "var(--lost-ink)",
+                },
+                { label: "Slips", value: String(stats.totalSlips) },
+                {
+                  label: "Avg confidence",
+                  value:
+                    stats.avgConfidence === null
+                      ? "—"
+                      : `${Math.round(Number(stats.avgConfidence) * 10)}%`,
+                },
+              ].map((s) => (
+                <div key={s.label} className="rounded-xl bg-surface-secondary px-3 py-4">
+                  <dd className="numeral text-xl" style={s.tone ? { color: s.tone } : undefined}>
+                    {s.value}
+                  </dd>
+                  <dt className="label mt-1">{s.label}</dt>
+                </div>
+              ))}
+            </dl>
+
+            <div className="mt-4 flex gap-1.5">
+              {(
+                [
+                  { n: stats.won, label: "won", c: "var(--success)" },
+                  { n: stats.lost, label: "lost", c: "var(--danger)" },
+                  { n: stats.pending, label: "open", c: "var(--surface-tertiary)" },
+                ] as const
+              )
+                .filter((x) => x.n > 0)
+                .map((x) => (
+                  <span
+                    key={x.label}
+                    title={`${x.n} ${x.label}`}
+                    className="h-1.5 rounded-full"
+                    style={{ flex: x.n, background: x.c }}
+                  />
+                ))}
+            </div>
+            <p className="mt-2 text-[11px] text-muted">
+              {stats.won} won · {stats.lost} lost · {stats.pending} still open
+            </p>
+          </section>
+        )}
+
+        {/* --------------------- engine by league --------------------- */}
+        {leagues && leagues.length > 0 && (
+          <section className="overflow-hidden rounded-[1.75rem] border border-border bg-surface">
+            <div className="px-6 pt-6">
+              <h2 className="text-[15px] font-semibold">Engine accuracy by league</h2>
+              <p className="mt-1 text-[13px] text-muted">
+                Where the model has actually been right. Leagues with fewer than
+                three settled calls are left out rather than shown at 100% off
+                one result.
+              </p>
+            </div>
+
+            <ul className="mt-4 divide-y divide-separator border-t border-separator">
+              {leagues.map((l) => (
+                <li key={l.leagueName} className="flex items-center gap-3 px-6 py-3">
+                  {l.logo && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={l.logo} alt="" width={18} height={18} className="h-[18px] w-[18px] flex-none object-contain" />
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-[13px] font-medium">{l.leagueName}</p>
+                    <p className="truncate text-[11px] text-muted">{l.country}</p>
+                  </div>
+                  <span className="numeral flex-none text-[11px] text-muted">
+                    {l.wins}W&ndash;{l.losses}L
+                  </span>
+                  <span
+                    className="numeral w-12 flex-none text-right text-[13px] font-semibold"
+                    style={{
+                      color:
+                        l.accuracyRate >= 0.6
+                          ? "var(--won-ink)"
+                          : l.accuracyRate < 0.45
+                            ? "var(--lost-ink)"
+                            : "var(--foreground)",
+                    }}
+                  >
+                    {Math.round(l.accuracyRate * 100)}%
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
 
         {/* --------------------- channels --------------------- */}
         <section className="rounded-[1.75rem] border border-border bg-surface p-6">
