@@ -39,3 +39,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Supabase generated local state — contains dev secrets, never commit
+supabase/.temp/
