@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@heroui/react/button";
 import { Chip } from "@heroui/react/chip";
-import { FlaskConical, X } from "lucide-react";
+import { FlaskConical, X } from "@/components/ui/icons";
 import { signInAsDemo, signOut } from "@/lib/auth-actions";
 
 /**

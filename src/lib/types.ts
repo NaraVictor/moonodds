@@ -50,7 +50,8 @@ export type TeamRef = {
 export type Pick = {
   id: string;
   locked?: boolean;
-  predictionType: Market;
+  /** Absent when locked — the market is half the call, so it's sold too. */
+  predictionType?: Market;
   predictedValue?: string;
   confidenceScore?: number;
   stakingUnit?: number;
@@ -89,6 +90,7 @@ export type Pick = {
  * locked case?" into a build error instead of a runtime `undefined`.
  */
 export type UnlockedPick = Pick & {
+  predictionType: Market;
   predictedValue: string;
   confidenceScore: number;
   odds: number;

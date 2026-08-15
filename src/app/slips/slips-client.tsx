@@ -1,6 +1,6 @@
 "use client";
 
-import { Receipt, Check, X, Clock } from "lucide-react";
+import { Receipt, Check, X, Clock } from "@/components/ui/icons";
 import { useSlips } from "@/lib/queries";
 import { LinkButton } from "@/components/ui/link-button";
 

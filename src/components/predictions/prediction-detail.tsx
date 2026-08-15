@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowLeft, Check, Lock, MapPin, Plus, Users } from "lucide-react";
+import { ArrowLeft, Check, Lock, MapPin, Plus, Users } from "@/components/ui/icons";
 import { MeterRoot, MeterTrack, MeterFill } from "@heroui/react";
 import { usePredictionDetail, type FixtureStats } from "@/lib/queries";
 import { useBetSlip } from "@/lib/bet-slip";

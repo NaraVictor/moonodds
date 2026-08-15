@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import Link from "next/link";
-import { ArrowUpRight, Check, Plus, X } from "lucide-react";
+import { ArrowUpRight, Check, Plus, X } from "@/components/ui/icons";
 import { usePredictionDetail } from "@/lib/queries";
 import { useBetSlip } from "@/lib/bet-slip";
 import { ConfidenceRing } from "./confidence-ring";

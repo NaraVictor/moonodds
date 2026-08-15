@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronLeft, ChevronRight, Flame } from "lucide-react";
+import { ChevronLeft, ChevronRight, Flame } from "@/components/ui/icons";
 import { PredictionCard } from "@/components/predictions/prediction-card";
 import type { Pick, UnlockedPick } from "@/lib/types";
 

@@ -8,7 +8,7 @@ import { Button } from "@heroui/react/button";
 import { Chip } from "@heroui/react/chip";
 import { Alert } from "@heroui/react/alert";
 import { Skeleton } from "@heroui/react/skeleton";
-import { Check, ShieldCheck, Sparkles } from "lucide-react";
+import { Check, ShieldCheck, Sparkles } from "@/components/ui/icons";
 import { useAccessState, useLeagueOptions } from "@/lib/queries";
 import { LinkButton } from "@/components/ui/link-button";
 import { extraPicksPriceUsd } from "@/lib/pricing";

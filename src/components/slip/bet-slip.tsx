@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { Receipt, X, Trash2, Check, Info } from "lucide-react";
+import { Receipt, X, Trash2, Check, Info } from "@/components/ui/icons";
 import { useBetSlip } from "@/lib/bet-slip";
 import { Alert } from "@/components/ui/alert";
 import { useConfirmSlip } from "@/lib/queries";

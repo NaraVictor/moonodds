@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { ArrowDown, ArrowUp, Check, Lock, Plus } from "lucide-react";
+import { ArrowDown, ArrowUp, Check, Lock, Plus } from "@/components/ui/icons";
 import { useBetSlip } from "@/lib/bet-slip";
 import { TeamCrest } from "@/components/predictions/team-crest";
 import { isUnlocked, type Pick } from "@/lib/types";

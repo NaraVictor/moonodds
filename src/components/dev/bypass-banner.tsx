@@ -1,5 +1,5 @@
 import { devBypassEnabledClient } from "@/lib/dev-bypass";
-import { ShieldOff } from "lucide-react";
+import { ShieldOff } from "@/components/ui/icons";
 
 /**
  * Loud, unmissable banner shown whenever the auth bypass is active. If this is

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useSyncExternalStore } from "react";
-import { ShieldAlert } from "lucide-react";
+import { ShieldAlert } from "@/components/ui/icons";
 
 /**
  * 18+ confirmation.

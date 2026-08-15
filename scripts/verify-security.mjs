@@ -120,6 +120,7 @@ async function main() {
    * locked payload fails this suite instead of shipping.
    */
   const AI_FIELDS = [
+    "predictionType",
     "predictedValue",
     "confidenceScore",
     "reasoning",
@@ -139,8 +140,8 @@ async function main() {
     const c = await signedIn(ACCOUNTS.lockedOut);
     const { data } = await c.rpc("get_todays_picks", w);
     check(
-      "locked-out user gets 0 unlocked picks but a true total",
-      unlockedUnsettled(data) === 0 && data?.totalCount > 0,
+      "no-pass user gets exactly the 2 free picks, and a true total",
+      unlockedUnsettled(data) === 2 && data?.totalCount > 2,
       `unlocked=${unlockedUnsettled(data)} rows=${data?.picks?.length} total=${data?.totalCount} fullAccess=${data?.hasFullAccess}`,
     );
   }
@@ -183,8 +184,8 @@ async function main() {
     const anon = anonClient();
     const { data } = await anon.rpc("get_todays_picks", w);
     check(
-      "guest gets fixture facts but 0 unlocked picks",
-      unlockedUnsettled(data) === 0 && data?.picks?.length > 0,
+      "guest gets exactly 2 free picks, drawn from the top of the board",
+      unlockedUnsettled(data) === 2 && data?.picks?.length > 2,
       `unlocked=${unlockedUnsettled(data)} rows=${data?.picks?.length} total=${data?.totalCount}`,
     );
   }
@@ -201,6 +202,17 @@ async function main() {
       p
         ? `${p.homeTeam?.name} v ${p.awayTeam?.name} · ${p.league?.name}`
         : "no locked pick found",
+    );
+
+    // The market is half the call: knowing we picked the handicap rather than
+    // the 1x2 already tells you where we think the mispricing is.
+    const marketLeaks = (data?.picks ?? []).filter(
+      (x) => x?.locked && x?.predictionType !== undefined,
+    ).length;
+    check(
+      "locked picks do NOT reveal which market we called",
+      marketLeaks === 0,
+      `leaks=${marketLeaks} of ${(data?.picks ?? []).filter((x) => x?.locked).length} locked`,
     );
   }
 
@@ -416,8 +428,8 @@ async function main() {
           p?.reasoning !== undefined),
     ).length;
     check(
-      "guest still gets 0 unlocked from get_todays_picks (preview is separate)",
-      leaked === 0,
+      "guest gets no MORE than the 2 free picks from get_todays_picks",
+      leaked === 2,
       `unlocked=${leaked} rows=${data?.picks?.length}`,
     );
   }

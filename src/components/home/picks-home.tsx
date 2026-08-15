@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   LayoutGrid,
   List,
@@ -9,10 +9,11 @@ import {
   Sparkles,
   TrendingUp,
   X,
-} from "lucide-react";
+} from "@/components/ui/icons";
 import { PredictionCard } from "@/components/predictions/prediction-card";
 import { PredictionSummary } from "@/components/predictions/prediction-summary";
 import { HeroSlider } from "./hero-slider";
+import { ActivityPanel } from "./activity-panel";
 import { PicksTable } from "./picks-table";
 import { EMPTY_FILTERS, FilterRail, type Filters } from "./filter-rail";
 import { LinkButton } from "@/components/ui/link-button";
@@ -27,7 +28,7 @@ import {
 } from "@/lib/queries";
 import { useBoardView } from "@/lib/view-preference";
 import { formatPercent } from "@/lib/format";
-import { isUnlocked, type Market, type Pick, type UnlockedPick } from "@/lib/types";
+import type { Market, Pick, UnlockedPick } from "@/lib/types";
 
 /**
  * The board.
@@ -45,6 +46,21 @@ export function PicksHome() {
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
   const [summary, setSummary] = useState<UnlockedPick | null>(null);
   const [railOpen, setRailOpen] = useState(false);
+
+  /**
+   * A clock that ticks rather than a fresh Date.now() per render.
+   *
+   * The kickoff filter is time-relative ("next 3 hours"), so it needs a
+   * current reading — but reading the clock during render is impure and makes
+   * the same render produce different output. A snapshot refreshed each minute
+   * is both pure and more correct: the window advances on its own instead of
+   * only when something else happens to re-render.
+   */
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 60_000);
+    return () => clearInterval(id);
+  }, []);
 
   const { view, choose } = useBoardView();
   const { data: access } = useAccessState();
@@ -71,19 +87,29 @@ export function PicksHome() {
       .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
   }, [all]);
 
+  // Only unlocked picks have a market to count. For a guest that means the
+  // market facet is nearly empty — correct, since filtering by a market you
+  // can't see would be a way to probe for it.
   const markets = useMemo(() => {
     const m = new Map<Market, number>();
-    for (const p of all) m.set(p.predictionType, (m.get(p.predictionType) ?? 0) + 1);
+    for (const p of all) {
+      if (!p.predictionType) continue;
+      m.set(p.predictionType, (m.get(p.predictionType) ?? 0) + 1);
+    }
     return [...m.entries()]
       .map(([key, count]) => ({ key, count }))
       .sort((a, b) => b.count - a.count);
   }, [all]);
 
   const visible = useMemo(() => {
-    const now = Date.now();
     return all.filter((p) => {
       if (filters.leagues.length && !filters.leagues.includes(p.league.name ?? "")) return false;
-      if (filters.markets.length && !filters.markets.includes(p.predictionType)) return false;
+      if (filters.markets.length) {
+        // Same reasoning as confidence below: a locked pick has no market, so
+        // a market filter excludes it rather than guessing.
+        if (!p.predictionType) return false;
+        if (!filters.markets.includes(p.predictionType)) return false;
+      }
       if (filters.minConfidence > 0) {
         // A locked pick has no confidence to compare, so a confidence filter
         // necessarily excludes it rather than silently treating it as zero.
@@ -97,15 +123,17 @@ export function PicksHome() {
       }
       return true;
     });
-  }, [all, filters]);
+  }, [all, filters, now]);
 
   // The hero shortlist ignores the filters on purpose — it's the day's headline,
   // not a view of the current query.
+  //
+  // Locked picks are NOT excluded. For a guest that means two unlocked calls
+  // and a third behind the paywall, which is the honest framing of "your free
+  // picks are among today's best" — and a far better argument for paying than
+  // a shortlist that quietly shrinks to the size of your entitlement.
   const hero = useMemo(
-    () =>
-      all
-        .filter((p) => isUnlocked(p) && p.status === "pending")
-        .slice(0, 3),
+    () => all.filter((p) => p.status === "pending").slice(0, 3),
     [all],
   );
 
@@ -197,7 +225,19 @@ export function PicksHome() {
         </div>
       </header>
 
-      {hero.length > 0 && <HeroSlider picks={hero} onSummary={setSummary} />}
+      {/* ------------------------- hero row -------------------------
+          Two thirds of the width for the day's shortlist, one third for what's
+          already happening. Side by side because they answer different
+          questions — "what should I look at" and "how are we doing" — and a
+          visitor forms a view of the product from both at once. */}
+      {hero.length > 0 && (
+        <div className="mb-8 grid gap-4 xl:grid-cols-3 xl:items-stretch">
+          <div className="xl:col-span-2">
+            <HeroSlider picks={hero} onSummary={setSummary} />
+          </div>
+          <ActivityPanel picks={all} />
+        </div>
+      )}
 
       {/* Mobile: the rail collapses behind a button rather than eating the fold. */}
       <button

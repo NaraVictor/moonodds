@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Toggle } from "@/components/ui/toggle";
 import { Alert } from "@/components/ui/alert";
-import { Bell, Mail, MessageSquare, ShieldCheck, Check } from "lucide-react";
+import { Bell, Mail, MessageSquare, ShieldCheck, Check } from "@/components/ui/icons";
 import {
   useAccessState,
   useNotificationPreferences,

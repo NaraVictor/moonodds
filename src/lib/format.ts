@@ -7,12 +7,14 @@ import type { Market, Pick } from "./types";
 /**
  * The call, in words.
  *
- * `value` is optional because a locked pick carries the market but not the
- * selection — we advertise which question was answered without answering it.
- * With no value this returns the market's own name, which is exactly the
- * teaser a locked card wants.
+ * Both arguments are optional because a locked pick carries neither. The market
+ * used to survive locking as a teaser — "there's a handicap call here" — but
+ * that gives away where we think the mispricing is, which is the substance of
+ * what a subscriber pays for. So a locked pick now says only that a call
+ * exists.
  */
-export function formatMarket(market: Market, value?: string): string {
+export function formatMarket(market?: Market, value?: string): string {
+  if (market === undefined) return "Prediction hidden";
   if (value === undefined) return MARKET_LABELS[market] ?? "Prediction";
   const v = value.toLowerCase();
 

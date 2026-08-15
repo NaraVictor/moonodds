@@ -15,7 +15,7 @@ import {
   Clock,
   AlertTriangle,
   ShieldOff,
-} from "lucide-react";
+} from "@/components/ui/icons";
 import {
   useAdminPredictions,
   useAdminUsers,

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Check, X, Clock, ArrowUpRight, Plus, Lock } from "lucide-react";
+import { Check, X, Clock, ArrowUpRight, Plus, Lock } from "@/components/ui/icons";
 import { useBetSlip } from "@/lib/bet-slip";
 import { ConfidenceRing } from "./confidence-ring";
 import { TeamCrest } from "./team-crest";

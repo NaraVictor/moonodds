@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, Receipt, User } from "lucide-react";
+import { Home, Receipt, User } from "@/components/ui/icons";
 
 /**
  * Mobile bottom navigation.

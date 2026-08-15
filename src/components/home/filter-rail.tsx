@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, X } from "lucide-react";
+import { Check, X } from "@/components/ui/icons";
 import { MARKET_LABELS } from "@/lib/format";
 import type { Market, StatusFilter } from "@/lib/types";
 

@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { Button } from "@heroui/react/button";
 import { LinkButton } from "@/components/ui/link-button";
 import { Chip } from "@heroui/react/chip";
-import { LogOut } from "lucide-react";
+import { LogOut } from "@/components/ui/icons";
 import { Logo } from "@/components/brand/logo";
 import { useAccessState } from "@/lib/queries";
 import { signOut } from "@/lib/auth-actions";
