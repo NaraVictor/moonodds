@@ -25,6 +25,9 @@ import {
   useOfficeAction,
   usePredictionRuns,
   useTuningReports,
+  usePredictionReport,
+  useUserPicksReport,
+  useAllConfigs,
   type CatalogLeague,
   type CatalogTeam,
 } from "@/lib/admin-queries";
@@ -1349,6 +1352,141 @@ function EditTeamForm({
 
 /* ------------------------------- engine ------------------------------- */
 
+/**
+ * Config versions.
+ *
+ * The schema has always supported active / draft / archived and enforced a
+ * single active row, but nothing could create a draft or promote one, so the
+ * only way to change the engine was to edit the live config in place — with no
+ * way back if the change was wrong.
+ *
+ * A draft is a full copy, so experimenting costs nothing and the incumbent
+ * keeps running untouched until someone deliberately promotes its replacement.
+ */
+function ConfigVersions() {
+  const { data: configs, isPending } = useAllConfigs();
+  const action = useOfficeAction();
+  const [drafting, setDrafting] = useState(false);
+  const [name, setName] = useState("");
+  const [notes, setNotes] = useState("");
+
+  const live = configs?.find((c) => c.status === "active");
+
+  return (
+    <Panel
+      title="Versions"
+      description="Draft a copy, tune it, then promote it. The live config keeps running until you do."
+      action={
+        live && (
+          <button
+            type="button"
+            onClick={() => setDrafting((v) => !v)}
+            className={PILL}
+          >
+            {drafting ? "Cancel" : "New draft"}
+          </button>
+        )
+      }
+    >
+      {drafting && live && (
+        <div className="rise mb-4 space-y-3 rounded-2xl bg-surface-secondary p-4">
+          <p className="text-[12px] leading-relaxed text-muted">
+            Copies every setting from <strong>{live.name}</strong> v{live.version}.
+            Nothing goes live until you promote it.
+          </p>
+          <input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Name this draft"
+            aria-label="Draft name"
+            className={`${FIELD} w-full`}
+          />
+          <input
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            placeholder="What are you changing, and why?"
+            aria-label="Draft notes"
+            className={`${FIELD} w-full`}
+          />
+          <button
+            type="button"
+            disabled={!name.trim() || action.isPending}
+            onClick={() =>
+              action.mutate(
+                {
+                  action: "createDraftConfig",
+                  fromConfigId: live.id,
+                  name: name.trim(),
+                  ...(notes.trim() ? { notes: notes.trim() } : {}),
+                },
+                {
+                  onSuccess: () => {
+                    setDrafting(false);
+                    setName("");
+                    setNotes("");
+                  },
+                },
+              )
+            }
+            className="press rounded-full bg-accent px-5 py-2 text-[13px] font-semibold text-accent-foreground disabled:opacity-40"
+          >
+            Create draft
+          </button>
+        </div>
+      )}
+
+      {isPending ? (
+        <Loading rows={3} />
+      ) : !configs?.length ? (
+        <Empty>No configs.</Empty>
+      ) : (
+        <ul className="divide-y divide-separator">
+          {configs.map((c) => (
+            <li key={c.id} className="flex flex-wrap items-center gap-3 py-3 first:pt-0">
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-[13px] font-semibold">
+                  {c.name} <span className="numeral text-muted">v{c.version}</span>
+                </p>
+                <p className="truncate text-[11px] text-muted">
+                  {c.notes || "No notes"}
+                  {c.approved_by ? ` · ${c.approved_by}` : ""}
+                </p>
+              </div>
+
+              <Tag tone={c.status === "active" ? "won" : c.status === "draft" ? "accent" : "pending"}>
+                {c.status}
+              </Tag>
+
+              {c.status !== "active" && (
+                <button
+                  type="button"
+                  disabled={action.isPending}
+                  onClick={() => action.mutate({ action: "activateConfig", configId: c.id })}
+                  className={PILL}
+                >
+                  Promote
+                </button>
+              )}
+              {c.status === "draft" && (
+                <button
+                  type="button"
+                  disabled={action.isPending}
+                  onClick={() => action.mutate({ action: "archiveConfig", configId: c.id })}
+                  className={PILL}
+                >
+                  Archive
+                </button>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {action.error && <ActionError message={action.error.message} />}
+    </Panel>
+  );
+}
+
 function EnginePanel() {
   const { data: config, isPending } = useEngineConfig();
   const action = useOfficeAction();
@@ -1397,6 +1535,8 @@ function EnginePanel() {
 
   return (
     <div className="space-y-4">
+      <ConfigVersions />
+
       <Panel
         title={`${config.name} · v${config.version}`}
         description={`Last updated ${new Date(config.last_updated_at).toLocaleString()}${config.approved_by ? ` by ${config.approved_by}` : ""}.`}
@@ -1520,7 +1660,248 @@ function EnginePanel() {
 
 /* ------------------------------- reports ------------------------------- */
 
+/**
+ * Date presets.
+ *
+ * Windows are half-open — start inclusive, end exclusive — so a month never
+ * double-counts a fixture sitting on the boundary. Returns undefined for "all
+ * time", which the RPC reads as no filter.
+ */
+function rangeFor(preset: string): { start?: string; end?: string } {
+  const now = new Date();
+  const startOfDay = (d: Date) =>
+    new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate())).toISOString();
+
+  switch (preset) {
+    case "7d": {
+      const s = new Date(now);
+      s.setUTCDate(s.getUTCDate() - 7);
+      return { start: startOfDay(s) };
+    }
+    case "30d": {
+      const s = new Date(now);
+      s.setUTCDate(s.getUTCDate() - 30);
+      return { start: startOfDay(s) };
+    }
+    case "thisMonth":
+      return {
+        start: new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString(),
+      };
+    case "lastMonth":
+      return {
+        start: new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1)).toISOString(),
+        end: new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString(),
+      };
+    default:
+      return {};
+  }
+}
+
+const PRESETS = [
+  { v: "all", label: "All time" },
+  { v: "7d", label: "Last 7 days" },
+  { v: "30d", label: "Last 30 days" },
+  { v: "thisMonth", label: "This month" },
+  { v: "lastMonth", label: "Last month" },
+];
+
+function Stat({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: string;
+  tone?: string;
+}) {
+  return (
+    <div className="rounded-xl bg-surface-secondary px-3 py-4">
+      <p className="numeral text-xl" style={tone ? { color: tone } : undefined}>
+        {value}
+      </p>
+      <p className="label mt-1">{label}</p>
+    </div>
+  );
+}
+
 function ReportsPanel() {
+  const [view, setView] = useState<"engine" | "users" | "tuning">("engine");
+  const [preset, setPreset] = useState("all");
+
+  const SUBVIEWS = [
+    { v: "engine", label: "Accuracy" },
+    { v: "users", label: "User picks" },
+    { v: "tuning", label: "Tuning" },
+  ] as const;
+
+  return (
+    <div className="space-y-4">
+      <nav className="flex gap-1.5" aria-label="Report type">
+        {SUBVIEWS.map((s) => {
+          const on = view === s.v;
+          return (
+            <button
+              key={s.v}
+              type="button"
+              onClick={() => setView(s.v)}
+              aria-current={on ? "page" : undefined}
+              className={`press rounded-full border px-4 py-2 text-[13px] font-semibold ${
+                on
+                  ? "border-transparent bg-feature text-feature-foreground"
+                  : "border-border bg-surface text-muted hover:text-foreground"
+              }`}
+            >
+              {s.label}
+            </button>
+          );
+        })}
+      </nav>
+
+      {view === "engine" && <EngineReportView preset={preset} onPreset={setPreset} />}
+      {view === "users" && <UserPicksView />}
+      {view === "tuning" && <TuningReportsView />}
+    </div>
+  );
+}
+
+function EngineReportView({
+  preset,
+  onPreset,
+}: {
+  preset: string;
+  onPreset: (v: string) => void;
+}) {
+  const range = rangeFor(preset);
+  const { data, isPending } = usePredictionReport(range);
+
+  return (
+    <Panel
+      title="Engine performance"
+      description="Settled calls only — pending picks are counted but can't be right or wrong yet."
+    >
+      <div className="mb-5 flex flex-wrap gap-1.5">
+        {PRESETS.map((p) => {
+          const on = preset === p.v;
+          return (
+            <button
+              key={p.v}
+              type="button"
+              onClick={() => onPreset(p.v)}
+              aria-pressed={on}
+              className="press rounded-full border px-3 py-1.5 text-[12px] font-semibold"
+              style={
+                on
+                  ? { borderColor: "transparent", background: "var(--accent-wash)", color: "var(--accent)" }
+                  : { borderColor: "var(--border)", color: "var(--muted)" }
+              }
+            >
+              {p.label}
+            </button>
+          );
+        })}
+      </div>
+
+      {isPending ? (
+        <Loading rows={4} />
+      ) : !data || data.total === 0 ? (
+        <Empty>No predictions in that window.</Empty>
+      ) : (
+        <>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <Stat
+              label="Win rate"
+              value={data.winRate === null ? "—" : `${Math.round(data.winRate * 100)}%`}
+              tone="var(--won-ink)"
+            />
+            <Stat label="Won" value={String(data.wins)} tone="var(--won-ink)" />
+            <Stat label="Lost" value={String(data.losses)} tone="var(--lost-ink)" />
+            <Stat label="Pending" value={String(data.pending)} />
+          </div>
+
+          {data.leagues.length > 0 && (
+            <>
+              <h3 className="mt-6 text-[13px] font-semibold">By league</h3>
+              <ul className="mt-2 divide-y divide-separator">
+                {data.leagues.map((l) => (
+                  <li key={l.leagueName} className="flex items-center gap-3 py-3">
+                    {l.logo && (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={l.logo} alt="" width={18} height={18} className="h-[18px] w-[18px] flex-none object-contain" />
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-[13px] font-medium">{l.leagueName}</p>
+                      <p className="truncate text-[11px] text-muted">{l.country}</p>
+                    </div>
+                    <span className="numeral flex-none text-[11px] text-muted">
+                      {l.wins}W&ndash;{l.losses}L
+                    </span>
+                    <span className="numeral w-12 flex-none text-right text-[13px] font-semibold">
+                      {l.winRate === null ? "—" : `${Math.round(l.winRate * 100)}%`}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+        </>
+      )}
+    </Panel>
+  );
+}
+
+function UserPicksView() {
+  const { data, isPending } = useUserPicksReport();
+
+  return (
+    <Panel
+      title="User picks"
+      description="Who is following what. Sorted by volume — the accounts most worth knowing about when support writes in."
+    >
+      {isPending ? (
+        <Loading rows={4} />
+      ) : !data || data.users.length === 0 ? (
+        <Empty>Nobody has saved a slip yet.</Empty>
+      ) : (
+        <>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <Stat
+              label="Avg win rate"
+              value={data.avgWinRate === null ? "—" : `${Math.round(data.avgWinRate * 100)}%`}
+              tone="var(--won-ink)"
+            />
+            <Stat label="Slips" value={String(data.totalSlips)} />
+            <Stat label="Won" value={String(data.totalWins)} tone="var(--won-ink)" />
+            <Stat label="Lost" value={String(data.totalLosses)} tone="var(--lost-ink)" />
+          </div>
+
+          <ul className="mt-6 divide-y divide-separator">
+            {data.users.map((u) => (
+              <li key={u.id} className="flex items-center gap-3 py-3">
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-[13px] font-medium">
+                    {u.displayName ?? u.email ?? "—"}
+                  </p>
+                  <p className="truncate text-[11px] text-muted">{u.email}</p>
+                </div>
+                <span className="numeral flex-none text-[11px] text-muted">
+                  {u.totalSlips} slips
+                </span>
+                <span className="numeral flex-none text-[11px] text-muted">
+                  {u.wins}W&ndash;{u.losses}L
+                </span>
+                <span className="numeral w-12 flex-none text-right text-[13px] font-semibold">
+                  {u.winRate === null ? "—" : `${Math.round(u.winRate * 100)}%`}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+    </Panel>
+  );
+}
+
+function TuningReportsView() {
   const { data: reports, isPending } = useTuningReports();
   const action = useOfficeAction();
 
@@ -1597,47 +1978,174 @@ function ReportsPanel() {
 function UsersPanel() {
   const { data: users, isPending } = useAdminUsers();
   const action = useOfficeAction();
+  const [query, setQuery] = useState("");
+  const [expanded, setExpanded] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+
+  // Filtering in the browser: the whole account list is already loaded, and a
+  // round trip per keystroke would be slower and no more correct.
+  const q = query.trim().toLowerCase();
+  const visible = (users ?? []).filter(
+    (u) =>
+      !q ||
+      (u.email ?? "").toLowerCase().includes(q) ||
+      (u.display_name ?? "").toLowerCase().includes(q),
+  );
 
   return (
-    <Panel title="Users" description={`${users?.length ?? 0} accounts.`}>
+    <Panel
+      title="Users"
+      description={`${users?.length ?? 0} accounts. Comped passes carry no payment, so they don't show up as revenue.`}
+    >
+      <input
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        placeholder="Search by name or email…"
+        aria-label="Search accounts"
+        className={`${FIELD} mb-4 w-full`}
+      />
+
       {isPending ? (
         <Loading rows={6} />
-      ) : !users?.length ? (
-        <Empty>No accounts.</Empty>
+      ) : !visible.length ? (
+        <Empty>{q ? "Nobody matches that." : "No accounts."}</Empty>
       ) : (
         <ul className="divide-y divide-separator">
-          {users.map((u) => {
+          {visible.map((u) => {
             const passes = (u.daily_passes ?? []) as Array<{ status: string }>;
             const active = passes.filter((p) => p.status === "active").length;
+            const open = expanded === u.id;
 
             return (
-              <li key={u.id} className="flex flex-wrap items-center gap-3 py-3 first:pt-0">
-                <span
-                  className="flex h-9 w-9 flex-none items-center justify-center rounded-full text-[12px] font-bold"
-                  style={{ background: "var(--surface-secondary)", color: "var(--muted)" }}
-                >
-                  {(u.display_name ?? u.email ?? "?").slice(0, 2).toUpperCase()}
-                </span>
+              <li key={u.id} className="py-3 first:pt-0">
+                <div className="flex flex-wrap items-center gap-3">
+                  <span
+                    className="flex h-9 w-9 flex-none items-center justify-center rounded-full text-[12px] font-bold"
+                    style={{ background: "var(--surface-secondary)", color: "var(--muted)" }}
+                  >
+                    {(u.display_name ?? u.email ?? "?").slice(0, 2).toUpperCase()}
+                  </span>
 
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-[13px] font-semibold">{u.display_name ?? "—"}</p>
-                  <p className="truncate text-[11px] text-muted">{u.email}</p>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-[13px] font-semibold">{u.display_name ?? "—"}</p>
+                    <p className="truncate text-[11px] text-muted">{u.email}</p>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {u.is_super_admin && <Tag tone="accent">admin</Tag>}
+                    {u.is_suspended && <Tag tone="lost">suspended</Tag>}
+                    {active > 0 && <Tag tone="won">{active} pass</Tag>}
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setExpanded(open ? null : u.id)}
+                    aria-expanded={open}
+                    className={PILL}
+                  >
+                    {open ? "Close" : "Manage"}
+                  </button>
                 </div>
 
-                <div className="flex flex-wrap items-center gap-1.5">
-                  {u.is_super_admin && <Tag tone="accent">admin</Tag>}
-                  {u.is_suspended && <Tag tone="lost">suspended</Tag>}
-                  {active > 0 && <Tag tone="won">{active} pass</Tag>}
-                </div>
+                {open && (
+                  <div className="rise mt-3 space-y-3 rounded-2xl bg-surface-secondary p-4">
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        disabled={action.isPending}
+                        onClick={() =>
+                          action.mutate({ action: "grantPass", userId: u.id, days: 1 })
+                        }
+                        className={PILL}
+                      >
+                        Comp 1 day
+                      </button>
+                      <button
+                        type="button"
+                        disabled={action.isPending}
+                        onClick={() =>
+                          action.mutate({ action: "grantPass", userId: u.id, days: 7 })
+                        }
+                        className={PILL}
+                      >
+                        Comp 7 days
+                      </button>
+                      <button
+                        type="button"
+                        disabled={action.isPending || active === 0}
+                        onClick={() => action.mutate({ action: "revokePass", userId: u.id })}
+                        className={PILL}
+                      >
+                        Revoke passes
+                      </button>
+                      <button
+                        type="button"
+                        disabled={action.isPending}
+                        onClick={() =>
+                          action.mutate({
+                            action: "setUserFlags",
+                            userId: u.id,
+                            isSuspended: !u.is_suspended,
+                          })
+                        }
+                        className={PILL}
+                      >
+                        {u.is_suspended ? "Reinstate" : "Suspend"}
+                      </button>
+                    </div>
 
-                <button
-                  type="button"
-                  disabled={action.isPending}
-                  onClick={() => action.mutate({ action: "setUserFlags", userId: u.id, isSuspended: !u.is_suspended })}
-                  className="press flex-none rounded-full border border-border px-4 py-2 text-[12px] font-semibold disabled:opacity-40"
-                >
-                  {u.is_suspended ? "Reinstate" : "Suspend"}
-                </button>
+                    <EditUserForm
+                      displayName={u.display_name ?? ""}
+                      phone={u.phone ?? ""}
+                      busy={action.isPending}
+                      onSubmit={(f) =>
+                        action.mutate({ action: "updateUserProfile", userId: u.id, ...f })
+                      }
+                    />
+
+                    {/* Deletion is last, visually separated, and two-step. It
+                        removes the account and everything hanging off it. */}
+                    <div className="flex items-center justify-between gap-3 border-t border-separator pt-3">
+                      <p className="text-[11px] leading-snug text-muted">
+                        Deleting removes the account, its slips, passes and
+                        payment records. There is no undo.
+                      </p>
+                      {confirmDelete === u.id ? (
+                        <span className="flex flex-none gap-2">
+                          <button
+                            type="button"
+                            disabled={action.isPending}
+                            onClick={() =>
+                              action.mutate(
+                                { action: "deleteUser", userId: u.id },
+                                { onSuccess: () => { setConfirmDelete(null); setExpanded(null); } },
+                              )
+                            }
+                            className="press rounded-full px-3 py-1.5 text-[11px] font-semibold"
+                            style={{ background: "var(--lost-wash)", color: "var(--lost-ink)" }}
+                          >
+                            Really delete
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setConfirmDelete(null)}
+                            className={PILL}
+                          >
+                            Cancel
+                          </button>
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => setConfirmDelete(u.id)}
+                          className={`${PILL} flex-none`}
+                        >
+                          Delete account
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
               </li>
             );
           })}
@@ -1646,5 +2154,48 @@ function UsersPanel() {
 
       {action.error && <ActionError message={action.error.message} />}
     </Panel>
+  );
+}
+
+function EditUserForm({
+  displayName,
+  phone,
+  busy,
+  onSubmit,
+}: {
+  displayName: string;
+  phone: string;
+  busy: boolean;
+  onSubmit: (f: { displayName: string; phone: string }) => void;
+}) {
+  const [name, setName] = useState(displayName);
+  const [tel, setTel] = useState(phone);
+  const dirty = name !== displayName || tel !== phone;
+
+  return (
+    <div className="flex flex-wrap gap-2">
+      <input
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        placeholder="Display name"
+        aria-label="Display name"
+        className={`${FIELD} min-w-40 flex-1`}
+      />
+      <input
+        value={tel}
+        onChange={(e) => setTel(e.target.value)}
+        placeholder="Phone"
+        aria-label="Phone"
+        className={`${FIELD} min-w-32 flex-1`}
+      />
+      <button
+        type="button"
+        disabled={!dirty || busy}
+        onClick={() => onSubmit({ displayName: name, phone: tel })}
+        className="press rounded-full bg-accent px-5 text-[13px] font-semibold text-accent-foreground disabled:opacity-40"
+      >
+        Save
+      </button>
+    </div>
   );
 }

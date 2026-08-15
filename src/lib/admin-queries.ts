@@ -104,6 +104,90 @@ export function useJobQueue() {
   });
 }
 
+export type PredictionReport = {
+  wins: number;
+  losses: number;
+  pending: number;
+  voided: number;
+  graded: number;
+  total: number;
+  winRate: number | null;
+  leagues: {
+    leagueName: string;
+    country: string;
+    logo: string | null;
+    wins: number;
+    losses: number;
+    pending: number;
+    graded: number;
+    winRate: number | null;
+  }[];
+};
+
+export type UserPicksReport = {
+  totalSlips: number;
+  totalWins: number;
+  totalLosses: number;
+  avgWinRate: number | null;
+  users: {
+    id: string;
+    email: string | null;
+    displayName: string | null;
+    totalSlips: number;
+    wins: number;
+    losses: number;
+    winRate: number | null;
+    lastSlipAt: string | null;
+  }[];
+};
+
+/** Engine performance for a window. Null dates mean all time. */
+export function usePredictionReport(range: { start?: string; end?: string; leagueId?: string }) {
+  return useQuery({
+    queryKey: ["office", "report", "predictions", range],
+    queryFn: async (): Promise<PredictionReport> => {
+      const supabase = createClient();
+      const { data, error } = await supabase.rpc("get_prediction_report", {
+        p_league_id: range.leagueId ?? null,
+        p_start: range.start ?? null,
+        p_end: range.end ?? null,
+      });
+      if (error) throw error;
+      return data as PredictionReport;
+    },
+  });
+}
+
+export function useUserPicksReport() {
+  return useQuery({
+    queryKey: ["office", "report", "users"],
+    queryFn: async (): Promise<UserPicksReport> => {
+      const supabase = createClient();
+      const { data, error } = await supabase.rpc("get_user_picks_report");
+      if (error) throw error;
+      return data as UserPicksReport;
+    },
+  });
+}
+
+/** Every config, not just the live one — the lifecycle needs the whole set. */
+export function useAllConfigs() {
+  return useQuery({
+    queryKey: ["office", "configs"],
+    queryFn: async () => {
+      const supabase = createClient();
+      const { data, error } = await supabase
+        .from("ai_engine_config")
+        .select("id, name, version, status, notes, approved_by, last_updated_at, ranking_weights")
+        // By recency, not by version: version is a semver-shaped text column,
+        // so ordering on it puts 1.4.10 below 1.4.9.
+        .order("last_updated_at", { ascending: false });
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+}
+
 export type CatalogLeague = {
   id: string;
   name: string;

@@ -14,6 +14,20 @@ import { getProviders } from "@/lib/providers";
 import type { Market } from "@/lib/types";
 import { runClvCheck, runRecalibration } from "@/lib/tuning";
 
+/**
+ * Next config version.
+ *
+ * `version` is a semver-shaped text column, not a number — bumping it
+ * arithmetically yields NaN and the insert fails silently. Increments the patch
+ * segment, and falls back to appending one for anything that isn't dotted.
+ */
+function nextVersion(current: string): string {
+  const parts = current.split(".");
+  const patch = Number(parts[parts.length - 1]);
+  if (parts.length < 2 || Number.isNaN(patch)) return `${current}.1`;
+  return [...parts.slice(0, -1), patch + 1].join(".");
+}
+
 /** Initials when the catalogue gives us no team code. */
 function autoShortName(name: string): string {
   const words = name
@@ -121,6 +135,33 @@ const Body = z.discriminatedUnion("action", [
     isActive: z.boolean().optional(),
   }),
   z.object({ action: z.literal("deleteTeam"), teamId: z.uuid() }),
+
+  /* ------------------------ engine config lifecycle ------------------------ */
+
+  z.object({
+    action: z.literal("createDraftConfig"),
+    fromConfigId: z.uuid(),
+    name: z.string().min(1).max(120),
+    notes: z.string().max(2000).optional(),
+  }),
+  z.object({ action: z.literal("activateConfig"), configId: z.uuid() }),
+  z.object({ action: z.literal("archiveConfig"), configId: z.uuid() }),
+
+  /* --------------------------- user management --------------------------- */
+
+  z.object({
+    action: z.literal("grantPass"),
+    userId: z.uuid(),
+    days: z.number().int().min(1).max(30).default(1),
+  }),
+  z.object({ action: z.literal("revokePass"), userId: z.uuid() }),
+  z.object({
+    action: z.literal("updateUserProfile"),
+    userId: z.uuid(),
+    displayName: z.string().max(120).nullable().optional(),
+    phone: z.string().max(32).nullable().optional(),
+  }),
+  z.object({ action: z.literal("deleteUser"), userId: z.uuid() }),
   z.object({
     action: z.literal("setSelectedLeagues"),
     configId: z.uuid(),
@@ -471,6 +512,156 @@ export async function POST(request: Request) {
           .eq("id", body.configId);
         if (error) throw new Error(error.message);
         return NextResponse.json({ updated: true, count: body.leagueExternalIds.length });
+      }
+
+      /* -------------------- engine config lifecycle -------------------- */
+
+      case "createDraftConfig": {
+        // Copy the source row wholesale rather than naming each column: the
+        // config is thirty-odd tuning fields and a draft that silently omits
+        // one is worse than no draft at all.
+        const { data: source, error: readErr } = await db
+          .from("ai_engine_config")
+          .select("*")
+          .eq("id", body.fromConfigId)
+          .single();
+        if (readErr) throw new Error(readErr.message);
+
+        // Drop only the columns the new row must own: its identity and its
+        // birthday. Everything else is deliberately carried across.
+        const rest = { ...(source as Record<string, unknown>) };
+        delete rest.id;
+        delete rest.created_at;
+
+        const { data, error } = await db
+          .from("ai_engine_config")
+          .insert({
+            ...rest,
+            name: body.name.trim(),
+            version: nextVersion(String(rest.version ?? "1.0.0")),
+            status: "draft",
+            notes: body.notes ?? null,
+            approved_by: actor,
+            last_updated_at: new Date().toISOString(),
+          })
+          .select("id, name, version")
+          .single();
+        if (error) throw new Error(error.message);
+        return NextResponse.json({ draft: data });
+      }
+
+      case "activateConfig": {
+        // A partial unique index enforces one active row, so the incumbent has
+        // to step down before the successor steps up. Two statements, and a
+        // failure between them leaves nothing active — which the daily job
+        // treats as "no config" and skips, rather than running on the wrong one.
+        const { error: demote } = await db
+          .from("ai_engine_config")
+          .update({ status: "archived" })
+          .eq("status", "active")
+          .neq("id", body.configId);
+        if (demote) throw new Error(demote.message);
+
+        const { error } = await db
+          .from("ai_engine_config")
+          .update({
+            status: "active",
+            approved_by: actor,
+            last_updated_at: new Date().toISOString(),
+          })
+          .eq("id", body.configId);
+        if (error) throw new Error(error.message);
+        return NextResponse.json({ activated: true });
+      }
+
+      case "archiveConfig": {
+        const { data: target } = await db
+          .from("ai_engine_config")
+          .select("status")
+          .eq("id", body.configId)
+          .single();
+
+        if (target?.status === "active") {
+          return NextResponse.json(
+            { error: "That's the live config. Activate another one first." },
+            { status: 409 },
+          );
+        }
+
+        const { error } = await db
+          .from("ai_engine_config")
+          .update({ status: "archived" })
+          .eq("id", body.configId);
+        if (error) throw new Error(error.message);
+        return NextResponse.json({ archived: true });
+      }
+
+      /* ---------------------- user management ---------------------- */
+
+      case "grantPass": {
+        // Comped passes carry no payment_id — that column is what ties a pass
+        // to money, and a gift has none. Amount 0 keeps revenue reporting
+        // honest rather than inflating it with passes nobody paid for.
+        const rows = Array.from({ length: body.days }, (_, i) => {
+          const d = new Date();
+          d.setUTCDate(d.getUTCDate() + i);
+          return {
+            user_id: body.userId,
+            date_key: d.toISOString().slice(0, 10),
+            amount_usd: 0,
+            status: "active" as const,
+          };
+        });
+
+        const { error } = await db.from("daily_passes").upsert(rows, {
+          onConflict: "user_id,date_key",
+        });
+        if (error) throw new Error(error.message);
+        return NextResponse.json({ granted: body.days });
+      }
+
+      case "revokePass": {
+        const { error } = await db
+          .from("daily_passes")
+          .update({ status: "expired" })
+          .eq("user_id", body.userId)
+          .eq("status", "active");
+        if (error) throw new Error(error.message);
+        return NextResponse.json({ revoked: true });
+      }
+
+      case "updateUserProfile": {
+        const patch: Record<string, unknown> = {};
+        if (body.displayName !== undefined) patch.display_name = body.displayName;
+        if (body.phone !== undefined) patch.phone = body.phone;
+
+        const { error } = await db.from("profiles").update(patch).eq("id", body.userId);
+        if (error) throw new Error(error.message);
+        return NextResponse.json({ updated: true });
+      }
+
+      case "deleteUser": {
+        // Refuse to delete an admin, including yourself. Locking every operator
+        // out of the Office is not a mistake anyone should be able to make in
+        // one click, and the recovery is a database console.
+        const { data: target } = await db
+          .from("profiles")
+          .select("is_super_admin, email")
+          .eq("id", body.userId)
+          .single();
+
+        if (target?.is_super_admin) {
+          return NextResponse.json(
+            { error: "That account is an admin. Remove the flag in the database first." },
+            { status: 409 },
+          );
+        }
+
+        // Deleting the auth user cascades to profiles, slips, passes and
+        // payments through the foreign keys.
+        const { error } = await db.auth.admin.deleteUser(body.userId);
+        if (error) throw new Error(error.message);
+        return NextResponse.json({ deleted: true, email: target?.email ?? null });
       }
     }
   } catch (err) {
