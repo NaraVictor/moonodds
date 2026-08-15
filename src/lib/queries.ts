@@ -236,6 +236,31 @@ export function useLeagueOptions(enabled: boolean) {
 
 /** The user's saved slips, with legs. */
 /**
+ * Which of the slip's picks still exist server-side.
+ *
+ * The slip is held in the browser, so it can outlive the predictions it points
+ * at — regenerate the board and the ids stop resolving. Checking on open lets
+ * the sheet mark the dead legs individually instead of failing the whole save
+ * with a message that names none of them.
+ */
+export function useLivePredictionIds(ids: string[]) {
+  const key = [...ids].sort().join(",");
+  return useQuery({
+    queryKey: ["picks", "live-check", key],
+    enabled: ids.length > 0,
+    staleTime: 30_000,
+    queryFn: async (): Promise<Set<string>> => {
+      const supabase = createClient();
+      const { data, error } = await supabase.rpc("filter_live_predictions", {
+        p_ids: ids,
+      });
+      if (error) throw error;
+      return new Set((data as string[]) ?? []);
+    },
+  });
+}
+
+/**
  * Discard a whole slip.
  *
  * Goes through an RPC rather than a PostgREST delete so ownership is checked in

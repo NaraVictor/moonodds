@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { Receipt, X, Trash2, Check, Info } from "@/components/ui/icons";
 import { useBetSlip } from "@/lib/bet-slip";
 import { Alert } from "@/components/ui/alert";
-import { useConfirmSlip } from "@/lib/queries";
+import { useConfirmSlip, useLivePredictionIds } from "@/lib/queries";
 import { formatMarket, teamShort } from "@/lib/format";
 
 /**
@@ -73,6 +73,19 @@ function SlipSheetBody() {
   const confirm = useConfirmSlip();
   const router = useRouter();
   const [done, setDone] = useState(false);
+
+  /**
+   * Legs whose prediction no longer exists.
+   *
+   * Checked when the sheet opens rather than on save, so a stale slip announces
+   * itself before someone commits to the button and gets an error naming none
+   * of the offenders. While the check is in flight nothing is marked — assuming
+   * everything is dead until proven otherwise would flash the whole slip red.
+   */
+  const { data: liveIds } = useLivePredictionIds(entries.map((e) => e.pick.id));
+  const staleIds = new Set(
+    liveIds ? entries.map((e) => e.pick.id).filter((id) => !liveIds.has(id)) : [],
+  );
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
@@ -187,32 +200,56 @@ function SlipSheetBody() {
                 </div>
               ) : (
                 <ul className="divide-y divide-separator">
-                  {entries.map(({ pick, odds }) => (
-                    <li key={pick.id} className="flex items-start gap-3 px-6 py-4">
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-[13px] font-semibold">
-                          {teamShort(pick.homeTeam)} v {teamShort(pick.awayTeam)}
-                        </p>
-                        <p className="mt-0.5 truncate text-[12px] text-muted">
-                          {formatMarket(pick.predictionType, pick.predictedValue)}
-                        </p>
-                        <p className="mt-0.5 truncate text-[11px] text-muted">
-                          {pick.league.name}
-                        </p>
-                      </div>
-
-                      <span className="numeral flex-none text-sm">{odds.toFixed(2)}</span>
-
-                      <button
-                        type="button"
-                        onClick={() => remove(pick.id)}
-                        aria-label={`Remove ${teamShort(pick.homeTeam)} v ${teamShort(pick.awayTeam)}`}
-                        className="press flex h-7 w-7 flex-none items-center justify-center rounded-full text-muted hover:bg-surface-secondary hover:text-foreground"
+                  {entries.map(({ pick, odds }) => {
+                    const dead = staleIds.has(pick.id);
+                    return (
+                      <li
+                        key={pick.id}
+                        className="flex items-start gap-3 px-6 py-4"
+                        style={dead ? { background: "var(--lost-wash)" } : undefined}
                       >
-                        <X className="h-3.5 w-3.5" />
-                      </button>
-                    </li>
-                  ))}
+                        <div className="min-w-0 flex-1">
+                          <p
+                            className="truncate text-[13px] font-semibold"
+                            style={dead ? { textDecoration: "line-through" } : undefined}
+                          >
+                            {teamShort(pick.homeTeam)} v {teamShort(pick.awayTeam)}
+                          </p>
+                          <p className="mt-0.5 truncate text-[12px] text-muted">
+                            {formatMarket(pick.predictionType, pick.predictedValue)}
+                          </p>
+                          {dead ? (
+                            <p
+                              className="mt-0.5 truncate text-[11px] font-semibold"
+                              style={{ color: "var(--lost-ink)" }}
+                            >
+                              No longer available
+                            </p>
+                          ) : (
+                            <p className="mt-0.5 truncate text-[11px] text-muted">
+                              {pick.league.name}
+                            </p>
+                          )}
+                        </div>
+
+                        <span
+                          className="numeral flex-none text-sm"
+                          style={dead ? { opacity: 0.4 } : undefined}
+                        >
+                          {odds.toFixed(2)}
+                        </span>
+
+                        <button
+                          type="button"
+                          onClick={() => remove(pick.id)}
+                          aria-label={`Remove ${teamShort(pick.homeTeam)} v ${teamShort(pick.awayTeam)}`}
+                          className="press flex h-7 w-7 flex-none items-center justify-center rounded-full text-muted hover:bg-surface-secondary hover:text-foreground"
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      </li>
+                    );
+                  })}
                 </ul>
               )}
             </div>
@@ -235,14 +272,26 @@ function SlipSheetBody() {
                   </Alert>
                 )}
 
-                <button
-                  type="button"
-                  disabled={confirm.isPending}
-                  onClick={save}
-                  className="press mt-4 h-12 w-full rounded-full bg-accent text-sm font-semibold text-accent-foreground disabled:opacity-50"
-                >
-                  {confirm.isPending ? "Saving…" : "Save slip"}
-                </button>
+                {staleIds.size > 0 ? (
+                  <button
+                    type="button"
+                    onClick={() => staleIds.forEach((id) => remove(id))}
+                    className="press mt-4 h-12 w-full rounded-full text-sm font-semibold"
+                    style={{ background: "var(--lost-wash)", color: "var(--lost-ink)" }}
+                  >
+                    Remove {staleIds.size} unavailable{" "}
+                    {staleIds.size === 1 ? "pick" : "picks"}
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    disabled={confirm.isPending}
+                    onClick={save}
+                    className="press mt-4 h-12 w-full rounded-full bg-accent text-sm font-semibold text-accent-foreground disabled:opacity-50"
+                  >
+                    {confirm.isPending ? "Saving…" : "Save slip"}
+                  </button>
+                )}
 
                 <p className="mt-3 flex items-start gap-1.5 text-[11px] leading-snug text-muted">
                   <Info className="mt-0.5 h-3 w-3 flex-none" />
