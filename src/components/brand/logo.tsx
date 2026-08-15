@@ -45,7 +45,7 @@ export function Logo({
 
       {showWord && (
         <span className="display text-[1.35rem] leading-none tracking-tight">
-          Moon<span className="text-brand-gradient">Odds</span>
+          Moon<span className="text-accent">Odds</span>
         </span>
       )}
     </span>

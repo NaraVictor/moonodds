@@ -380,7 +380,8 @@ begin
     select * into away from teams where league_id = league.id and id <> home.id order by random() limit 1;
 
     kickoff := date_trunc('day', now() at time zone 'utc') at time zone 'utc'
-               + interval '1 hour' * (14 + i);
+               + interval '1 hour' * (12 + (i % 10))
+               + interval '15 minutes' * (i % 4);
 
     insert into fixtures (
       league_id, home_team_id, away_team_id, slug, fixture_date, status, venue, round
@@ -438,7 +439,7 @@ begin
     select * into away from teams where league_id = league.id and id <> home.id order by random() limit 1;
 
     kickoff := date_trunc('day', now() at time zone 'utc') at time zone 'utc'
-               + interval '1 day' + interval '1 hour' * (13 + i);
+               + interval '1 day' + interval '1 hour' * (12 + (i % 9));
 
     insert into fixtures (
       league_id, home_team_id, away_team_id, slug, fixture_date, status, venue, round

@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
-import { GuestLanding } from "@/components/home/guest-landing";
+import { Landing } from "@/components/home/landing";
 import { PicksHome } from "@/components/home/picks-home";
 import { SiteHeader } from "@/components/layout/site-header";
 import { RoleSwitcher } from "@/components/dev/role-switcher";
@@ -18,7 +18,7 @@ export default async function HomePage() {
   return (
     <>
       <SiteHeader signedIn={!!user} />
-      {user ? <PicksHome /> : <GuestLanding />}
+      {user ? <PicksHome /> : <Landing />}
       {process.env.NODE_ENV !== "production" && <RoleSwitcher />}
     </>
   );

@@ -69,7 +69,7 @@ export function SignUpForm() {
         fullWidth
         size="lg"
         isDisabled={pending}
-        className="bg-brand-gradient border-0 text-white"
+        variant="primary"
       >
         {pending ? "Creating account…" : "Create account"}
       </Button>

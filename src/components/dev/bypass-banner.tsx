@@ -11,12 +11,12 @@ export function BypassBanner() {
   return (
     <div
       role="alert"
-      className="sticky top-0 z-50 flex items-center justify-center gap-2 bg-danger px-4 py-1.5 text-center text-danger-foreground"
+      className="relative z-50 flex items-center justify-center gap-2 bg-danger px-4 py-1.5 text-center text-danger-foreground"
     >
       <ShieldOff className="h-3.5 w-3.5 flex-none" />
       <p className="text-xs font-semibold">
         Auth guards bypassed for testing — set{" "}
-        <code className="font-mono">DEV_BYPASS_AUTH=false</code> to restore them.
+        <code className="font-mono text-[0.9em]">DEV_BYPASS_AUTH=false</code> to restore them.
         Never ships: disabled in production builds.
       </p>
     </div>

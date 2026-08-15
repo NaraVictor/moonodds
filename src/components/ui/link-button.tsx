@@ -9,20 +9,21 @@ import type { ComponentProps } from "react";
  */
 
 const BASE =
-  "inline-flex cursor-pointer items-center justify-center gap-1.5 rounded-xl font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 focus-visible:ring-offset-background";
+  "press inline-flex cursor-pointer items-center justify-center gap-1.5 rounded-full font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 focus-visible:ring-offset-background";
 
+/** Touch targets stay at or above 44px from md up. */
 const SIZES = {
-  sm: "h-8 px-3 text-sm",
-  md: "h-10 px-4 text-sm",
-  lg: "h-12 px-6 text-base",
+  sm: "h-9 px-4 text-[13px]",
+  md: "h-11 px-5 text-sm",
+  lg: "h-[3.25rem] px-7 text-[15px]",
 } as const;
 
 const VARIANTS = {
-  gradient: "bg-brand-gradient text-white hover:opacity-90",
-  primary: "bg-accent text-accent-foreground hover:bg-accent-hover",
+  primary: "bg-accent text-accent-foreground hover:brightness-110",
   secondary:
-    "border border-border bg-surface-secondary text-foreground hover:bg-surface-tertiary",
+    "border border-border bg-surface text-foreground hover:bg-surface-secondary",
   ghost: "text-muted hover:bg-surface-secondary hover:text-foreground",
+  dark: "bg-feature text-feature-foreground hover:brightness-125",
 } as const;
 
 export function LinkButton({

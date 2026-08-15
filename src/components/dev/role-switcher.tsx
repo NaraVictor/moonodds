@@ -79,7 +79,7 @@ export function RoleSwitcher() {
     <div className="fixed bottom-4 left-4 z-50 w-[19rem] rounded-xl border border-border bg-surface p-3 shadow-2xl">
       <div className="mb-3 flex items-center justify-between">
         <div>
-          <p className="eyebrow">Dev · access tier</p>
+          <p className="label">Dev · access tier</p>
           <p className="text-xs text-muted">Not shown in production</p>
         </div>
         <button

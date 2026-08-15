@@ -61,7 +61,7 @@ export function ProfileClient() {
   return (
     <main className="mx-auto w-full max-w-2xl space-y-5 px-5 py-8">
       <header className="space-y-1">
-        <p className="eyebrow">Account</p>
+        <p className="label">Account</p>
         <h1 className="display text-2xl">Profile</h1>
       </header>
 
@@ -72,7 +72,7 @@ export function ProfileClient() {
               <p className="text-sm font-semibold">
                 {profile?.display_name ?? "—"}
               </p>
-              <p className="font-mono text-xs text-muted">{profile?.email}</p>
+              <p className="numeral text-xs text-muted">{profile?.email}</p>
             </div>
             <div className="flex flex-wrap justify-end gap-1.5">
               {access?.hasFullAccess && (

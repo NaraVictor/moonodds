@@ -1,33 +1,26 @@
 import type { Metadata, Viewport } from "next";
-import { Archivo, Manrope, JetBrains_Mono } from "next/font/google";
+import { Sora, Plus_Jakarta_Sans } from "next/font/google";
 import { Providers } from "./providers";
 import { BypassBanner } from "@/components/dev/bypass-banner";
 import "./globals.css";
 
 /**
- * adipredictstreet pairs a wide display face with a neutral text face and a
- * mono for figures. Archivo carries the same technical width; Manrope reads
- * cleanly at small sizes in dense pick lists; JetBrains Mono keeps odds,
- * confidence and dates aligned.
+ * Sora carries headlines and every figure — geometric, confident, with
+ * numerals that hold their shape at the sizes scorelines demand. Plus Jakarta
+ * Sans handles UI text: highly legible small, with a warmth that keeps the
+ * product from reading as an enterprise dashboard.
  */
-const display = Archivo({
+const display = Sora({
   variable: "--font-display",
   subsets: ["latin"],
   weight: ["500", "600", "700", "800"],
   display: "swap",
 });
 
-const body = Manrope({
+const body = Plus_Jakarta_Sans({
   variable: "--font-body",
   subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
-  display: "swap",
-});
-
-const mono = JetBrains_Mono({
-  variable: "--font-mono-figures",
-  subsets: ["latin"],
-  weight: ["400", "500", "600"],
+  weight: ["400", "500", "600", "700", "800"],
   display: "swap",
 });
 
@@ -37,7 +30,7 @@ export const metadata: Metadata = {
     template: "%s · MoonOdds",
   },
   description:
-    "AI-ranked football predictions with confidence scores, plain-English reasoning and a verifiable track record. One day pass, no subscription.",
+    "AI-powered football predictions with confidence scores and the reasoning behind every call. Smarter decisions, backed by the data.",
   openGraph: {
     title: "MoonOdds — AI football predictions",
     description:
@@ -47,8 +40,8 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#010820",
-  colorScheme: "dark",
+  themeColor: "#f6f7f9",
+  colorScheme: "light",
 };
 
 export default function RootLayout({
@@ -59,8 +52,8 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      data-theme="dark"
-      className={`${display.variable} ${body.variable} ${mono.variable} h-full`}
+      data-theme="light"
+      className={`${display.variable} ${body.variable} h-full`}
       suppressHydrationWarning
     >
       <body className="min-h-full flex flex-col bg-background text-foreground">

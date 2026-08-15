@@ -21,7 +21,7 @@ export function SiteHeader({ signedIn }: { signedIn: boolean }) {
   const { data: access } = useAccessState();
 
   return (
-    <header className="sticky top-0 z-40 border-b border-border/70 bg-background/85 backdrop-blur">
+    <header className="sticky top-0 z-40 border-b border-border bg-background/80 backdrop-blur-xl">
       <div className="mx-auto flex w-full max-w-6xl items-center gap-6 px-5 py-3">
         <Link href="/" className="flex-none" aria-label="MoonOdds home">
           <Logo />
@@ -86,7 +86,7 @@ export function SiteHeader({ signedIn }: { signedIn: boolean }) {
               </Button>
             </form>
           ) : (
-            <LinkButton size="sm" href="/auth/sign-in" variant="gradient">
+            <LinkButton size="sm" href="/auth/sign-in" variant="primary">
               Get started
             </LinkButton>
           )}

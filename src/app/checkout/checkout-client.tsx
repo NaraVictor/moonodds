@@ -106,7 +106,7 @@ export function CheckoutClient({ kind }: { kind: Kind }) {
               </p>
             </div>
             <Button
-              className="bg-brand-gradient border-0 text-white"
+              variant="primary"
               onPress={() => {
                 router.push("/");
                 router.refresh();
@@ -125,7 +125,7 @@ export function CheckoutClient({ kind }: { kind: Kind }) {
   return (
     <main className="mx-auto w-full max-w-md space-y-5 px-5 py-12">
       <header className="space-y-1 text-center">
-        <p className="eyebrow">Checkout</p>
+        <p className="label">Checkout</p>
         <h1 className="display text-2xl">
           {kind === "day-pass" ? "Day pass" : "Extra league picks"}
         </h1>
@@ -158,7 +158,7 @@ export function CheckoutClient({ kind }: { kind: Kind }) {
         <Card.Content className="space-y-5 p-6">
           {kind === "extra-picks" && (
             <div className="space-y-2">
-              <p className="eyebrow">Choose leagues</p>
+              <p className="label">Choose leagues</p>
               {leagues.isPending ? (
                 <Skeleton className="h-32 rounded-lg" />
               ) : !leagues.data?.length ? (
@@ -204,7 +204,7 @@ export function CheckoutClient({ kind }: { kind: Kind }) {
 
           <div className="flex items-end justify-between border-t border-border pt-4">
             <div>
-              <p className="eyebrow">Total</p>
+              <p className="label">Total</p>
               <p className="display text-4xl">${priceUsd}</p>
               {kind === "extra-picks" && (
                 <p className="text-xs text-muted">
@@ -222,7 +222,7 @@ export function CheckoutClient({ kind }: { kind: Kind }) {
           <Button
             fullWidth
             size="lg"
-            className="bg-brand-gradient border-0 text-white"
+            variant="primary"
             isDisabled={
               busy ||
               priceUsd === 0 ||

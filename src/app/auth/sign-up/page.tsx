@@ -15,14 +15,8 @@ export default async function SignUpPage() {
   if (user) redirect("/");
 
   return (
-    <main className="relative flex min-h-svh flex-col items-center justify-center px-5 py-12">
-      <div className="pointer-events-none absolute inset-0 bg-grid opacity-60" />
-      <div
-        className="pointer-events-none absolute left-1/2 top-0 h-96 w-[40rem] -translate-x-1/2 rounded-full opacity-20 blur-3xl"
-        style={{ background: "var(--brand-gradient)" }}
-      />
-
-      <div className="relative w-full max-w-sm space-y-8">
+    <main className="flex min-h-svh flex-col items-center justify-center px-5 py-12">
+      <div className="w-full max-w-sm space-y-8">
         <Link href="/" className="flex justify-center">
           <Logo />
         </Link>

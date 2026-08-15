@@ -1,19 +1,15 @@
 /* ---------------------------------------------------------------------------
- * MoonOdds theme
+ * MoonOdds design system
  *
- * HeroUI v3 ships a semantic CSS-variable theme (--background, --surface,
- * --accent, --success, ...). We import it, then override those variables with
- * the MoonOdds palette. Component styling therefore flows through HeroUI's own
- * tokens — we never restyle its internals.
+ * The references share a language: a light, airy base; generous whitespace
+ * doing the work that borders and shadows usually do; large rounded surfaces;
+ * one dark "feature" card carrying the hero content; and oversized, confident
+ * numerals. That's what's borrowed — not the palettes, which belong to their
+ * own products.
  *
- * Palette sampled from adipredictstreet.com:
- *   ground        #010820   surface       #0D142B   elevated  #1A2136 / #34394D
- *   teal (win)    #00D4BF   red (loss)    #F2404C
- *   blue          #658BFF / #2E64FF / #013CFF        orange    #FF710A
- *   CTA gradient  linear-gradient(90deg, #013CFF, #FF710A)
- *
- * The product is dark-first — the palette is built for the dark ground and the
- * light theme is a considered companion, not an inversion.
+ * MoonOdds sits on near-white with a single violet brand accent (intelligence,
+ * not casino) and a strict three-state outcome system. Green and red appear
+ * ONLY as prediction outcomes, so colour always means the same thing.
  * ------------------------------------------------------------------------- */
 
 @import "@heroui/react/styles";
@@ -21,144 +17,198 @@
 @source "../../node_modules/@heroui/react/dist";
 
 @layer base {
-  /* ---------------- dark: the primary theme ---------------- */
   :root,
-  .dark,
-  [data-theme="dark"] {
-    color-scheme: dark;
-
-    --radius: 0.625rem;
-    --border-width: 1px;
-
-    /* Grounds */
-    --background: #010820;
-    --foreground: #ffffff;
-
-    --surface: #0d142b;
-    --surface-foreground: #ffffff;
-    --surface-secondary: #131a33;
-    --surface-secondary-foreground: #ffffff;
-    --surface-tertiary: #1a2136;
-    --surface-tertiary-foreground: #ffffff;
-
-    --overlay: #0d142b;
-    --overlay-foreground: #ffffff;
-
-    --muted: #999ca6;
-
-    /* Neutral fill */
-    --default: #1a2136;
-    --default-foreground: #ffffff;
-
-    /* Accent — the interactive blue. The gradient is reserved for CTAs. */
-    --accent: #2e64ff;
-    --accent-foreground: #ffffff;
-
-    /* Outcome semantics: teal wins, red loses, orange warns. */
-    --success: #00d4bf;
-    --success-foreground: #01131a;
-    --danger: #f2404c;
-    --danger-foreground: #ffffff;
-    --warning: #ff710a;
-    --warning-foreground: #1a0c00;
-
-    /* Structure */
-    --border: #1a2136;
-    --separator: #151c33;
-    --focus: #658bff;
-    --link: #658bff;
-
-    --segment: #1a2136;
-    --segment-foreground: #ffffff;
-
-    /* Form fields sit slightly above the card ground */
-    --field-background: #131a33;
-    --field-foreground: #ffffff;
-    --field-placeholder: #6d7385;
-    --field-border: #232b45;
-    --field-border-width: 1px;
-
-    --backdrop: rgba(1, 8, 32, 0.72);
-
-    --scrollbar-thumb: #232b45;
-    --scrollbar-track: transparent;
-
-    /* App-level tokens (not part of HeroUI's contract) */
-    --brand-from: #013cff;
-    --brand-to: #ff710a;
-    --brand-gradient: linear-gradient(90deg, #013cff 0%, #ff710a 100%);
-    --elevated: #34394d;
-    --grid-line: rgba(255, 255, 255, 0.04);
-  }
-
-  /* ---------------- light: a considered companion ---------------- */
   .light,
   [data-theme="light"] {
     color-scheme: light;
 
-    --background: #f4f6fb;
-    --foreground: #010820;
+    --radius: 1rem;
+    --border-width: 1px;
+
+    /* Grounds — near-white, not pure, so white cards read as raised. */
+    --background: #f6f7f9;
+    --foreground: #0b0d12;
 
     --surface: #ffffff;
-    --surface-foreground: #010820;
-    --surface-secondary: #eef1f8;
-    --surface-secondary-foreground: #010820;
-    --surface-tertiary: #e4e9f4;
-    --surface-tertiary-foreground: #010820;
+    --surface-foreground: #0b0d12;
+    --surface-secondary: #f2f4f7;
+    --surface-secondary-foreground: #0b0d12;
+    --surface-tertiary: #e9ecf1;
+    --surface-tertiary-foreground: #0b0d12;
 
     --overlay: #ffffff;
-    --overlay-foreground: #010820;
+    --overlay-foreground: #0b0d12;
 
-    --muted: #5c6379;
+    --muted: #667085;
 
-    --default: #e4e9f4;
-    --default-foreground: #010820;
+    --default: #f2f4f7;
+    --default-foreground: #0b0d12;
 
-    --accent: #1b47d6;
+    /* Brand: one accent, used for AI/confidence and primary actions. */
+    --accent: #6d5bff;
     --accent-foreground: #ffffff;
 
-    /* Teal is lightened-ground-hostile at #00D4BF, so it darkens here. */
-    --success: #067d70;
+    /* Outcome system. Reserved — never decorative. */
+    --success: #0e9f6e;
     --success-foreground: #ffffff;
-    --danger: #cf2233;
-    --danger-foreground: #ffffff;
-    --warning: #b34d00;
+    --warning: #b54708;
     --warning-foreground: #ffffff;
+    --danger: #e5484d;
+    --danger-foreground: #ffffff;
 
-    --border: #d7dded;
-    --separator: #e4e9f4;
-    --focus: #2e64ff;
-    --link: #1b47d6;
+    --border: #e4e7ec;
+    --separator: #eef0f3;
+    --focus: #6d5bff;
+    --link: #6d5bff;
 
     --segment: #ffffff;
-    --segment-foreground: #010820;
+    --segment-foreground: #0b0d12;
 
     --field-background: #ffffff;
-    --field-foreground: #010820;
-    --field-placeholder: #8a90a3;
-    --field-border: #d7dded;
+    --field-foreground: #0b0d12;
+    --field-placeholder: #98a2b3;
+    --field-border: #d7dbe3;
+    --field-border-width: 1px;
 
-    --backdrop: rgba(1, 8, 32, 0.45);
+    --backdrop: rgba(11, 13, 18, 0.45);
+    --scrollbar-thumb: #d7dbe3;
+    --scrollbar-track: transparent;
 
-    --scrollbar-thumb: #c8d0e4;
+    /* --- app tokens --------------------------------------------------- */
 
-    --brand-from: #013cff;
-    --brand-to: #ff710a;
-    --brand-gradient: linear-gradient(90deg, #013cff 0%, #ff710a 100%);
-    --elevated: #c8d0e4;
-    --grid-line: rgba(1, 8, 32, 0.05);
+    /* The dark feature surface — the hero match card. */
+    --feature: #0e1116;
+    --feature-foreground: #ffffff;
+    --feature-muted: #8b93a3;
+    --feature-border: rgba(255, 255, 255, 0.08);
+
+    /* Outcome washes: tint, never saturate. Text must stay legible on them. */
+    --won-wash: #ecfdf3;
+    --won-edge: #a6f4c5;
+    --won-ink: #05603a;
+
+    --lost-wash: #fef3f2;
+    --lost-edge: #fecdca;
+    --lost-ink: #912018;
+
+    --pending-wash: #ffffff;
+    --pending-edge: #e4e7ec;
+    --pending-ink: #475467;
+
+    --accent-wash: #f0edff;
+    --accent-edge: #d9d2ff;
+
+    --lock-veil: rgba(246, 247, 249, 0.55);
+
+    --shadow-card: 0 1px 2px rgba(11, 13, 18, 0.04),
+      0 12px 32px -20px rgba(11, 13, 18, 0.18);
+    --shadow-lift: 0 2px 4px rgba(11, 13, 18, 0.05),
+      0 20px 48px -24px rgba(11, 13, 18, 0.28);
+  }
+
+  .dark,
+  [data-theme="dark"] {
+    color-scheme: dark;
+
+    --background: #0b0d12;
+    --foreground: #f5f7fa;
+
+    --surface: #14171e;
+    --surface-foreground: #f5f7fa;
+    --surface-secondary: #1a1e27;
+    --surface-secondary-foreground: #f5f7fa;
+    --surface-tertiary: #222732;
+    --surface-tertiary-foreground: #f5f7fa;
+
+    --overlay: #14171e;
+    --overlay-foreground: #f5f7fa;
+
+    --muted: #98a2b3;
+
+    --default: #1a1e27;
+    --default-foreground: #f5f7fa;
+
+    --accent: #8b7bff;
+    --accent-foreground: #0b0d12;
+
+    --success: #3ecf8e;
+    --success-foreground: #06281c;
+    --warning: #f79009;
+    --warning-foreground: #2b1503;
+    --danger: #ff6369;
+    --danger-foreground: #2d0709;
+
+    --border: #242936;
+    --separator: #1c212b;
+    --focus: #8b7bff;
+    --link: #8b7bff;
+
+    --segment: #1a1e27;
+    --segment-foreground: #f5f7fa;
+
+    --field-background: #14171e;
+    --field-foreground: #f5f7fa;
+    --field-placeholder: #667085;
+    --field-border: #2a3040;
+
+    --backdrop: rgba(0, 0, 0, 0.7);
+    --scrollbar-thumb: #2a3040;
+
+    --feature: #14171e;
+    --feature-foreground: #ffffff;
+    --feature-muted: #8b93a3;
+    --feature-border: rgba(255, 255, 255, 0.08);
+
+    --won-wash: #0d2a1e;
+    --won-edge: #14603f;
+    --won-ink: #6ee7b0;
+
+    --lost-wash: #2c1113;
+    --lost-edge: #6b1f22;
+    --lost-ink: #ff9b9e;
+
+    --pending-wash: #14171e;
+    --pending-edge: #242936;
+    --pending-ink: #98a2b3;
+
+    --accent-wash: #1b1735;
+    --accent-edge: #322a5e;
+
+    --lock-veil: rgba(11, 13, 18, 0.55);
+
+    --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4),
+      0 12px 32px -20px rgba(0, 0, 0, 0.8);
+    --shadow-lift: 0 2px 4px rgba(0, 0, 0, 0.5),
+      0 20px 48px -24px rgba(0, 0, 0, 0.9);
   }
 }
 
-/* Expose the app tokens to Tailwind so `bg-elevated` etc. resolve. */
 @theme inline {
-  --color-elevated: var(--elevated);
-  --color-brand-from: var(--brand-from);
-  --color-brand-to: var(--brand-to);
+  --color-feature: var(--feature);
+  --color-feature-foreground: var(--feature-foreground);
+  --color-feature-muted: var(--feature-muted);
+
+  --color-won-wash: var(--won-wash);
+  --color-won-edge: var(--won-edge);
+  --color-won-ink: var(--won-ink);
+  --color-lost-wash: var(--lost-wash);
+  --color-lost-edge: var(--lost-edge);
+  --color-lost-ink: var(--lost-ink);
+  --color-pending-wash: var(--pending-wash);
+  --color-pending-edge: var(--pending-edge);
+  --color-pending-ink: var(--pending-ink);
+  --color-accent-wash: var(--accent-wash);
+  --color-accent-edge: var(--accent-edge);
+
+  --shadow-card: var(--shadow-card);
+  --shadow-lift: var(--shadow-lift);
 
   --font-sans: var(--font-body), ui-sans-serif, system-ui, sans-serif;
   --font-display: var(--font-display), ui-sans-serif, system-ui, sans-serif;
-  --font-mono: var(--font-mono-figures), ui-monospace, monospace;
+
+  /* Layout scale — spacing does the structural work, not borders. */
+  --spacing-gutter: 1.25rem;
+  --spacing-section: 4rem;
 }
 
 @layer base {
@@ -171,57 +221,184 @@
     background-color: var(--background);
     color: var(--foreground);
     font-family: var(--font-sans);
+    font-feature-settings: "cv11", "ss01";
   }
 
-  /* Figures line up in every table, stat strip and odds column. */
+  /* Every figure in this product lines up in a column somewhere. */
+  .tabular,
   table,
-  .tabular {
+  [data-numeric] {
     font-variant-numeric: tabular-nums;
+  }
+
+  ::selection {
+    background: var(--accent-wash);
+    color: var(--foreground);
   }
 }
 
-@layer utilities {
-  /* The signature CTA treatment — used sparingly, on primary actions only. */
-  .bg-brand-gradient {
-    background-image: var(--brand-gradient);
-  }
-
-  .text-brand-gradient {
-    background-image: var(--brand-gradient);
-    -webkit-background-clip: text;
-    background-clip: text;
-    color: transparent;
-  }
-
-  .border-gradient {
-    border: 1px solid transparent;
-    background:
-      linear-gradient(var(--surface), var(--surface)) padding-box,
-      var(--brand-gradient) border-box;
-  }
-
-  /* Faint field grid behind hero sections — echoes a betting board. */
-  .bg-grid {
-    background-image:
-      linear-gradient(to right, var(--grid-line) 1px, transparent 1px),
-      linear-gradient(to bottom, var(--grid-line) 1px, transparent 1px);
-    background-size: 56px 56px;
-  }
+@layer components {
+  /* --- typography ---------------------------------------------------- */
 
   .display {
     font-family: var(--font-display);
     font-weight: 700;
-    letter-spacing: -0.03em;
+    letter-spacing: -0.035em;
+    line-height: 1.02;
     text-wrap: balance;
   }
 
-  .eyebrow {
-    font-family: var(--font-mono);
+  .numeral {
+    font-family: var(--font-display);
+    font-variant-numeric: tabular-nums;
+    font-weight: 700;
+    letter-spacing: -0.04em;
+    line-height: 1;
+  }
+
+  .label {
     font-size: 0.6875rem;
-    letter-spacing: 0.16em;
+    font-weight: 600;
+    letter-spacing: 0.1em;
     text-transform: uppercase;
     color: var(--muted);
   }
+
+  /* --- outcome surfaces ----------------------------------------------
+   * Tint plus a 1px edge. The wash carries the state; the ink stays high
+   * contrast so team names and scorelines never fight the colour.
+   * ------------------------------------------------------------------ */
+
+  .state-won {
+    background: var(--won-wash);
+    border-color: var(--won-edge);
+  }
+  .state-lost {
+    background: var(--lost-wash);
+    border-color: var(--lost-edge);
+  }
+  .state-pending {
+    background: var(--pending-wash);
+    border-color: var(--pending-edge);
+  }
+}
+
+@layer utilities {
+  /* --- motion --------------------------------------------------------
+   * One easing curve and two durations across the whole product, so
+   * everything feels like it was built by the same hand.
+   * ------------------------------------------------------------------ */
+
+  :root {
+    --ease-out-soft: cubic-bezier(0.22, 1, 0.36, 1);
+    --dur-fast: 160ms;
+    --dur-base: 260ms;
+  }
+
+  .press {
+    transition:
+      transform var(--dur-fast) var(--ease-out-soft),
+      box-shadow var(--dur-base) var(--ease-out-soft),
+      background-color var(--dur-fast) var(--ease-out-soft),
+      border-color var(--dur-fast) var(--ease-out-soft);
+  }
+  .press:active {
+    transform: scale(0.985);
+  }
+
+  .lift {
+    transition:
+      transform var(--dur-base) var(--ease-out-soft),
+      box-shadow var(--dur-base) var(--ease-out-soft);
+  }
+  @media (hover: hover) {
+    .lift:hover {
+      transform: translateY(-2px);
+      box-shadow: var(--shadow-lift);
+    }
+  }
+
+  .rise {
+    animation: rise var(--dur-base) var(--ease-out-soft) both;
+  }
+  @keyframes rise {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
+  /* Confidence rings draw themselves in on mount. */
+  @keyframes sweep {
+    from {
+      stroke-dashoffset: var(--sweep-from);
+    }
+    to {
+      stroke-dashoffset: var(--sweep-to);
+    }
+  }
+  .sweep {
+    animation: sweep 900ms var(--ease-out-soft) both;
+  }
+
+  /* Live indicator. */
+  @keyframes ping-soft {
+    0% {
+      transform: scale(1);
+      opacity: 0.7;
+    }
+    70%,
+    100% {
+      transform: scale(2.2);
+      opacity: 0;
+    }
+  }
+  .ping-soft::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: 9999px;
+    background: currentColor;
+    animation: ping-soft 1.8s var(--ease-out-soft) infinite;
+  }
+
+  /* Shimmer for loading skeletons. */
+  @keyframes shimmer {
+    100% {
+      transform: translateX(100%);
+    }
+  }
+  .shimmer {
+    position: relative;
+    overflow: hidden;
+  }
+  .shimmer::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    transform: translateX(-100%);
+    background: linear-gradient(
+      90deg,
+      transparent,
+      color-mix(in oklab, var(--foreground) 6%, transparent),
+      transparent
+    );
+    animation: shimmer 1.6s infinite;
+  }
+
+  .stagger > * {
+    animation: rise var(--dur-base) var(--ease-out-soft) both;
+  }
+  .stagger > *:nth-child(1) { animation-delay: 0ms; }
+  .stagger > *:nth-child(2) { animation-delay: 60ms; }
+  .stagger > *:nth-child(3) { animation-delay: 120ms; }
+  .stagger > *:nth-child(4) { animation-delay: 180ms; }
+  .stagger > *:nth-child(5) { animation-delay: 240ms; }
+  .stagger > *:nth-child(6) { animation-delay: 300ms; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -232,5 +409,9 @@
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
+  }
+  .lift:hover,
+  .press:active {
+    transform: none !important;
   }
 }

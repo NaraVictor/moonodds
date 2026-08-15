@@ -50,22 +50,22 @@ export function SignInForm() {
         fullWidth
         size="lg"
         isDisabled={pending}
-        className="bg-brand-gradient border-0 text-white"
+        variant="primary"
       >
         {pending ? "Signing in…" : "Sign in"}
       </Button>
 
       <p className="rounded-lg border border-border bg-surface-secondary p-3 text-xs leading-relaxed text-muted">
         <span className="font-semibold text-foreground">Demo accounts</span> —
-        password <code className="font-mono">moonodds</code>
+        password <code className="font-mono text-[0.9em]">moonodds</code>
         <br />
-        <code className="font-mono">pass@moonodds.test</code> · full access
+        <code className="font-mono text-[0.9em]">pass@moonodds.test</code> · full access
         <br />
-        <code className="font-mono">new@moonodds.test</code> · 2 free picks
+        <code className="font-mono text-[0.9em]">new@moonodds.test</code> · 2 free picks
         <br />
-        <code className="font-mono">locked@moonodds.test</code> · paywalled
+        <code className="font-mono text-[0.9em]">locked@moonodds.test</code> · paywalled
         <br />
-        <code className="font-mono">admin@moonodds.test</code> · Office panel
+        <code className="font-mono text-[0.9em]">admin@moonodds.test</code> · Office panel
       </p>
     </form>
   );

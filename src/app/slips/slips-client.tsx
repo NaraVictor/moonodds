@@ -46,11 +46,11 @@ export function SlipsClient() {
     <main className="mx-auto w-full max-w-3xl space-y-6 px-5 py-8">
       <header className="flex items-end justify-between gap-4">
         <div>
-          <p className="eyebrow">Your record</p>
+          <p className="label">Your record</p>
           <h1 className="display text-2xl">My slips</h1>
         </div>
         {settled.length > 0 && (
-          <Chip size="sm" color="success" variant="soft" className="font-mono">
+          <Chip size="sm" color="success" variant="soft" className="numeral">
             {won}/{settled.length} won
           </Chip>
         )}
@@ -105,7 +105,7 @@ export function SlipsClient() {
                     </div>
 
                     <div className="text-right">
-                      <p className="font-mono text-xl font-semibold leading-none">
+                      <p className="numeral text-xl font-semibold leading-none">
                         {Number(slip.combined_odds).toFixed(2)}
                       </p>
                       <p className="mt-1 text-[10px] uppercase tracking-widest text-muted">
@@ -122,11 +122,11 @@ export function SlipsClient() {
                         key={leg.id}
                         className="flex items-center justify-between text-xs"
                       >
-                        <span className="truncate font-mono text-muted">
+                        <span className="truncate numeral text-muted">
                           {leg.prediction_id.slice(0, 8)}
                         </span>
                         <div className="flex items-center gap-2">
-                          <span className="font-mono">
+                          <span className="numeral">
                             {Number(leg.odds).toFixed(2)}
                           </span>
                           <Chip

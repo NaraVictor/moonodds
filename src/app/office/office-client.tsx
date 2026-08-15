@@ -58,7 +58,7 @@ export function OfficeClient({
   return (
     <main className="mx-auto w-full max-w-6xl space-y-6 px-5 py-8">
       <header className="space-y-1">
-        <p className="eyebrow">Signed in as {adminName}</p>
+        <p className="label">Signed in as {adminName}</p>
         <h1 className="display text-3xl">Office</h1>
         <p className="text-sm text-muted">
           Run the pipeline, review the engine, and manage access.
@@ -163,7 +163,7 @@ function PipelinePanel() {
       {last && (
         <Alert status="success">
           <Alert.Description>
-            <code className="font-mono text-xs">{last}</code>
+            <code className="numeral text-xs">{last}</code>
           </Alert.Description>
         </Alert>
       )}
@@ -270,13 +270,13 @@ function PredictionsPanel() {
                     {teamShort(p.homeTeam)} v {teamShort(p.awayTeam)}
                   </Td>
                   <Td className="text-muted">{p.league.name}</Td>
-                  <Td className="font-mono text-xs">
+                  <Td className="numeral text-xs">
                     {formatMarketShort(p.predictionType, p.predictedValue)}
                   </Td>
-                  <Td className="text-right font-mono">
+                  <Td className="text-right numeral">
                     {confidencePercent(p.confidenceScore)}%
                   </Td>
-                  <Td className="text-right font-mono">{p.stakingUnit}u</Td>
+                  <Td className="text-right numeral">{p.stakingUnit}u</Td>
                   <Td className="text-right">
                     <Chip
                       size="sm"
@@ -310,7 +310,7 @@ function PredictionsPanel() {
             >
               Previous
             </Button>
-            <span className="font-mono text-xs text-muted">
+            <span className="numeral text-xs text-muted">
               {page + 1} / {pages}
             </span>
             <Button
@@ -434,7 +434,7 @@ function CatalogPanel() {
               className="flex items-center justify-between border-b border-border/40 py-1.5 text-sm last:border-0"
             >
               <span>{t.name}</span>
-              <span className="font-mono text-xs text-muted">{t.short_name}</span>
+              <span className="numeral text-xs text-muted">{t.short_name}</span>
             </div>
           ))}
         </Card.Content>
@@ -505,7 +505,7 @@ function EnginePanel() {
         <Card.Header>
           <Card.Title>
             {config.name}{" "}
-            <span className="font-mono text-sm text-muted">v{config.version}</span>
+            <span className="numeral text-sm text-muted">v{config.version}</span>
           </Card.Title>
           <Card.Description>
             Last updated {new Date(config.last_updated_at).toLocaleString()}
@@ -538,7 +538,7 @@ function EnginePanel() {
                       [key]: Number(e.target.value),
                     })
                   }
-                  className="w-full rounded-lg border border-field-border bg-field px-3 py-2 font-mono text-sm text-field-foreground"
+                  className="w-full rounded-lg border border-field-border bg-field px-3 py-2 numeral text-sm text-field-foreground"
                 />
               </label>
             ))}
@@ -546,7 +546,7 @@ function EnginePanel() {
 
           <div className="flex items-center justify-between">
             <span
-              className={`font-mono text-sm ${sumOk ? "text-success" : "text-danger"}`}
+              className={`numeral text-sm ${sumOk ? "text-success" : "text-danger"}`}
             >
               Σ {sum.toFixed(3)}
             </span>
@@ -579,7 +579,7 @@ function EnginePanel() {
             rows={14}
             value={prompt ?? config.system_prompt}
             onChange={(e) => setPrompt(e.target.value)}
-            className="w-full rounded-xl border border-field-border bg-field p-3 font-mono text-xs leading-relaxed text-field-foreground"
+            className="w-full rounded-xl border border-field-border bg-field p-3 numeral text-xs leading-relaxed text-field-foreground"
           />
           {otpError && (
             <Alert status="danger">
@@ -607,7 +607,7 @@ function EnginePanel() {
                   onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
                   placeholder="000000"
                   aria-label="Confirmation code"
-                  className="w-32 rounded-lg border border-field-border bg-field px-3 py-2 text-center font-mono tracking-[0.3em] text-field-foreground"
+                  className="w-32 rounded-lg border border-field-border bg-field px-3 py-2 text-center numeral tracking-[0.3em] text-field-foreground"
                 />
                 <Button
                   size="sm"
@@ -724,8 +724,8 @@ function ReportsPanel() {
                   className="rounded-lg border border-border bg-surface-secondary p-3"
                 >
                   <div className="flex items-center justify-between">
-                    <span className="font-mono text-sm">{c.parameter}</span>
-                    <span className="font-mono text-sm">
+                    <span className="numeral text-sm">{c.parameter}</span>
+                    <span className="numeral text-sm">
                       <span className="text-muted">{c.current_value}</span>
                       <span className="mx-2 text-muted">→</span>
                       <span className="text-accent">{c.proposed_value}</span>
@@ -802,7 +802,7 @@ function UsersPanel() {
                 <p className="truncate text-sm font-medium">
                   {u.display_name ?? "—"}
                 </p>
-                <p className="truncate font-mono text-[11px] text-muted">
+                <p className="truncate numeral text-[11px] text-muted">
                   {u.email}
                 </p>
               </div>
