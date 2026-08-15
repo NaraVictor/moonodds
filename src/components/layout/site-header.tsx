@@ -28,7 +28,7 @@ export function SiteHeader({ signedIn }: { signedIn: boolean }) {
         </Link>
 
         {signedIn && (
-          <nav className="hidden items-center gap-1 sm:flex">
+          <nav className="hidden items-center gap-1 md:flex">
             {NAV.map((item) => {
               const active =
                 item.href === "/"

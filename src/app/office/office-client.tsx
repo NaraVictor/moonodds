@@ -1,11 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { Button } from "@heroui/react/button";
-import { Card } from "@heroui/react/card";
-import { Chip } from "@heroui/react/chip";
-import { Alert } from "@heroui/react/alert";
-import { Skeleton } from "@heroui/react/skeleton";
 import {
   Zap,
   ListChecks,
@@ -14,6 +9,12 @@ import {
   Brain,
   BarChart3,
   KeyRound,
+  Play,
+  Check,
+  X,
+  Clock,
+  AlertTriangle,
+  ShieldOff,
 } from "lucide-react";
 import {
   useAdminPredictions,
@@ -28,23 +29,113 @@ import {
 import {
   confidencePercent,
   formatDateShort,
-  formatMarketShort,
+  formatMarket,
   formatPercent,
   teamShort,
 } from "@/lib/format";
 import type { Pick } from "@/lib/types";
 
+/**
+ * The Office.
+ *
+ * An admin panel, but part of the same product — so it uses the MoonOdds
+ * language rather than dashboard conventions: light ground, generous spacing,
+ * rounded surfaces, and the SAME outcome vocabulary as the prediction card, so
+ * green/red/amber mean exactly what they mean everywhere else.
+ *
+ * Density is earned, not assumed: the operator wants to know what ran, what's
+ * queued, and what needs a decision — those come first on every tab.
+ */
+
 const TABS = [
-  { key: "pipeline", label: "Pipeline", icon: Zap },
-  { key: "predictions", label: "Predictions", icon: ListChecks },
-  { key: "grade", label: "Grade", icon: CheckCircle2 },
-  { key: "catalog", label: "Catalog", icon: Database },
-  { key: "engine", label: "AI engine", icon: Brain },
-  { key: "reports", label: "Reports", icon: BarChart3 },
-  { key: "users", label: "Users", icon: KeyRound },
+  { key: "pipeline", label: "Pipeline", Icon: Zap },
+  { key: "predictions", label: "Predictions", Icon: ListChecks },
+  { key: "grade", label: "Grade", Icon: CheckCircle2 },
+  { key: "catalog", label: "Catalog", Icon: Database },
+  { key: "engine", label: "Engine", Icon: Brain },
+  { key: "reports", label: "Reports", Icon: BarChart3 },
+  { key: "users", label: "Users", Icon: KeyRound },
 ] as const;
 
 type TabKey = (typeof TABS)[number]["key"];
+
+/* ------------------------------ primitives ------------------------------ */
+
+function Panel({
+  title,
+  description,
+  action,
+  children,
+}: {
+  title: string;
+  description?: string;
+  action?: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <section
+      className="overflow-hidden rounded-[1.5rem] border border-border bg-surface"
+      style={{ boxShadow: "var(--shadow-card)" }}
+    >
+      <div className="flex flex-wrap items-start justify-between gap-3 px-6 pt-6">
+        <div>
+          <h2 className="text-[15px] font-semibold">{title}</h2>
+          {description && (
+            <p className="mt-1 max-w-md text-[13px] leading-relaxed text-muted">
+              {description}
+            </p>
+          )}
+        </div>
+        {action}
+      </div>
+      <div className="px-6 pb-6 pt-5">{children}</div>
+    </section>
+  );
+}
+
+function Tag({
+  tone,
+  children,
+}: {
+  tone: "won" | "lost" | "pending" | "accent";
+  children: React.ReactNode;
+}) {
+  const ink =
+    tone === "won"
+      ? "var(--won-ink)"
+      : tone === "lost"
+        ? "var(--lost-ink)"
+        : tone === "accent"
+          ? "var(--accent)"
+          : "var(--pending-ink)";
+
+  return (
+    <span
+      className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.08em]"
+      style={{ color: ink, background: "color-mix(in oklab, currentColor 10%, transparent)" }}
+    >
+      {children}
+    </span>
+  );
+}
+
+function Empty({ children }: { children: React.ReactNode }) {
+  return (
+    <p className="py-10 text-center text-sm text-muted">{children}</p>
+  );
+}
+
+function Loading({ rows = 3 }: { rows?: number }) {
+  return (
+    <div className="space-y-3">
+      {Array.from({ length: rows }).map((_, i) => (
+        <div key={i} className="shimmer h-14 rounded-xl bg-surface-secondary" />
+      ))}
+    </div>
+  );
+}
+
+/* -------------------------------- shell -------------------------------- */
 
 export function OfficeClient({
   adminName,
@@ -56,275 +147,284 @@ export function OfficeClient({
   const [tab, setTab] = useState<TabKey>("pipeline");
 
   return (
-    <main className="mx-auto w-full max-w-6xl space-y-6 px-5 py-8">
-      <header className="space-y-1">
-        <p className="label">Signed in as {adminName}</p>
-        <h1 className="display text-3xl">Office</h1>
-        <p className="text-sm text-muted">
-          Run the pipeline, review the engine, and manage access.
+    <main className="mx-auto w-full max-w-5xl px-5 py-8">
+      <header className="mb-6">
+        <span className="label">Signed in as {adminName}</span>
+        <h1 className="display mt-1.5 text-[2rem] sm:text-4xl">Office</h1>
+        <p className="mt-2 max-w-lg text-sm leading-relaxed text-muted">
+          Run the pipeline, review what the engine proposes, and manage access.
         </p>
       </header>
 
       {anonymousBypass && (
-        <Alert status="warning">
-          <Alert.Title>Reachable, but reading nothing</Alert.Title>
-          <Alert.Description>
-            The bypass gets you to this page, but it doesn&rsquo;t fake an
-            identity — and admin tables are protected by row-level security, not
-            by the route guard. With no session, every panel below reads back
-            empty. Actions still run. Use the flask button to sign in as
-            <code className="mx-1 font-mono">admin@moonodds.test</code>
-            and the data appears.
-          </Alert.Description>
-        </Alert>
+        <div className="mb-6 flex gap-3 rounded-2xl border border-lost-edge bg-lost-wash p-5">
+          <ShieldOff className="mt-0.5 h-4 w-4 flex-none" style={{ color: "var(--lost-ink)" }} />
+          <div>
+            <p className="text-sm font-semibold" style={{ color: "var(--lost-ink)" }}>
+              Reachable, but reading nothing
+            </p>
+            <p className="mt-1 text-[13px] leading-relaxed text-muted">
+              The bypass gets you to this page but doesn&rsquo;t fake an
+              identity — admin tables are protected by row-level security, not
+              the route guard. With no session every panel reads back empty.
+              Actions still run. Sign in as{" "}
+              <code className="font-mono text-[0.9em]">admin@moonodds.test</code>{" "}
+              via the flask button and the data appears.
+            </p>
+          </div>
+        </div>
       )}
 
-      <nav className="flex gap-1 overflow-x-auto rounded-xl border border-border bg-surface-secondary p-1">
-        {TABS.map((t) => (
-          <button
-            key={t.key}
-            type="button"
-            onClick={() => setTab(t.key)}
-            aria-current={tab === t.key ? "page" : undefined}
-            className={`flex flex-1 cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-2 text-xs font-medium transition-colors ${
-              tab === t.key
-                ? "bg-surface text-foreground shadow-sm"
-                : "text-muted hover:text-foreground"
-            }`}
-          >
-            <t.icon className="h-3.5 w-3.5" />
-            {t.label}
-          </button>
-        ))}
+      <nav
+        aria-label="Office sections"
+        className="mb-6 flex gap-1.5 overflow-x-auto pb-1"
+      >
+        {TABS.map(({ key, label, Icon }) => {
+          const on = tab === key;
+          return (
+            <button
+              key={key}
+              type="button"
+              onClick={() => setTab(key)}
+              aria-current={on ? "page" : undefined}
+              className={`press flex flex-none items-center gap-1.5 rounded-full border px-4 py-2 text-[13px] font-semibold ${
+                on
+                  ? "border-transparent bg-feature text-feature-foreground"
+                  : "border-border bg-surface text-muted hover:text-foreground"
+              }`}
+            >
+              <Icon className="h-3.5 w-3.5" />
+              {label}
+            </button>
+          );
+        })}
       </nav>
 
-      {tab === "pipeline" && <PipelinePanel />}
-      {tab === "predictions" && <PredictionsPanel />}
-      {tab === "grade" && <GradePanel />}
-      {tab === "catalog" && <CatalogPanel />}
-      {tab === "engine" && <EnginePanel />}
-      {tab === "reports" && <ReportsPanel />}
-      {tab === "users" && <UsersPanel />}
+      <div className="rise">
+        {tab === "pipeline" && <PipelinePanel />}
+        {tab === "predictions" && <PredictionsPanel />}
+        {tab === "grade" && <GradePanel />}
+        {tab === "catalog" && <CatalogPanel />}
+        {tab === "engine" && <EnginePanel />}
+        {tab === "reports" && <ReportsPanel />}
+        {tab === "users" && <UsersPanel />}
+      </div>
     </main>
   );
 }
 
 /* ------------------------------ pipeline ------------------------------ */
 
+const STAGES = [
+  { action: "fetchFixtures", label: "Fetch fixtures", hint: "Pull today's matches from the feed" },
+  { action: "generatePicks", label: "Generate picks", hint: "Run the engine over today's board" },
+  { action: "gradeResults", label: "Grade results", hint: "Settle anything that has finished" },
+  { action: "clvCheck", label: "CLV check", hint: "Flag lines that moved against us" },
+  { action: "recalibrate", label: "Recalibrate", hint: "Propose weight changes from results" },
+];
+
 function PipelinePanel() {
   const action = useOfficeAction();
   const runs = usePredictionRuns();
   const jobs = useJobQueue();
-  const [last, setLast] = useState<string | null>(null);
+  const [last, setLast] = useState<{ stage: string; result: unknown } | null>(null);
 
-  const steps = [
-    { action: "fetchFixtures", label: "Fetch fixtures", hint: "Pull today's matches" },
-    { action: "generatePicks", label: "Generate picks", hint: "Run the engine" },
-    { action: "gradeResults", label: "Grade results", hint: "Settle finished games" },
-    { action: "clvCheck", label: "CLV check", hint: "Flag adverse line moves" },
-    { action: "recalibrate", label: "Recalibrate", hint: "Propose weight changes" },
-  ];
-
-  async function run(a: string) {
+  async function run(stage: string) {
     setLast(null);
-    const result = await action.mutateAsync({ action: a });
-    setLast(`${a}: ${JSON.stringify(result)}`);
+    const result = await action.mutateAsync({ action: stage });
+    setLast({ stage, result });
   }
 
   return (
     <div className="space-y-4">
-      <Card>
-        <Card.Header>
-          <Card.Title>Run a stage</Card.Title>
-          <Card.Description>
-            These are the same functions pg_cron calls on schedule.
-          </Card.Description>
-        </Card.Header>
-        <Card.Content className="flex flex-row flex-wrap gap-2">
-          {steps.map((s) => (
-            <Button
+      <Panel
+        title="Run a stage"
+        description="These are the same functions pg_cron calls on schedule. Running one here does exactly what the scheduled job does."
+      >
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+          {STAGES.map((s) => (
+            <button
               key={s.action}
-              variant="secondary"
-              size="sm"
-              isDisabled={action.isPending}
-              onPress={() => run(s.action)}
+              type="button"
+              disabled={action.isPending}
+              onClick={() => run(s.action)}
+              className="press lift flex items-start gap-3 rounded-2xl border border-border bg-background p-4 text-left disabled:opacity-50"
             >
-              {s.label}
-            </Button>
+              <span
+                className="mt-0.5 flex h-7 w-7 flex-none items-center justify-center rounded-full"
+                style={{ background: "var(--accent-wash)", color: "var(--accent)" }}
+              >
+                <Play className="h-3 w-3" fill="currentColor" />
+              </span>
+              <span className="min-w-0">
+                <span className="block text-[13px] font-semibold">{s.label}</span>
+                <span className="mt-0.5 block text-[11px] leading-snug text-muted">
+                  {s.hint}
+                </span>
+              </span>
+            </button>
           ))}
-        </Card.Content>
-      </Card>
+        </div>
 
-      {action.error && (
-        <Alert status="danger">
-          <Alert.Description>{action.error.message}</Alert.Description>
-        </Alert>
-      )}
-      {last && (
-        <Alert status="success">
-          <Alert.Description>
-            <code className="numeral text-xs">{last}</code>
-          </Alert.Description>
-        </Alert>
-      )}
+        {action.isPending && (
+          <p className="mt-4 text-[13px] text-muted">Running…</p>
+        )}
+
+        {action.error && (
+          <div className="mt-4 rounded-2xl border border-lost-edge bg-lost-wash p-4">
+            <p className="text-[13px]" style={{ color: "var(--lost-ink)" }}>
+              {action.error.message}
+            </p>
+          </div>
+        )}
+
+        {last && (
+          <div className="mt-4 rounded-2xl border border-won-edge bg-won-wash p-4">
+            <p className="text-[11px] font-bold uppercase tracking-[0.08em]" style={{ color: "var(--won-ink)" }}>
+              {last.stage} finished
+            </p>
+            <pre className="mt-2 overflow-x-auto font-mono text-[11px] leading-relaxed text-muted">
+              {JSON.stringify(last.result, null, 2)}
+            </pre>
+          </div>
+        )}
+      </Panel>
 
       <div className="grid gap-4 lg:grid-cols-2">
-        <Card>
-          <Card.Header>
-            <Card.Title>Recent runs</Card.Title>
-          </Card.Header>
-          <Card.Content className="space-y-2">
-            {runs.data?.length ? (
-              runs.data.map((r) => (
-                <Row
-                  key={r.id}
-                  left={new Date(r.run_at).toLocaleString()}
-                  right={`${r.num_picks} picks`}
-                  sub={r.model_version}
-                />
-              ))
-            ) : (
-              <Empty>No runs yet.</Empty>
-            )}
-          </Card.Content>
-        </Card>
+        <Panel title="Recent runs" description="Each engine pass and what it produced.">
+          {runs.isPending ? (
+            <Loading />
+          ) : !runs.data?.length ? (
+            <Empty>No runs yet.</Empty>
+          ) : (
+            <ul className="divide-y divide-separator">
+              {runs.data.map((r) => (
+                <li key={r.id} className="flex items-center justify-between gap-3 py-3 first:pt-0 last:pb-0">
+                  <div className="min-w-0">
+                    <p className="text-[13px] font-medium">
+                      {new Date(r.run_at).toLocaleString(undefined, {
+                        day: "numeric", month: "short", hour: "2-digit", minute: "2-digit",
+                      })}
+                    </p>
+                    <p className="truncate font-mono text-[11px] text-muted">{r.model_version}</p>
+                  </div>
+                  <span className="numeral flex-none text-lg">{r.num_picks}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Panel>
 
-        <Card>
-          <Card.Header>
-            <Card.Title>Job queue</Card.Title>
-            <Card.Description>
-              Replaces Convex&rsquo;s scheduler — with retries and a dead-letter
-              state it never had.
-            </Card.Description>
-          </Card.Header>
-          <Card.Content className="space-y-2">
-            {jobs.data?.length ? (
-              jobs.data.map((j) => (
-                <Row
-                  key={j.id}
-                  left={j.kind}
-                  right={
-                    <Chip
-                      size="sm"
-                      variant="soft"
-                      color={
-                        j.status === "done"
-                          ? "success"
-                          : j.status === "dead" || j.status === "failed"
-                            ? "danger"
-                            : j.status === "running"
-                              ? "accent"
-                              : "default"
-                      }
-                    >
-                      {j.status}
-                    </Chip>
-                  }
-                  sub={j.last_error ?? `attempt ${j.attempts}/${j.max_attempts}`}
-                />
-              ))
-            ) : (
-              <Empty>Queue is empty.</Empty>
-            )}
-          </Card.Content>
-        </Card>
+        <Panel
+          title="Job queue"
+          description="Replaces Convex's scheduler — with retries and a dead-letter state it never had."
+        >
+          {jobs.isPending ? (
+            <Loading />
+          ) : !jobs.data?.length ? (
+            <Empty>Queue is empty.</Empty>
+          ) : (
+            <ul className="divide-y divide-separator">
+              {jobs.data.map((j) => (
+                <li key={j.id} className="flex items-center justify-between gap-3 py-3 first:pt-0 last:pb-0">
+                  <div className="min-w-0">
+                    <p className="truncate font-mono text-[12px]">{j.kind}</p>
+                    <p className="truncate text-[11px] text-muted">
+                      {j.last_error ?? `attempt ${j.attempts}/${j.max_attempts}`}
+                    </p>
+                  </div>
+                  <Tag
+                    tone={
+                      j.status === "done" ? "won"
+                        : j.status === "dead" || j.status === "failed" ? "lost"
+                        : j.status === "running" ? "accent" : "pending"
+                    }
+                  >
+                    {j.status}
+                  </Tag>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Panel>
       </div>
     </div>
   );
 }
 
-/* ----------------------------- predictions ----------------------------- */
+/* ---------------------------- predictions ---------------------------- */
 
 function PredictionsPanel() {
   const [page, setPage] = useState(0);
   const { data, isPending } = useAdminPredictions(page);
 
-  if (isPending) return <Skeleton className="h-96 rounded-xl" />;
-
   const rows = (data?.rows ?? []) as Pick[];
   const pages = Math.ceil((data?.total ?? 0) / (data?.pageSize ?? 25));
 
   return (
-    <Card>
-      <Card.Header>
-        <Card.Title>All predictions</Card.Title>
-        <Card.Description>{data?.total ?? 0} total</Card.Description>
-      </Card.Header>
-      <Card.Content className="space-y-3">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border text-left">
-                <Th>Match</Th>
-                <Th>League</Th>
-                <Th>Pick</Th>
-                <Th className="text-right">Conf.</Th>
-                <Th className="text-right">Stake</Th>
-                <Th className="text-right">Status</Th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((p) => (
-                <tr key={p.id} className="border-b border-border/50">
-                  <Td>
+    <Panel title="All predictions" description={`${data?.total ?? 0} on record.`}>
+      {isPending ? (
+        <Loading rows={6} />
+      ) : !rows.length ? (
+        <Empty>Nothing to show.</Empty>
+      ) : (
+        <>
+          <ul className="divide-y divide-separator">
+            {rows.map((p) => (
+              <li key={p.id} className="flex flex-wrap items-center gap-3 py-3 first:pt-0">
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-[13px] font-semibold">
                     {teamShort(p.homeTeam)} v {teamShort(p.awayTeam)}
-                  </Td>
-                  <Td className="text-muted">{p.league.name}</Td>
-                  <Td className="numeral text-xs">
-                    {formatMarketShort(p.predictionType, p.predictedValue)}
-                  </Td>
-                  <Td className="text-right numeral">
-                    {confidencePercent(p.confidenceScore)}%
-                  </Td>
-                  <Td className="text-right numeral">{p.stakingUnit}u</Td>
-                  <Td className="text-right">
-                    <Chip
-                      size="sm"
-                      variant="soft"
-                      color={
-                        p.status === "won"
-                          ? "success"
-                          : p.status === "lost"
-                            ? "danger"
-                            : p.status === "review_needed"
-                              ? "warning"
-                              : "default"
-                      }
-                    >
-                      {p.status}
-                    </Chip>
-                  </Td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+                  </p>
+                  <p className="truncate text-[11px] text-muted">
+                    {p.league.name} · {formatMarket(p.predictionType, p.predictedValue)}
+                  </p>
+                </div>
+                <span className="numeral w-12 text-right text-sm">
+                  {confidencePercent(p.confidenceScore)}%
+                </span>
+                <span className="numeral w-8 text-right text-sm text-muted">
+                  {p.stakingUnit}u
+                </span>
+                <Tag
+                  tone={
+                    p.status === "won" ? "won"
+                      : p.status === "lost" ? "lost"
+                      : p.status === "review_needed" ? "accent" : "pending"
+                  }
+                >
+                  {p.status.replace("_", " ")}
+                </Tag>
+              </li>
+            ))}
+          </ul>
 
-        {pages > 1 && (
-          <div className="flex items-center justify-between">
-            <Button
-              size="sm"
-              variant="ghost"
-              isDisabled={page === 0}
-              onPress={() => setPage((p) => p - 1)}
-            >
-              Previous
-            </Button>
-            <span className="numeral text-xs text-muted">
-              {page + 1} / {pages}
-            </span>
-            <Button
-              size="sm"
-              variant="ghost"
-              isDisabled={page >= pages - 1}
-              onPress={() => setPage((p) => p + 1)}
-            >
-              Next
-            </Button>
-          </div>
-        )}
-      </Card.Content>
-    </Card>
+          {pages > 1 && (
+            <div className="mt-5 flex items-center justify-between">
+              <button
+                type="button"
+                disabled={page === 0}
+                onClick={() => setPage((p) => p - 1)}
+                className="press rounded-full border border-border px-4 py-2 text-[13px] font-semibold disabled:opacity-40"
+              >
+                Previous
+              </button>
+              <span className="numeral text-[13px] text-muted">
+                {page + 1} / {pages}
+              </span>
+              <button
+                type="button"
+                disabled={page >= pages - 1}
+                onClick={() => setPage((p) => p + 1)}
+                className="press rounded-full border border-border px-4 py-2 text-[13px] font-semibold disabled:opacity-40"
+              >
+                Next
+              </button>
+            </div>
+          )}
+        </>
+      )}
+    </Panel>
   );
 }
 
@@ -332,59 +432,60 @@ function PredictionsPanel() {
 
 function GradePanel() {
   const action = useOfficeAction();
-  const { data } = useAdminPredictions(0);
+  const { data, isPending } = useAdminPredictions(0);
   const rows = (data?.rows ?? []) as Pick[];
   const needsReview = rows.filter((p) => p.status === "review_needed");
 
   return (
     <div className="space-y-4">
-      <Card>
-        <Card.Header>
-          <Card.Title>Settle finished fixtures</Card.Title>
-          <Card.Description>
-            Fetches results for anything kicked off more than 2.5 hours ago and
-            grades its predictions.
-          </Card.Description>
-        </Card.Header>
-        <Card.Content>
-          <Button
-            variant="secondary"
-            isDisabled={action.isPending}
-            onPress={() => action.mutate({ action: "gradeResults" })}
+      <Panel
+        title="Settle finished fixtures"
+        description="Fetches results for anything that kicked off more than 2.5 hours ago and grades its predictions."
+        action={
+          <button
+            type="button"
+            disabled={action.isPending}
+            onClick={() => action.mutate({ action: "gradeResults" })}
+            className="press rounded-full bg-accent px-5 py-2.5 text-[13px] font-semibold text-accent-foreground disabled:opacity-50"
           >
             {action.isPending ? "Grading…" : "Grade now"}
-          </Button>
-        </Card.Content>
-      </Card>
+          </button>
+        }
+      >
+        <p className="text-[13px] leading-relaxed text-muted">
+          Half-time markets grade from the stored HT score. Draw-no-bet and
+          handicap pushes void rather than losing. Anything genuinely
+          ungradeable is flagged below instead of being written off.
+        </p>
+      </Panel>
 
-      <Card>
-        <Card.Header>
-          <Card.Title>Needs review</Card.Title>
-          <Card.Description>
-            Markets the grader can&rsquo;t settle automatically — corners need a
-            separate data feed. These are flagged rather than written off as
-            losses.
-          </Card.Description>
-        </Card.Header>
-        <Card.Content className="space-y-2">
-          {needsReview.length ? (
-            needsReview.map((p) => (
-              <Row
-                key={p.id}
-                left={`${teamShort(p.homeTeam)} v ${teamShort(p.awayTeam)}`}
-                right={
-                  <Chip size="sm" color="warning" variant="soft">
-                    {formatMarketShort(p.predictionType, p.predictedValue)}
-                  </Chip>
-                }
-                sub={p.league.name ?? ""}
-              />
-            ))
-          ) : (
-            <Empty>Nothing waiting on a human.</Empty>
-          )}
-        </Card.Content>
-      </Card>
+      <Panel
+        title="Needs a human"
+        description="Markets the grader can't settle on its own — corners need a data feed we don't call."
+      >
+        {isPending ? (
+          <Loading />
+        ) : !needsReview.length ? (
+          <Empty>Nothing waiting on a decision.</Empty>
+        ) : (
+          <ul className="divide-y divide-separator">
+            {needsReview.map((p) => (
+              <li key={p.id} className="flex items-center justify-between gap-3 py-3 first:pt-0">
+                <div className="min-w-0">
+                  <p className="truncate text-[13px] font-semibold">
+                    {teamShort(p.homeTeam)} v {teamShort(p.awayTeam)}
+                  </p>
+                  <p className="truncate text-[11px] text-muted">{p.league.name}</p>
+                </div>
+                <Tag tone="accent">
+                  <AlertTriangle className="h-3 w-3" />
+                  {formatMarket(p.predictionType, p.predictedValue)}
+                </Tag>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Panel>
     </div>
   );
 }
@@ -393,52 +494,47 @@ function GradePanel() {
 
 function CatalogPanel() {
   const { data, isPending } = useCatalog();
-  if (isPending) return <Skeleton className="h-96 rounded-xl" />;
 
   return (
     <div className="grid gap-4 lg:grid-cols-2">
-      <Card>
-        <Card.Header>
-          <Card.Title>Leagues</Card.Title>
-          <Card.Description>{data?.leagues.length ?? 0} tracked</Card.Description>
-        </Card.Header>
-        <Card.Content className="space-y-2">
-          {data?.leagues.map((l) => (
-            <Row
-              key={l.id}
-              left={l.name}
-              right={
-                <Chip
-                  size="sm"
-                  variant="soft"
-                  color={l.is_active ? "success" : "default"}
-                >
+      <Panel title="Leagues" description={`${data?.leagues.length ?? 0} tracked.`}>
+        {isPending ? (
+          <Loading />
+        ) : (
+          <ul className="divide-y divide-separator">
+            {data?.leagues.map((l) => (
+              <li key={l.id} className="flex items-center justify-between gap-3 py-3 first:pt-0">
+                <div className="min-w-0">
+                  <p className="truncate text-[13px] font-semibold">{l.name}</p>
+                  <p className="truncate text-[11px] text-muted">
+                    {l.country} · season {l.season ?? "—"} · id {l.external_id ?? "—"}
+                  </p>
+                </div>
+                <Tag tone={l.is_active ? "won" : "pending"}>
                   {l.is_active ? "active" : "off"}
-                </Chip>
-              }
-              sub={`${l.country} · season ${l.season ?? "—"} · id ${l.external_id ?? "—"}`}
-            />
-          ))}
-        </Card.Content>
-      </Card>
+                </Tag>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Panel>
 
-      <Card>
-        <Card.Header>
-          <Card.Title>Teams</Card.Title>
-          <Card.Description>{data?.teams.length ?? 0} tracked</Card.Description>
-        </Card.Header>
-        <Card.Content className="max-h-[28rem] space-y-1.5 overflow-y-auto">
-          {data?.teams.map((t) => (
-            <div
-              key={t.id}
-              className="flex items-center justify-between border-b border-border/40 py-1.5 text-sm last:border-0"
-            >
-              <span>{t.name}</span>
-              <span className="numeral text-xs text-muted">{t.short_name}</span>
-            </div>
-          ))}
-        </Card.Content>
-      </Card>
+      <Panel title="Teams" description={`${data?.teams.length ?? 0} tracked.`}>
+        {isPending ? (
+          <Loading />
+        ) : (
+          <ul className="max-h-[26rem] divide-y divide-separator overflow-y-auto">
+            {data?.teams.map((t) => (
+              <li key={t.id} className="flex items-center justify-between gap-3 py-2.5 first:pt-0">
+                <span className="truncate text-[13px]">{t.name}</span>
+                <span className="numeral flex-none text-[11px] text-muted">
+                  {t.short_name}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Panel>
     </div>
   );
 }
@@ -450,29 +546,25 @@ function EnginePanel() {
   const action = useOfficeAction();
   const [prompt, setPrompt] = useState<string | null>(null);
   const [weights, setWeights] = useState<Record<string, number> | null>(null);
-  const [otp, setOtp] = useState<{ sent: boolean; masked?: string; devCode?: string } | null>(null);
+  const [otp, setOtp] = useState<{ masked?: string; devCode?: string } | null>(null);
   const [code, setCode] = useState("");
   const [otpError, setOtpError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   async function requestCode() {
-    setOtpError(null);
-    setBusy(true);
+    setOtpError(null); setBusy(true);
     try {
       const res = await fetch("/api/office/otp", { method: "POST" });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error);
-      setOtp({ sent: true, masked: json.maskedEmail, devCode: json.devCode });
+      setOtp({ masked: json.maskedEmail, devCode: json.devCode });
     } catch (e) {
       setOtpError(e instanceof Error ? e.message : "Could not send a code.");
-    } finally {
-      setBusy(false);
-    }
+    } finally { setBusy(false); }
   }
 
   async function applyPrompt(configId: string) {
-    setOtpError(null);
-    setBusy(true);
+    setOtpError(null); setBusy(true);
     try {
       const res = await fetch("/api/office/otp", {
         method: "PATCH",
@@ -481,184 +573,139 @@ function EnginePanel() {
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error);
-      setPrompt(null);
-      setOtp(null);
-      setCode("");
+      setPrompt(null); setOtp(null); setCode("");
     } catch (e) {
       setOtpError(e instanceof Error ? e.message : "Could not save the prompt.");
-    } finally {
-      setBusy(false);
-    }
+    } finally { setBusy(false); }
   }
 
-  if (isPending) return <Skeleton className="h-96 rounded-xl" />;
-  if (!config) return <Empty>No active engine config.</Empty>;
+  if (isPending) return <Panel title="AI engine"><Loading rows={5} /></Panel>;
+  if (!config) return <Panel title="AI engine"><Empty>No active engine config.</Empty></Panel>;
 
-  const currentWeights: Record<string, number> =
+  const current: Record<string, number> =
     weights ?? (config.ranking_weights as Record<string, number>);
-  const sum = Object.values(currentWeights).reduce((a, b) => a + b, 0);
+  const sum = Object.values(current).reduce((a, b) => a + b, 0);
   const sumOk = Math.abs(sum - 1) < 0.001;
 
   return (
     <div className="space-y-4">
-      <Card>
-        <Card.Header>
-          <Card.Title>
-            {config.name}{" "}
-            <span className="numeral text-sm text-muted">v{config.version}</span>
-          </Card.Title>
-          <Card.Description>
-            Last updated {new Date(config.last_updated_at).toLocaleString()}
-            {config.approved_by ? ` by ${config.approved_by}` : ""}
-          </Card.Description>
-        </Card.Header>
-      </Card>
-
-      <Card>
-        <Card.Header>
-          <Card.Title>Ranking weights</Card.Title>
-          <Card.Description>
-            Must sum to exactly 1.0 — the server rejects anything else.
-          </Card.Description>
-        </Card.Header>
-        <Card.Content className="space-y-3">
-          <div className="grid gap-3 sm:grid-cols-2">
-            {Object.entries(currentWeights).map(([key, value]) => (
-              <label key={key} className="space-y-1">
-                <span className="text-xs text-muted">{key}</span>
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  max="1"
-                  value={value}
-                  onChange={(e) =>
-                    setWeights({
-                      ...currentWeights,
-                      [key]: Number(e.target.value),
-                    })
-                  }
-                  className="w-full rounded-lg border border-field-border bg-field px-3 py-2 numeral text-sm text-field-foreground"
-                />
-              </label>
-            ))}
-          </div>
-
-          <div className="flex items-center justify-between">
-            <span
-              className={`numeral text-sm ${sumOk ? "text-success" : "text-danger"}`}
-            >
-              Σ {sum.toFixed(3)}
-            </span>
-            <Button
-              size="sm"
-              isDisabled={!sumOk || !weights || action.isPending}
-              onPress={() =>
-                action.mutate({
-                  action: "updateWeights",
-                  configId: config.id,
-                  rankingWeights: currentWeights,
-                })
-              }
-            >
-              Save weights
-            </Button>
-          </div>
-        </Card.Content>
-      </Card>
-
-      <Card>
-        <Card.Header>
-          <Card.Title>System prompt</Card.Title>
-          <Card.Description>
-            The instructions the engine runs against every fixture.
-          </Card.Description>
-        </Card.Header>
-        <Card.Content className="space-y-3">
-          <textarea
-            rows={14}
-            value={prompt ?? config.system_prompt}
-            onChange={(e) => setPrompt(e.target.value)}
-            className="w-full rounded-xl border border-field-border bg-field p-3 numeral text-xs leading-relaxed text-field-foreground"
-          />
-          {otpError && (
-            <Alert status="danger">
-              <Alert.Description>{otpError}</Alert.Description>
-            </Alert>
-          )}
-
-          {otp?.sent ? (
-            <div className="space-y-2 rounded-lg border border-border bg-surface-secondary p-3">
-              <p className="text-xs text-muted">
-                Code sent to {otp.masked}. It expires in 10 minutes.
-                {otp.devCode && (
-                  <>
-                    {" "}
-                    Providers are mocked, so here it is:{" "}
-                    <code className="font-mono text-foreground">{otp.devCode}</code>
-                  </>
-                )}
-              </p>
-              <div className="flex gap-2">
-                <input
-                  inputMode="numeric"
-                  maxLength={6}
-                  value={code}
-                  onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
-                  placeholder="000000"
-                  aria-label="Confirmation code"
-                  className="w-32 rounded-lg border border-field-border bg-field px-3 py-2 text-center numeral tracking-[0.3em] text-field-foreground"
-                />
-                <Button
-                  size="sm"
-                  isDisabled={code.length !== 6 || busy}
-                  onPress={() => applyPrompt(config.id)}
-                >
-                  Confirm &amp; save
-                </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  isDisabled={busy}
-                  onPress={() => {
-                    setOtp(null);
-                    setCode("");
-                  }}
-                >
-                  Cancel
-                </Button>
-              </div>
+      <Panel
+        title={`${config.name} · v${config.version}`}
+        description={`Last updated ${new Date(config.last_updated_at).toLocaleString()}${config.approved_by ? ` by ${config.approved_by}` : ""}.`}
+      >
+        <div className="grid gap-3 sm:grid-cols-3">
+          {[
+            ["Primary floor", config.confidence_thresholds?.primarySlipFloor],
+            ["Absolute min", config.confidence_thresholds?.absoluteMinimumFloor],
+            ["Batch size", config.self_tuning?.batchSize],
+          ].map(([k, v]) => (
+            <div key={String(k)} className="rounded-2xl bg-surface-secondary p-4">
+              <p className="label">{k}</p>
+              <p className="numeral mt-1.5 text-xl">{String(v ?? "—")}</p>
             </div>
-          ) : (
-            <div className="flex items-center justify-end gap-2">
-              <p className="mr-auto text-xs text-muted">
-                Changing the prompt needs an emailed confirmation code.
-              </p>
-              <Button
-                size="sm"
-                variant="ghost"
-                isDisabled={prompt === null}
-                onPress={() => setPrompt(null)}
-              >
-                Discard
-              </Button>
-              <Button
-                size="sm"
-                isDisabled={prompt === null || busy}
-                onPress={requestCode}
-              >
-                Save prompt…
-              </Button>
-            </div>
-          )}
-        </Card.Content>
-      </Card>
+          ))}
+        </div>
+      </Panel>
 
-      {action.error && (
-        <Alert status="danger">
-          <Alert.Description>{action.error.message}</Alert.Description>
-        </Alert>
-      )}
+      <Panel
+        title="Ranking weights"
+        description="Must sum to exactly 1.0 — the server rejects anything else."
+        action={
+          <span className={`numeral text-sm ${sumOk ? "" : "text-danger"}`} style={sumOk ? { color: "var(--success)" } : undefined}>
+            Σ {sum.toFixed(3)}
+          </span>
+        }
+      >
+        <div className="grid gap-3 sm:grid-cols-2">
+          {Object.entries(current).map(([key, value]) => (
+            <label key={key} className="space-y-1.5">
+              <span className="label">{key.replace(/Weight$/, "")}</span>
+              <input
+                type="number" step="0.01" min="0" max="1" value={value}
+                onChange={(e) => setWeights({ ...current, [key]: Number(e.target.value) })}
+                className="h-11 w-full rounded-xl border border-field-border bg-field px-3 font-mono text-sm"
+              />
+            </label>
+          ))}
+        </div>
+
+        <button
+          type="button"
+          disabled={!sumOk || !weights || action.isPending}
+          onClick={() => action.mutate({ action: "updateWeights", configId: config.id, rankingWeights: current })}
+          className="press mt-5 rounded-full bg-accent px-5 py-2.5 text-[13px] font-semibold text-accent-foreground disabled:opacity-40"
+        >
+          Save weights
+        </button>
+      </Panel>
+
+      <Panel
+        title="System prompt"
+        description="The instructions the engine runs against every fixture. Changing it needs an emailed confirmation code — a bad edit degrades every call silently."
+      >
+        <textarea
+          rows={12}
+          value={prompt ?? config.system_prompt}
+          onChange={(e) => setPrompt(e.target.value)}
+          className="w-full rounded-2xl border border-field-border bg-field p-4 font-mono text-[12px] leading-relaxed"
+        />
+
+        {otpError && (
+          <div className="mt-3 rounded-2xl border border-lost-edge bg-lost-wash p-4">
+            <p className="text-[13px]" style={{ color: "var(--lost-ink)" }}>{otpError}</p>
+          </div>
+        )}
+
+        {otp ? (
+          <div className="mt-4 rounded-2xl border border-accent-edge bg-accent-wash p-4">
+            <p className="text-[13px] text-muted">
+              Code sent to {otp.masked}. Expires in 10 minutes.
+              {otp.devCode && (
+                <> Providers are mocked, so here it is: <code className="font-mono font-semibold text-foreground">{otp.devCode}</code></>
+              )}
+            </p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <input
+                inputMode="numeric" maxLength={6} value={code}
+                onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
+                placeholder="000000" aria-label="Confirmation code"
+                className="h-11 w-32 rounded-full border border-field-border bg-field text-center font-mono tracking-[0.3em]"
+              />
+              <button
+                type="button" disabled={code.length !== 6 || busy}
+                onClick={() => applyPrompt(config.id)}
+                className="press h-11 rounded-full bg-accent px-5 text-[13px] font-semibold text-accent-foreground disabled:opacity-40"
+              >
+                Confirm &amp; save
+              </button>
+              <button
+                type="button" disabled={busy}
+                onClick={() => { setOtp(null); setCode(""); }}
+                className="press h-11 rounded-full border border-border px-5 text-[13px] font-semibold"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="mt-4 flex flex-wrap justify-end gap-2">
+            <button
+              type="button" disabled={prompt === null}
+              onClick={() => setPrompt(null)}
+              className="press rounded-full border border-border px-5 py-2.5 text-[13px] font-semibold disabled:opacity-40"
+            >
+              Discard
+            </button>
+            <button
+              type="button" disabled={prompt === null || busy}
+              onClick={requestCode}
+              className="press rounded-full bg-accent px-5 py-2.5 text-[13px] font-semibold text-accent-foreground disabled:opacity-40"
+            >
+              Save prompt…
+            </button>
+          </div>
+        )}
+      </Panel>
     </div>
   );
 }
@@ -669,106 +716,73 @@ function ReportsPanel() {
   const { data: reports, isPending } = useTuningReports();
   const action = useOfficeAction();
 
-  if (isPending) return <Skeleton className="h-96 rounded-xl" />;
-  if (!reports?.length) return <Empty>No tuning reports yet.</Empty>;
+  if (isPending) return <Panel title="Tuning reports"><Loading rows={4} /></Panel>;
+  if (!reports?.length)
+    return <Panel title="Tuning reports"><Empty>No reports yet. They generate after enough picks settle.</Empty></Panel>;
 
   return (
     <div className="space-y-4">
       {reports.map((r) => {
-        const period = r.review_period as {
-          predictionsReviewed: number;
-          overallWinRate: number;
-        };
-        const weightChanges = (r.proposed_weight_changes ?? []) as Array<{
-          parameter: string;
-          current_value: number;
-          proposed_value: number;
-          rationale: string;
-        }>;
-        const thresholdChanges = (r.proposed_threshold_changes ?? []) as typeof weightChanges;
-        const all = [...weightChanges, ...thresholdChanges];
+        const period = r.review_period as { predictionsReviewed: number; overallWinRate: number };
+        const changes = [
+          ...((r.proposed_weight_changes ?? []) as Array<Record<string, string | number>>),
+          ...((r.proposed_threshold_changes ?? []) as Array<Record<string, string | number>>),
+        ];
 
         return (
-          <Card key={r.id}>
-            <Card.Header>
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <Card.Title>
-                    {period.predictionsReviewed} picks reviewed
-                  </Card.Title>
-                  <Card.Description>
-                    Win rate {formatPercent(period.overallWinRate)} ·{" "}
-                    {formatDateShort(r.generated_at)}
-                  </Card.Description>
-                </div>
-                <Chip
-                  size="sm"
-                  variant="soft"
-                  color={
-                    r.status === "approved"
-                      ? "success"
-                      : r.status === "rejected"
-                        ? "danger"
-                        : "warning"
-                  }
-                >
-                  {r.status}
-                </Chip>
-              </div>
-            </Card.Header>
-
-            <Card.Content className="space-y-3">
-              {all.map((c) => (
-                <div
-                  key={c.parameter}
-                  className="rounded-lg border border-border bg-surface-secondary p-3"
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="numeral text-sm">{c.parameter}</span>
+          <Panel
+            key={r.id}
+            title={`${period.predictionsReviewed} picks reviewed`}
+            description={`Win rate ${formatPercent(period.overallWinRate)} · ${formatDateShort(r.generated_at)}`}
+            action={
+              <Tag tone={r.status === "approved" ? "won" : r.status === "rejected" ? "lost" : "accent"}>
+                {r.status === "approved" ? <Check className="h-3 w-3" /> : r.status === "rejected" ? <X className="h-3 w-3" /> : <Clock className="h-3 w-3" />}
+                {r.status}
+              </Tag>
+            }
+          >
+            <div className="space-y-3">
+              {changes.map((c) => (
+                <div key={String(c.parameter)} className="rounded-2xl bg-surface-secondary p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="font-mono text-[13px] font-semibold">{c.parameter}</span>
                     <span className="numeral text-sm">
                       <span className="text-muted">{c.current_value}</span>
                       <span className="mx-2 text-muted">→</span>
-                      <span className="text-accent">{c.proposed_value}</span>
+                      <span style={{ color: "var(--accent)" }}>{c.proposed_value}</span>
                     </span>
                   </div>
-                  <p className="mt-1.5 text-xs leading-relaxed text-muted">
-                    {c.rationale}
-                  </p>
+                  <p className="mt-2 text-[12px] leading-relaxed text-muted">{c.rationale}</p>
                 </div>
               ))}
+            </div>
 
-              {r.status === "pending" && (
-                <div className="flex justify-end gap-2">
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    isDisabled={action.isPending}
-                    onPress={() =>
-                      action.mutate({ action: "rejectReport", reportId: r.id })
-                    }
-                  >
-                    Reject
-                  </Button>
-                  <Button
-                    size="sm"
-                    isDisabled={action.isPending}
-                    onPress={() =>
-                      action.mutate({ action: "approveReport", reportId: r.id })
-                    }
-                  >
-                    Approve &amp; apply
-                  </Button>
-                </div>
-              )}
-            </Card.Content>
-          </Card>
+            {r.status === "pending" && (
+              <div className="mt-5 flex flex-wrap justify-end gap-2">
+                <button
+                  type="button" disabled={action.isPending}
+                  onClick={() => action.mutate({ action: "rejectReport", reportId: r.id })}
+                  className="press rounded-full border border-border px-5 py-2.5 text-[13px] font-semibold"
+                >
+                  Reject
+                </button>
+                <button
+                  type="button" disabled={action.isPending}
+                  onClick={() => action.mutate({ action: "approveReport", reportId: r.id })}
+                  className="press rounded-full bg-accent px-5 py-2.5 text-[13px] font-semibold text-accent-foreground"
+                >
+                  Approve &amp; apply
+                </button>
+              </div>
+            )}
+          </Panel>
         );
       })}
 
       {action.error && (
-        <Alert status="danger">
-          <Alert.Description>{action.error.message}</Alert.Description>
-        </Alert>
+        <div className="rounded-2xl border border-lost-edge bg-lost-wash p-4">
+          <p className="text-[13px]" style={{ color: "var(--lost-ink)" }}>{action.error.message}</p>
+        </div>
       )}
     </div>
   );
@@ -780,127 +794,57 @@ function UsersPanel() {
   const { data: users, isPending } = useAdminUsers();
   const action = useOfficeAction();
 
-  if (isPending) return <Skeleton className="h-96 rounded-xl" />;
-
   return (
-    <Card>
-      <Card.Header>
-        <Card.Title>Users</Card.Title>
-        <Card.Description>{users?.length ?? 0} accounts</Card.Description>
-      </Card.Header>
-      <Card.Content className="space-y-2">
-        {users?.map((u) => {
-          const passes = (u.daily_passes ?? []) as Array<{ status: string }>;
-          const activePasses = passes.filter((p) => p.status === "active").length;
+    <Panel title="Users" description={`${users?.length ?? 0} accounts.`}>
+      {isPending ? (
+        <Loading rows={6} />
+      ) : !users?.length ? (
+        <Empty>No accounts.</Empty>
+      ) : (
+        <ul className="divide-y divide-separator">
+          {users.map((u) => {
+            const passes = (u.daily_passes ?? []) as Array<{ status: string }>;
+            const active = passes.filter((p) => p.status === "active").length;
 
-          return (
-            <div
-              key={u.id}
-              className="flex flex-wrap items-center gap-3 border-b border-border/40 py-2.5 last:border-0"
-            >
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium">
-                  {u.display_name ?? "—"}
-                </p>
-                <p className="truncate numeral text-[11px] text-muted">
-                  {u.email}
-                </p>
-              </div>
+            return (
+              <li key={u.id} className="flex flex-wrap items-center gap-3 py-3 first:pt-0">
+                <span
+                  className="flex h-9 w-9 flex-none items-center justify-center rounded-full text-[12px] font-bold"
+                  style={{ background: "var(--surface-secondary)", color: "var(--muted)" }}
+                >
+                  {(u.display_name ?? u.email ?? "?").slice(0, 2).toUpperCase()}
+                </span>
 
-              <div className="flex items-center gap-1.5">
-                {u.is_super_admin && (
-                  <Chip size="sm" color="accent" variant="soft">
-                    admin
-                  </Chip>
-                )}
-                {u.is_suspended && (
-                  <Chip size="sm" color="danger" variant="soft">
-                    suspended
-                  </Chip>
-                )}
-                {activePasses > 0 && (
-                  <Chip size="sm" color="success" variant="soft">
-                    {activePasses} pass
-                  </Chip>
-                )}
-              </div>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-[13px] font-semibold">{u.display_name ?? "—"}</p>
+                  <p className="truncate text-[11px] text-muted">{u.email}</p>
+                </div>
 
-              <Button
-                size="sm"
-                variant={u.is_suspended ? "secondary" : "ghost"}
-                isDisabled={action.isPending}
-                onPress={() =>
-                  action.mutate({
-                    action: "setUserFlags",
-                    userId: u.id,
-                    isSuspended: !u.is_suspended,
-                  })
-                }
-              >
-                {u.is_suspended ? "Reinstate" : "Suspend"}
-              </Button>
-            </div>
-          );
-        })}
-      </Card.Content>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {u.is_super_admin && <Tag tone="accent">admin</Tag>}
+                  {u.is_suspended && <Tag tone="lost">suspended</Tag>}
+                  {active > 0 && <Tag tone="won">{active} pass</Tag>}
+                </div>
+
+                <button
+                  type="button"
+                  disabled={action.isPending}
+                  onClick={() => action.mutate({ action: "setUserFlags", userId: u.id, isSuspended: !u.is_suspended })}
+                  className="press flex-none rounded-full border border-border px-4 py-2 text-[12px] font-semibold disabled:opacity-40"
+                >
+                  {u.is_suspended ? "Reinstate" : "Suspend"}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
 
       {action.error && (
-        <Alert status="danger" className="m-4">
-          <Alert.Description>{action.error.message}</Alert.Description>
-        </Alert>
+        <div className="mt-4 rounded-2xl border border-lost-edge bg-lost-wash p-4">
+          <p className="text-[13px]" style={{ color: "var(--lost-ink)" }}>{action.error.message}</p>
+        </div>
       )}
-    </Card>
+    </Panel>
   );
-}
-
-/* ------------------------------- shared -------------------------------- */
-
-function Row({
-  left,
-  right,
-  sub,
-}: {
-  left: React.ReactNode;
-  right: React.ReactNode;
-  sub?: string;
-}) {
-  return (
-    <div className="flex items-center justify-between gap-3 border-b border-border/40 py-2 last:border-0">
-      <div className="min-w-0">
-        <p className="truncate text-sm">{left}</p>
-        {sub && <p className="truncate text-[11px] text-muted">{sub}</p>}
-      </div>
-      <div className="flex-none text-sm">{right}</div>
-    </div>
-  );
-}
-
-function Empty({ children }: { children: React.ReactNode }) {
-  return <p className="py-6 text-center text-sm text-muted">{children}</p>;
-}
-
-function Th({
-  children,
-  className = "",
-}: {
-  children: React.ReactNode;
-  className?: string;
-}) {
-  return (
-    <th
-      className={`pb-2 text-[11px] font-medium uppercase tracking-wider text-muted ${className}`}
-    >
-      {children}
-    </th>
-  );
-}
-
-function Td({
-  children,
-  className = "",
-}: {
-  children: React.ReactNode;
-  className?: string;
-}) {
-  return <td className={`py-2.5 ${className}`}>{children}</td>;
 }
