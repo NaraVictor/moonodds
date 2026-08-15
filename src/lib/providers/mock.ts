@@ -1,5 +1,6 @@
 import type {
   AiProvider,
+  RawFixtureStats,
   EnginePick,
   FootballProvider,
   MessagingProvider,
@@ -135,6 +136,35 @@ export const mockFootball: FootballProvider = {
     }
 
     return out;
+  },
+
+  async fetchStats(externalIds) {
+    const rand = rng(externalIds.length * 13 + 5);
+    const forms = ["WWDLW", "WDWWL", "LWWDW", "DWLWW", "LDWLL", "WLDLW"];
+    return externalIds.map((id) => ({
+      fixtureExternalId: id,
+      homeForm: forms[Math.floor(rand() * forms.length)],
+      awayForm: forms[Math.floor(rand() * forms.length)],
+      h2hHomeWins: Math.floor(rand() * 4),
+      h2hAwayWins: Math.floor(rand() * 3),
+      h2hDraws: Math.floor(rand() * 3),
+      h2hAvgGoals: Number((2.1 + rand() * 1.4).toFixed(2)),
+      h2hBttsRate: Number((0.4 + rand() * 0.4).toFixed(3)),
+      homeSeason: {
+        gamesPlayed: 24, wins: 13, draws: 6, losses: 5,
+        avgGoalsScored: Number((1.4 + rand()).toFixed(2)),
+        avgGoalsConceded: Number((0.8 + rand() * 0.7).toFixed(2)),
+        cleanSheetRate: Number((0.25 + rand() * 0.25).toFixed(3)),
+        bttsRate: Number((0.45 + rand() * 0.25).toFixed(3)),
+      },
+      awaySeason: {
+        gamesPlayed: 24, wins: 9, draws: 7, losses: 8,
+        avgGoalsScored: Number((1.0 + rand()).toFixed(2)),
+        avgGoalsConceded: Number((1.1 + rand() * 0.7).toFixed(2)),
+        cleanSheetRate: Number((0.15 + rand() * 0.2).toFixed(3)),
+        bttsRate: Number((0.5 + rand() * 0.25).toFixed(3)),
+      },
+    }));
   },
 
   async fetchResults(externalIds) {

@@ -27,11 +27,27 @@ export type RawFixture = {
   away: { externalId: number; name: string; shortName: string };
 };
 
+/** Pre-match stats the engine reasons over. */
+export type RawFixtureStats = {
+  fixtureExternalId: number;
+  homeForm: string | null;
+  awayForm: string | null;
+  h2hHomeWins: number;
+  h2hAwayWins: number;
+  h2hDraws: number;
+  h2hAvgGoals: number;
+  h2hBttsRate: number;
+  homeSeason: Record<string, number>;
+  awaySeason: Record<string, number>;
+};
+
 export interface FootballProvider {
   /** Fixtures for a UTC date across the given league external ids. */
   fetchFixtures(date: string, leagueIds: number[]): Promise<RawFixture[]>;
   /** Final scores for fixtures believed to have finished. */
   fetchResults(externalIds: number[]): Promise<RawFixture[]>;
+  /** Form, head-to-head and season averages for upcoming fixtures. */
+  fetchStats(externalIds: number[]): Promise<RawFixtureStats[]>;
 }
 
 /** What the engine is asked to analyse. */

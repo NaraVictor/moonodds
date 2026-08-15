@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState, type ReactNode } from "react";
 import { RouterProvider } from "react-aria-components";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { BetSlipProvider } from "@/lib/bet-slip";
 
 declare module "react-aria-components" {
   interface RouterConfig {
@@ -41,7 +42,9 @@ export function Providers({ children }: { children: ReactNode }) {
 
   return (
     <RouterProvider navigate={router.push} useHref={(href) => href}>
-      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+      <QueryClientProvider client={queryClient}>
+        <BetSlipProvider>{children}</BetSlipProvider>
+      </QueryClientProvider>
     </RouterProvider>
   );
 }

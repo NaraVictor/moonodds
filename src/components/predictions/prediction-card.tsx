@@ -1,6 +1,7 @@
 "use client";
 
-import { Check, X, Clock, MapPin, ArrowRight, Radio } from "lucide-react";
+import { Check, X, Clock, MapPin, ArrowRight, Plus } from "lucide-react";
+import { useBetSlip } from "@/lib/bet-slip";
 import { ConfidenceRing } from "./confidence-ring";
 import { TeamCrest } from "./team-crest";
 import type { Pick } from "@/lib/types";
@@ -103,6 +104,10 @@ export function PredictionCard({
   const s = STATE[status];
   const settled = status !== "pending";
   const live = pick.fixture.status === "live";
+  const slip = useBetSlip();
+  const inSlip = slip.has(pick.id);
+  // Only an unsettled, not-yet-kicked-off call can be added.
+  const addable = !settled && pick.fixture.status === "scheduled";
 
   const shell = feature
     ? "bg-feature text-feature-foreground border-transparent"
@@ -241,33 +246,60 @@ export function PredictionCard({
         />
       </div>
 
-      {/* ---------- reasoning CTA ---------- */}
-      <button
-        type="button"
-        onClick={() => onReasoning?.(pick)}
-        className="press mt-3 flex items-center justify-between gap-2 border-t px-5 py-4 text-left"
-        style={{
-          borderColor: feature ? "var(--feature-border)" : "var(--separator)",
-        }}
+      {/* ---------- actions ---------- */}
+      <div
+        className="mt-3 flex items-stretch border-t"
+        style={{ borderColor: feature ? "var(--feature-border)" : "var(--separator)" }}
       >
-        <span
-          className="text-[13px] font-semibold"
-          style={{ color: feature ? "#fff" : "var(--foreground)" }}
+        <button
+          type="button"
+          onClick={() => onReasoning?.(pick)}
+          className="press flex flex-1 items-center justify-between gap-2 px-5 py-4 text-left"
         >
-          Why this prediction?
-        </span>
-        <span
-          className="flex h-7 w-7 items-center justify-center rounded-full transition-transform duration-200 group-hover:translate-x-0.5"
-          style={{
-            background: feature
-              ? "rgba(255,255,255,0.1)"
-              : "var(--accent-wash)",
-            color: feature ? "#fff" : "var(--accent)",
-          }}
-        >
-          <ArrowRight className="h-3.5 w-3.5" strokeWidth={2.5} />
-        </span>
-      </button>
+          <span
+            className="text-[13px] font-semibold"
+            style={{ color: feature ? "#fff" : "var(--foreground)" }}
+          >
+            Why this prediction?
+          </span>
+          <span
+            className="flex h-7 w-7 items-center justify-center rounded-full transition-transform duration-200 group-hover:translate-x-0.5"
+            style={{
+              background: feature ? "rgba(255,255,255,0.1)" : "var(--accent-wash)",
+              color: feature ? "#fff" : "var(--accent)",
+            }}
+          >
+            <ArrowRight className="h-3.5 w-3.5" strokeWidth={2.5} />
+          </span>
+        </button>
+
+        {addable && (
+          <button
+            type="button"
+            onClick={() => (inSlip ? slip.remove(pick.id) : slip.add(pick))}
+            aria-pressed={inSlip}
+            className="press flex flex-none items-center gap-1.5 border-l px-5 text-[13px] font-semibold"
+            style={{
+              borderColor: feature ? "var(--feature-border)" : "var(--separator)",
+              color: inSlip
+                ? feature ? "#fff" : "var(--accent)"
+                : feature ? "var(--feature-muted)" : "var(--muted)",
+            }}
+          >
+            {inSlip ? (
+              <>
+                <Check className="h-3.5 w-3.5" strokeWidth={3} />
+                In slip
+              </>
+            ) : (
+              <>
+                <Plus className="h-3.5 w-3.5" strokeWidth={2.5} />
+                Add
+              </>
+            )}
+          </button>
+        )}
+      </div>
     </article>
   );
 }

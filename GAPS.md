@@ -9,7 +9,19 @@ Ported and verified working is omitted. This is what's missing.
 
 ---
 
-## 1. Bet slip builder — the largest gap
+## ~~1. Bet slip builder~~ — DONE
+
+Built: FAB, sheet, add/remove from the card, localStorage persistence keyed
+per day, combined odds, save through the existing `/api/slips` transaction.
+
+**Odds bug found and fixed along the way.** The first version derived a leg
+price as 1/confidence — so a 97%-confidence call priced at 1.03 and an
+accumulator of strong picks never cleared 1.10. Model confidence is not market
+probability; that gap *is* the edge, and collapsing it erased the only number a
+slip exists to show. Picks now carry a real price from `odds_snapshots`
+(migration `20260815120000_pick_odds.sql`). Same call now reads 1.83.
+
+## ~~1b. Original gap description (kept for context)~~
 
 The original had `bet-slip-sheet.tsx`, `bet-slip-fab.tsx` and a `use-bet-slip`
 hook: a floating action button, a sheet you add picks into, running combined
@@ -80,7 +92,21 @@ Original: `getProfileStats` `getUserPicksReport` `getPredictionReport`.
 Profile shows access tier and settings but no personal performance history. The
 Office has no per-user or per-prediction report export.
 
-## 9. Fixture stats refresh
+## ~~9. Fixture stats refresh~~ — DONE
+
+`runFetchStats()` + `/api/cron/fetch-stats`, scheduled at 05:00 UTC — between
+the fixture pull and the engine run, so stats are in place before picks
+generate. Crucially the daily-picks prompt now *includes* them: form, H2H
+record, and both sides' season scoring/conceding/clean-sheet/BTTS rates per
+fixture, with an explicit instruction to lower confidence where stats are
+missing rather than guess.
+
+The live implementation deliberately **throws** rather than returning empty —
+silently handing the engine no stats while claiming it reasoned over data is
+worse than a loud failure. Needs wiring to `/fixtures/headtohead` and
+`/teams/statistics`.
+
+## ~~9b. Original gap description (kept for context)~~
 
 Original: `fetchStatsForUpcomingFixtures` `upsertFixtureStats`
 `saveFixtureStats` `getFixtureStatsByExternalId`.

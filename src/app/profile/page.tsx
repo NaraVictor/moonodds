@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { SiteHeader } from "@/components/layout/site-header";
 import { BottomNav } from "@/components/layout/bottom-nav";
+import { BetSlipFab, BetSlipSheet } from "@/components/slip/bet-slip";
 import { RoleSwitcher } from "@/components/dev/role-switcher";
 import { devBypassEnabled } from "@/lib/dev-bypass";
 import { ProfileClient } from "./profile-client";
@@ -20,6 +21,8 @@ export default async function ProfilePage() {
     <>
       <SiteHeader signedIn={!!user} />
       <ProfileClient />
+      <BetSlipFab />
+      <BetSlipSheet />
       <BottomNav />
       {process.env.NODE_ENV !== "production" && <RoleSwitcher />}
     </>

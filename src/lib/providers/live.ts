@@ -140,6 +140,18 @@ export const liveFootball: FootballProvider = {
     return out;
   },
 
+  async fetchStats(externalIds) {
+    // API-Football exposes these across /fixtures/headtohead and /teams/statistics.
+    // Wiring the real calls is a follow-up; failing loudly beats silently
+    // handing the engine empty stats and pretending it reasoned over data.
+    if (!externalIds.length) return [];
+    throw new Error(
+      "Live fixture-stats fetching is not implemented yet. " +
+        "Run with MOCK_PROVIDERS=true, or implement liveFootball.fetchStats " +
+        "against /fixtures/headtohead and /teams/statistics.",
+    );
+  },
+
   async fetchResults(externalIds) {
     if (!externalIds.length) return [];
     const out: RawFixture[] = [];

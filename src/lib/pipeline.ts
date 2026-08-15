@@ -188,6 +188,75 @@ export async function runFetchFixtures(date: string) {
   return { date, leagues: leagueIds.length, fixtures: raw.length, upserted: inserted };
 }
 
+/**
+ * Fetch pre-match stats for upcoming fixtures.
+ *
+ * This is the feed the engine actually reasons over. Without it the prompt
+ * carries fixture names and nothing else, and every "based on the numbers"
+ * claim in the product is hollow.
+ */
+export async function runFetchStats() {
+  const db = createServiceClient();
+  const { football } = getProviders();
+
+  const now = new Date();
+  const horizon = new Date(now.getTime() + 36 * 3600 * 1000);
+
+  const { data: fixtures } = await db
+    .from("fixtures")
+    .select("id, external_id")
+    .eq("status", "scheduled")
+    .gte("fixture_date", now.toISOString())
+    .lt("fixture_date", horizon.toISOString())
+    .not("external_id", "is", null)
+    .limit(60);
+
+  if (!fixtures?.length) return { fetched: 0, upserted: 0 };
+
+  const byExternal = new Map(fixtures.map((f) => [f.external_id as number, f.id]));
+  const stats = await football.fetchStats([...byExternal.keys()]);
+
+  let upserted = 0;
+  for (const s of stats) {
+    const fixtureId = byExternal.get(s.fixtureExternalId);
+    if (!fixtureId) continue;
+
+    const { error } = await db.from("fixture_stats").upsert(
+      {
+        fixture_id: fixtureId,
+        fixture_external_id: s.fixtureExternalId,
+        fetched_at: new Date().toISOString(),
+        home_form: s.homeForm,
+        away_form: s.awayForm,
+        h2h_home_wins: s.h2hHomeWins,
+        h2h_away_wins: s.h2hAwayWins,
+        h2h_draws: s.h2hDraws,
+        h2h_avg_goals: s.h2hAvgGoals,
+        h2h_btts_rate: s.h2hBttsRate,
+        home_season: s.homeSeason,
+        away_season: s.awaySeason,
+      },
+      { onConflict: "fixture_id" },
+    );
+    if (!error) upserted++;
+  }
+
+  return { fetched: stats.length, upserted };
+}
+
+/** Format one fixture's stats for the prompt. */
+function statsBlock(s: Record<string, unknown> | null | undefined): string {
+  if (!s) return "    (no stats available — lower your confidence accordingly)";
+  const home = (s.home_season ?? {}) as Record<string, number>;
+  const away = (s.away_season ?? {}) as Record<string, number>;
+  return [
+    `    Form: home ${s.home_form ?? "?"} | away ${s.away_form ?? "?"}`,
+    `    H2H: ${s.h2h_home_wins ?? 0}W-${s.h2h_draws ?? 0}D-${s.h2h_away_wins ?? 0}L, avg ${s.h2h_avg_goals ?? "?"} goals, BTTS ${s.h2h_btts_rate ?? "?"}`,
+    `    Home season: ${home.avgGoalsScored ?? "?"} scored / ${home.avgGoalsConceded ?? "?"} conceded, CS ${home.cleanSheetRate ?? "?"}, BTTS ${home.bttsRate ?? "?"}`,
+    `    Away season: ${away.avgGoalsScored ?? "?"} scored / ${away.avgGoalsConceded ?? "?"} conceded, CS ${away.cleanSheetRate ?? "?"}, BTTS ${away.bttsRate ?? "?"}`,
+  ].join("\n");
+}
+
 /** Generate today's picks with the active engine config. */
 export async function runDailyPicks() {
   const db = createServiceClient();
@@ -221,9 +290,19 @@ export async function runDailyPicks() {
   const minConfidence = thresholds.primarySlipFloor ?? 8.5;
   const floor = thresholds.absoluteMinimumFloor ?? 7;
 
+  // Pull the stats the engine is supposed to reason over.
+  const { data: statRows } = await db
+    .from("fixture_stats")
+    .select("*")
+    .in("fixture_id", fixtures.map((f) => f.id));
+  const statsByFixture = new Map(
+    (statRows ?? []).map((r) => [r.fixture_id as string, r]),
+  );
+
   const briefs = fixtures.map((f, i) => {
     const league = asOne(f.leagues);
-    return `[${i}] ${asOne(f.home)?.name} vs ${asOne(f.away)?.name} | ${league?.name} (${league?.country}) | ${f.fixture_date} | ${f.venue ?? "Unknown"}`;
+    const head = `[${i}] ${asOne(f.home)?.name} vs ${asOne(f.away)?.name} | ${league?.name} (${league?.country}) | ${f.fixture_date} | ${f.venue ?? "Unknown"}`;
+    return `${head}\n${statsBlock(statsByFixture.get(f.id))}`;
   });
 
   const userPrompt = `## ACTIVE WEIGHTS (v${config.version})
@@ -234,6 +313,8 @@ Filter thresholds: ${JSON.stringify(config.filter_thresholds)}
 Market pivots: ${JSON.stringify(config.market_pivots)}
 
 Analyse these ${fixtures.length} fixtures for ${now.toISOString().slice(0, 10)}.
+Use the stats given under each fixture. Where stats are missing, say so and
+lower your confidence rather than guessing.
 Minimum confidence: ${minConfidence} on the 0-10 scale.
 Apply every filter from the system prompt and report which ones triggered.
 

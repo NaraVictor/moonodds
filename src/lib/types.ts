@@ -44,6 +44,8 @@ export type Pick = {
   predictedValue: string;
   confidenceScore: number;
   stakingUnit: number;
+  /** Book price where we have one, else a market-shaped estimate. */
+  odds: number;
   reasoning: string;
   status: PredictionStatus;
   reasoningTags: string[] | null;
