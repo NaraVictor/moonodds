@@ -23,7 +23,7 @@ export function SiteHeader({ signedIn }: { signedIn: boolean }) {
   return (
     <header className="sticky top-0 z-40 border-b border-border bg-background/80 backdrop-blur-xl">
       <div className="mx-auto flex w-full max-w-6xl items-center gap-6 px-5 py-3">
-        <Link href="/" className="flex-none" aria-label="MoonOdds home">
+        <Link href="/" className="flex-none py-1.5" aria-label="MoonOdds home">
           <Logo />
         </Link>
 
@@ -80,13 +80,13 @@ export function SiteHeader({ signedIn }: { signedIn: boolean }) {
 
           {signedIn ? (
             <form action={signOut}>
-              <Button type="submit" size="sm" variant="ghost">
+              <Button type="submit" size="md" variant="ghost">
                 <LogOut className="h-4 w-4" />
                 Sign out
               </Button>
             </form>
           ) : (
-            <LinkButton size="sm" href="/auth/sign-in" variant="primary">
+            <LinkButton size="md" href="/auth/sign-in" variant="primary">
               Get started
             </LinkButton>
           )}

@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { SiteHeader } from "@/components/layout/site-header";
+import { BottomNav } from "@/components/layout/bottom-nav";
 import { RoleSwitcher } from "@/components/dev/role-switcher";
 import { devBypassEnabled } from "@/lib/dev-bypass";
 import { SlipsClient } from "./slips-client";
@@ -19,6 +20,7 @@ export default async function SlipsPage() {
     <>
       <SiteHeader signedIn={!!user} />
       <SlipsClient />
+      <BottomNav />
       {process.env.NODE_ENV !== "production" && <RoleSwitcher />}
     </>
   );

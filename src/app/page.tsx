@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { Landing } from "@/components/home/landing";
 import { PicksHome } from "@/components/home/picks-home";
 import { SiteHeader } from "@/components/layout/site-header";
+import { BottomNav } from "@/components/layout/bottom-nav";
 import { RoleSwitcher } from "@/components/dev/role-switcher";
 
 /**
@@ -19,6 +20,7 @@ export default async function HomePage() {
     <>
       <SiteHeader signedIn={!!user} />
       {user ? <PicksHome /> : <Landing />}
+      <BottomNav />
       {process.env.NODE_ENV !== "production" && <RoleSwitcher />}
     </>
   );

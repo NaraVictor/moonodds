@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { SiteHeader } from "@/components/layout/site-header";
+import { BottomNav } from "@/components/layout/bottom-nav";
 import { OfficeClient } from "./office-client";
 import { devBypassEnabled } from "@/lib/dev-bypass";
 import { RoleSwitcher } from "@/components/dev/role-switcher";
@@ -58,6 +59,7 @@ export default async function OfficePage() {
     <>
       <SiteHeader signedIn />
       <OfficeClient adminName={profile?.display_name ?? user!.email ?? "admin"} />
+      <BottomNav />
       {process.env.NODE_ENV !== "production" && <RoleSwitcher />}
     </>
   );

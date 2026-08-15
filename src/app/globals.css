@@ -237,6 +237,17 @@
   }
 }
 
+@layer base {
+  /* Clear the fixed mobile bottom nav. Removed from sm up, where the nav
+     lives in the header instead. */
+  @media (max-width: 639px) {
+    main,
+    footer {
+      padding-bottom: calc(4.5rem + env(safe-area-inset-bottom));
+    }
+  }
+}
+
 @layer components {
   /* --- typography ---------------------------------------------------- */
 
