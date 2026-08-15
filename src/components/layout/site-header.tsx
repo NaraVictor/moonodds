@@ -7,6 +7,7 @@ import { LinkButton } from "@/components/ui/link-button";
 import { Chip } from "@heroui/react/chip";
 import { LogOut } from "@/components/ui/icons";
 import { Logo } from "@/components/brand/logo";
+import { SiteSearch } from "./site-search";
 import { useAccessState } from "@/lib/queries";
 import { signOut } from "@/lib/auth-actions";
 
@@ -22,13 +23,15 @@ export function SiteHeader({ signedIn }: { signedIn: boolean }) {
 
   return (
     <header className="sticky top-0 z-40 border-b border-border bg-background/80 backdrop-blur-xl">
-      <div className="mx-auto flex w-full max-w-6xl items-center gap-6 px-5 py-3">
+      {/* Matches the board's own width and gutters so the logo sits directly
+          above the first card rather than floating in a narrower column. */}
+      <div className="mx-auto flex w-full max-w-[110rem] items-center gap-4 px-5 py-3 sm:px-8">
         <Link href="/" className="flex-none py-1.5" aria-label="MoonOdds home">
           <Logo />
         </Link>
 
         {signedIn && (
-          <nav className="hidden items-center gap-1 md:flex">
+          <nav className="hidden flex-none items-center gap-1 lg:flex">
             {NAV.map((item) => {
               const active =
                 item.href === "/"
@@ -52,7 +55,13 @@ export function SiteHeader({ signedIn }: { signedIn: boolean }) {
           </nav>
         )}
 
-        <div className="ml-auto flex items-center gap-2.5">
+        {/* Search takes the middle and the slack, the way it does on every
+            marketplace — it's the primary way of getting somewhere specific. */}
+        <div className="hidden flex-1 justify-center px-2 md:flex">
+          <SiteSearch />
+        </div>
+
+        <div className="ml-auto flex flex-none items-center gap-2.5">
           {access?.hasFullAccess && (
             <Chip size="sm" color="success" variant="soft">
               Full access
