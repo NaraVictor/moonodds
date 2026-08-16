@@ -50,13 +50,13 @@ import { placeholdersIn } from "@/lib/engine/template";
 /**
  * The Office.
  *
- * An admin panel, but part of the same product — so it uses the MoonOdds
+ * An admin panel, but part of the same product, so it uses the MoonOdds
  * language rather than dashboard conventions: light ground, generous spacing,
  * rounded surfaces, and the SAME outcome vocabulary as the prediction card, so
  * green/red/amber mean exactly what they mean everywhere else.
  *
  * Density is earned, not assumed: the operator wants to know what ran, what's
- * queued, and what needs a decision — those come first on every tab.
+ * queued, and what needs a decision, those come first on every tab.
  */
 
 const TABS = [
@@ -174,7 +174,7 @@ export function OfficeClient({
           icon={<ShieldOff className="h-4 w-4" />}
           className="mb-6"
         >
-          The bypass gets you to this page but doesn&rsquo;t fake an identity —
+          The bypass gets you to this page but doesn&rsquo;t fake an identity,
           admin tables are protected by row-level security, not the route guard.
           With no session every panel reads back empty. Actions still run. Sign
           in as <code className="font-mono text-[0.9em]">admin@moonodds.test</code>{" "}
@@ -320,7 +320,7 @@ function PipelinePanel() {
 
         <Panel
           title="Job queue"
-          description="Replaces Convex's scheduler — with retries and a dead-letter state it never had."
+          description="Replaces Convex's scheduler, with retries and a dead-letter state it never had."
         >
           {jobs.isPending ? (
             <Loading />
@@ -502,7 +502,7 @@ function GradePanel() {
               <option value="">Choose a fixture…</option>
               {unsettled.map((p) => (
                 <option key={p.id} value={p.id}>
-                  {teamShort(p.homeTeam)} v {teamShort(p.awayTeam)} — {p.league.name}
+                  {teamShort(p.homeTeam)} v {teamShort(p.awayTeam)}, {p.league.name}
                 </option>
               ))}
             </select>
@@ -597,7 +597,7 @@ function GradePanel() {
 
       <Panel
         title="Needs a human"
-        description="Markets the grader can't settle on its own — corners need a data feed we don't call."
+        description="Markets the grader can't settle on its own, corners need a data feed we don't call."
       >
         {isPending ? (
           <Loading />
@@ -649,7 +649,7 @@ function CatalogPanel() {
  *
  * This is the single most consequential setting in the Office: it decides what
  * the engine ever sees. It reads and writes API-Football's league ids, so only
- * leagues that carry an external id can be selected — a hand-created league has
+ * leagues that carry an external id can be selected, a hand-created league has
  * nothing to fetch against.
  */
 function CoveragePanel() {
@@ -736,7 +736,7 @@ function CoveragePanel() {
 
           {!selected.length && (
             <p className="mt-4 text-[12px] leading-relaxed" style={{ color: "var(--pending-ink)" }}>
-              Nothing selected — the fetch falls back to its six built-in leagues.
+              Nothing selected, the fetch falls back to its six built-in leagues.
               Select explicitly if you want that decision recorded.
             </p>
           )}
@@ -802,7 +802,7 @@ function LeaguesPanel() {
                 <div className="min-w-0">
                   <p className="truncate text-[13px] font-semibold">{l.name}</p>
                   <p className="truncate text-[11px] text-muted">
-                    {l.country} · season {l.season ?? "—"} · id {l.external_id ?? "—"}
+                    {l.country} · season {l.season ?? "-"} · id {l.external_id ?? "-"}
                   </p>
                 </div>
                 <div className="flex flex-none items-center gap-2">
@@ -979,7 +979,7 @@ function ImportPanel() {
   return (
     <Panel
       title="Find and import"
-      description="Search the upstream catalogue for competitions and clubs you don't track yet. Importing a league only adds the league — pull its squad list separately."
+      description="Search the upstream catalogue for competitions and clubs you don't track yet. Importing a league only adds the league, pull its squad list separately."
     >
       <div className="flex flex-wrap gap-2">
         <div className="flex rounded-full border border-border p-1">
@@ -1035,7 +1035,7 @@ function ImportPanel() {
             <div className="min-w-0 flex-1">
               <p className="truncate text-[13px] font-semibold">{l.name}</p>
               <p className="truncate text-[11px] text-muted">
-                {l.country} · season {l.currentSeason ?? "—"} · id {l.externalId}
+                {l.country} · season {l.currentSeason ?? "-"} · id {l.externalId}
               </p>
             </div>
 
@@ -1096,7 +1096,7 @@ function ImportPanel() {
               <li key={t.externalId} className="flex items-center gap-3 py-2.5">
                 <span className="min-w-0 flex-1 truncate text-[13px]">{t.name}</span>
                 <span className="numeral flex-none text-[11px] text-muted">
-                  {t.shortName ?? "—"}
+                  {t.shortName ?? "-"}
                 </span>
                 <button
                   type="button"
@@ -1363,7 +1363,7 @@ function EditTeamForm({
  *
  * The schema has always supported active / draft / archived and enforced a
  * single active row, but nothing could create a draft or promote one, so the
- * only way to change the engine was to edit the live config in place — with no
+ * only way to change the engine was to edit the live config in place, with no
  * way back if the change was wrong.
  *
  * A draft is a full copy, so experimenting costs nothing and the incumbent
@@ -1498,8 +1498,8 @@ function ConfigVersions() {
  *
  * The question this answers is the one that used to be unanswerable: when you
  * change a number in the config, does the engine actually see it? Before the
- * variable table, most keys resolved to nothing — the names in the config and
- * the names in the prompt were different vocabularies — and the interface gave
+ * variable table, most keys resolved to nothing, the names in the config and
+ * the names in the prompt were different vocabularies, and the interface gave
  * no hint. Anything listed here as a default is a number you are not
  * controlling, whatever the config says.
  */
@@ -1561,7 +1561,7 @@ function PromptVariables({
           <code className="font-mono font-semibold">
             {w.key} = {String(w.value)}
           </code>{" "}
-          — {w.message}
+, {w.message}
         </Alert>
       ))}
 
@@ -1654,7 +1654,7 @@ function EnginePanel() {
           ].map(([k, v]) => (
             <div key={String(k)} className="rounded-2xl bg-surface-secondary p-4">
               <p className="label">{k}</p>
-              <p className="numeral mt-1.5 text-xl">{String(v ?? "—")}</p>
+              <p className="numeral mt-1.5 text-xl">{String(v ?? "-")}</p>
             </div>
           ))}
         </div>
@@ -1662,7 +1662,7 @@ function EnginePanel() {
 
       <Panel
         title="Ranking weights"
-        description="Must sum to exactly 1.0 — the server rejects anything else."
+        description="Must sum to exactly 1.0, the server rejects anything else."
         action={
           <span className={`numeral text-sm ${sumOk ? "" : "text-danger"}`} style={sumOk ? { color: "var(--success)" } : undefined}>
             Σ {sum.toFixed(3)}
@@ -1696,7 +1696,7 @@ function EnginePanel() {
 
       <Panel
         title="System prompt"
-        description="The instructions the engine runs against every fixture. Values in double braces are substituted from the config above before the prompt is sent. Changing it needs an emailed confirmation code — a bad edit degrades every call silently."
+        description="The instructions the engine runs against every fixture. Values in double braces are substituted from the config above before the prompt is sent. Changing it needs an emailed confirmation code, a bad edit degrades every call silently."
       >
         <textarea
           rows={12}
@@ -1770,7 +1770,7 @@ function EnginePanel() {
 /**
  * Date presets.
  *
- * Windows are half-open — start inclusive, end exclusive — so a month never
+ * Windows are half-open, start inclusive, end exclusive, so a month never
  * double-counts a fixture sitting on the boundary. Returns undefined for "all
  * time", which the RPC reads as no filter.
  */
@@ -1884,7 +1884,7 @@ function EngineReportView({
   return (
     <Panel
       title="Engine performance"
-      description="Settled calls only — pending picks are counted but can't be right or wrong yet."
+      description="Settled calls only, pending picks are counted but can't be right or wrong yet."
     >
       <div className="mb-5 flex flex-wrap gap-1.5">
         {PRESETS.map((p) => {
@@ -1917,7 +1917,7 @@ function EngineReportView({
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             <Stat
               label="Win rate"
-              value={data.winRate === null ? "—" : `${Math.round(data.winRate * 100)}%`}
+              value={data.winRate === null ? "-" : `${Math.round(data.winRate * 100)}%`}
               tone="var(--won-ink)"
             />
             <Stat label="Won" value={String(data.wins)} tone="var(--won-ink)" />
@@ -1943,7 +1943,7 @@ function EngineReportView({
                       {l.wins}W&ndash;{l.losses}L
                     </span>
                     <span className="numeral w-12 flex-none text-right text-[13px] font-semibold">
-                      {l.winRate === null ? "—" : `${Math.round(l.winRate * 100)}%`}
+                      {l.winRate === null ? "-" : `${Math.round(l.winRate * 100)}%`}
                     </span>
                   </li>
                 ))}
@@ -1962,7 +1962,7 @@ function UserPicksView() {
   return (
     <Panel
       title="User picks"
-      description="Who is following what. Sorted by volume — the accounts most worth knowing about when support writes in."
+      description="Who is following what. Sorted by volume, the accounts most worth knowing about when support writes in."
     >
       {isPending ? (
         <Loading rows={4} />
@@ -1973,7 +1973,7 @@ function UserPicksView() {
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             <Stat
               label="Avg win rate"
-              value={data.avgWinRate === null ? "—" : `${Math.round(data.avgWinRate * 100)}%`}
+              value={data.avgWinRate === null ? "-" : `${Math.round(data.avgWinRate * 100)}%`}
               tone="var(--won-ink)"
             />
             <Stat label="Slips" value={String(data.totalSlips)} />
@@ -1986,7 +1986,7 @@ function UserPicksView() {
               <li key={u.id} className="flex items-center gap-3 py-3">
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-[13px] font-medium">
-                    {u.displayName ?? u.email ?? "—"}
+                    {u.displayName ?? u.email ?? "-"}
                   </p>
                   <p className="truncate text-[11px] text-muted">{u.email}</p>
                 </div>
@@ -1997,7 +1997,7 @@ function UserPicksView() {
                   {u.wins}W&ndash;{u.losses}L
                 </span>
                 <span className="numeral w-12 flex-none text-right text-[13px] font-semibold">
-                  {u.winRate === null ? "—" : `${Math.round(u.winRate * 100)}%`}
+                  {u.winRate === null ? "-" : `${Math.round(u.winRate * 100)}%`}
                 </span>
               </li>
             ))}
@@ -2134,7 +2134,7 @@ function UsersPanel() {
                   </span>
 
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-[13px] font-semibold">{u.display_name ?? "—"}</p>
+                    <p className="truncate text-[13px] font-semibold">{u.display_name ?? "-"}</p>
                     <p className="truncate text-[11px] text-muted">{u.email}</p>
                   </div>
 

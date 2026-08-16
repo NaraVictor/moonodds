@@ -23,7 +23,7 @@ export default async function AboutPage() {
       <PageShell
         eyebrow="About"
         title="We show our working."
-        intro="MoonOdds reads the numbers behind every fixture — form, expected goals, head-to-head, rest and travel — and tells you what it thinks and exactly why. You stay in charge of the call."
+        intro="MoonOdds reads the numbers behind every fixture, form, expected goals, head-to-head, rest and travel, and tells you what it thinks and exactly why. You stay in charge of the call."
       >
         <Section title="What this is">
           <p>
@@ -36,7 +36,7 @@ export default async function AboutPage() {
           <p>
             We are not a bookmaker. We take no bets, hold no funds, and settle
             nothing. Where you see a price it is an indicative market price shown
-            so you can judge whether a call has any edge in it — not an offer.
+            so you can judge whether a call has any edge in it, not an offer.
           </p>
         </Section>
 
@@ -50,7 +50,7 @@ export default async function AboutPage() {
           <p>
             So the reasoning is the product. Every pick states its case, and the
             full record of what landed and what didn&rsquo;t stays public
-            permanently — including the losses. Our settled calls are visible to
+            permanently, including the losses. Our settled calls are visible to
             everyone, signed in or not.
           </p>
         </Section>

@@ -34,7 +34,7 @@ import type { Market, Pick, UnlockedPick } from "@/lib/types";
  * The board.
  *
  * A marketplace, laid out like one: filters pinned left, inventory right, full
- * width. The previous centred column was a feed — fine for a handful of picks a
+ * width. The previous centred column was a feed, fine for a handful of picks a
  * day, wrong for something you're meant to shop. Narrowing is the primary verb
  * here, so the controls that narrow never leave the screen.
  *
@@ -51,7 +51,7 @@ export function PicksHome() {
    * A clock that ticks rather than a fresh Date.now() per render.
    *
    * The kickoff filter is time-relative ("next 3 hours"), so it needs a
-   * current reading — but reading the clock during render is impure and makes
+   * current reading, but reading the clock during render is impure and makes
    * the same render produce different output. A snapshot refreshed each minute
    * is both pure and more correct: the window advances on its own instead of
    * only when something else happens to re-render.
@@ -93,7 +93,7 @@ export function PicksHome() {
   }, [all]);
 
   // Only unlocked picks have a market to count. For a guest that means the
-  // market facet is nearly empty — correct, since filtering by a market you
+  // market facet is nearly empty, correct, since filtering by a market you
   // can't see would be a way to probe for it.
   const markets = useMemo(() => {
     const m = new Map<Market, number>();
@@ -130,12 +130,12 @@ export function PicksHome() {
     });
   }, [all, filters, now]);
 
-  // The hero shortlist ignores the filters on purpose — it's the day's headline,
+  // The hero shortlist ignores the filters on purpose, it's the day's headline,
   // not a view of the current query.
   //
   // Locked picks are NOT excluded. For a guest that means two unlocked calls
   // and a third behind the paywall, which is the honest framing of "your free
-  // picks are among today's best" — and a far better argument for paying than
+  // picks are among today's best", and a far better argument for paying than
   // a shortlist that quietly shrinks to the size of your entitlement.
   const hero = useMemo(
     () => all.filter((p) => p.status === "pending").slice(0, 3),
@@ -268,8 +268,8 @@ export function PicksHome() {
               Lives inside the content column, not above it, so the filter rail
               runs the full height of the page beside everything it filters.
               Two thirds for the day's shortlist, one third for what's already
-              happening: they answer different questions — "what should I look
-              at" and "how are we doing" — and a visitor forms a view of the
+              happening: they answer different questions, "what should I look
+              at" and "how are we doing", and a visitor forms a view of the
               product from both at once.
 
               min-w-0 on the slider column is load-bearing, not decoration:
@@ -333,7 +333,7 @@ export function PicksHome() {
               </h2>
               <p className="mx-auto mt-2 max-w-sm text-sm leading-relaxed text-muted">
                 {access?.isFirstDay
-                  ? "You're seeing your free picks. The day pass unlocks the rest — and the full board tomorrow."
+                  ? "You're seeing your free picks. The day pass unlocks the rest, and the full board tomorrow."
                   : "One pass, one day, every prediction. No subscription."}
               </p>
               <LinkButton href="/checkout/day-pass" size="lg" variant="primary" className="mt-5">
@@ -366,7 +366,7 @@ export function PicksHome() {
                 </div>
               ) : (
                 <div className="rounded-[1.5rem] border border-border bg-surface p-10 text-center text-sm text-muted">
-                  Pick up to 3 games from any league we cover — $2 per group of 3.
+                  Pick up to 3 games from any league we cover, $2 per group of 3.
                 </div>
               )}
             </section>

@@ -15,7 +15,7 @@
  *
  * UNITS ARE LOAD-BEARING. Every penalty and boost is a **percent** (20 = 20%),
  * matching the v2.1 prompt text. A fraction where a percent belongs turns a 5%
- * penalty into 0.05%, which is indistinguishable from no penalty at all — so
+ * penalty into 0.05%, which is indistinguishable from no penalty at all, so
  * `validateEngineVariables` flags it rather than guessing what was meant.
  */
 
@@ -55,7 +55,7 @@ export type EngineVariable = {
   fallback: number | string;
   note: string;
   /**
-   * True when the variable gates an [OPTIONAL] overlay — one that fires only if
+   * True when the variable gates an [OPTIONAL] overlay, one that fires only if
    * the fixture payload actually carries the input. These stay in the table so
    * they are tunable the day the data arrives, but on the current feed the
    * overlays they govern never run.
@@ -119,7 +119,7 @@ export const ENGINE_VARIABLES: readonly EngineVariable[] = [
   { key: "artificialTurfBoost", group: "contextual", unit: "percent", fallback: 5, note: "Goals-over boost on a known artificial pitch." },
   { key: "motivationGapBoostPct", group: "contextual", unit: "percent", fallback: 5, note: "Boost to the motivated side in a single-sided dead rubber." },
 
-  // --- Environmental. [OPTIONAL] — only fire if the value was injected. ---
+  // --- Environmental. [OPTIONAL], only fire if the value was injected. ---
   { key: "windThresholdKmh", group: "environmental", unit: "kmh", fallback: 40, note: "Wind that suppresses goals.", optionalOverlay: true },
   { key: "windOver25PenaltyPct", group: "environmental", unit: "percent", fallback: 10, note: "Over 2.5 reduction in wind.", optionalOverlay: true },
   { key: "windSetPiecePenaltyPct", group: "environmental", unit: "percent", fallback: 8, note: "Set-piece market reduction in wind.", optionalOverlay: true },
@@ -138,7 +138,7 @@ export const ENGINE_VARIABLES: readonly EngineVariable[] = [
   { key: "humidityThreshold", group: "environmental", unit: "percent", fallback: 60, note: "Humidity that pivots the primary market.", optionalOverlay: true },
   // v2.1 pivoted humidity to corners over 8.5. Corners cannot be graded by this
   // system, so that pivot produced picks that could never settle. Under 2.5 is
-  // the same directional call — fewer goals in heavy air — on a market we grade.
+  // the same directional call, fewer goals in heavy air, on a market we grade.
   { key: "humidityPivotMarket", group: "environmental", unit: "market", fallback: "over_under_2_5", note: "Where a humid fixture pivots to.", optionalOverlay: true },
   { key: "humidityPivotValue", group: "environmental", unit: "market", fallback: "under", note: "Selection on the humidity pivot market.", optionalOverlay: true },
   { key: "precipitationPenalty", group: "environmental", unit: "percent", fallback: 15, note: "Over 2.5 reduction in heavy rain or snow.", optionalOverlay: true },
@@ -207,7 +207,7 @@ export const VARIABLES_BY_KEY: ReadonlyMap<string, EngineVariable> = new Map(
  * bucket that carries the key wins.
  *
  * `slip_building` and `api_budget` are deliberately NOT searched. Nothing in
- * them is a prompt variable — they configure slip assembly and API quota, and
+ * them is a prompt variable, they configure slip assembly and API quota, and
  * the app reads them directly. Including them made every one of their keys look
  * like an unrecognised engine variable, which is a warning about correct config.
  */
@@ -228,7 +228,7 @@ export type ResolvedVariables = {
   overrides: string[];
   /** Keys that fell back to the table default. */
   fallbacks: string[];
-  /** Config keys that match no variable — almost always a typo or a stale name. */
+  /** Config keys that match no variable, almost always a typo or a stale name. */
   unknownKeys: string[];
 };
 
@@ -236,7 +236,7 @@ export type ResolvedVariables = {
 export function resolveEngineVariables(config: ConfigLike | null | undefined): ResolvedVariables {
   const supplied = new Map<string, unknown>();
 
-  // Later buckets must not clobber earlier ones — first hit wins.
+  // Later buckets must not clobber earlier ones, first hit wins.
   for (const bucket of LOOKUP_ORDER) {
     const raw = config?.[bucket];
     if (!raw || typeof raw !== "object") continue;
@@ -282,7 +282,7 @@ export type VariableWarning = {
  *
  * The failure this exists for: the pre-2.1 config stored penalties as fractions
  * (`0.05` meaning 5%). Renamed into the v2.1 table without conversion, that
- * becomes a 0.05% penalty — arithmetically valid, functionally absent, and
+ * becomes a 0.05% penalty, arithmetically valid, functionally absent, and
  * invisible in every log. Better to say so.
  */
 export function validateEngineVariables(values: Record<string, number | string>): VariableWarning[] {
@@ -296,7 +296,7 @@ export function validateEngineVariables(values: Record<string, number | string>)
       warnings.push({
         key: variable.key,
         value,
-        message: `Reads as a fraction. This variable is a percent — 5% is 5, not 0.05. As written it applies ${value}%, which is effectively nothing.`,
+        message: `Reads as a fraction. This variable is a percent, 5% is 5, not 0.05. As written it applies ${value}%, which is effectively nothing.`,
       });
     }
     if (variable.unit === "percent" && value > 100) {

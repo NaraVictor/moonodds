@@ -1,5 +1,5 @@
 -- ============================================================================
--- MoonOdds — landing page preview
+-- MoonOdds, landing page preview
 --
 -- PRODUCT CHANGE, stated plainly: anonymous visitors previously received zero
 -- of today's picks. This grants them exactly ONE, in full, as the landing-page
@@ -9,7 +9,7 @@
 --
 --   1. It is a hard cap of one, enforced here, not a relaxation of the gate.
 --      `predictions` is still granted to no client role, and get_todays_picks
---      is untouched — a guest calling it still gets nothing.
+--      is untouched, a guest calling it still gets nothing.
 --   2. The locked cards get NO prediction data at all. This function returns a
 --      count and nothing else for them. Client-side blur would mean shipping
 --      the real picks to the browser and drawing a frosted rectangle over

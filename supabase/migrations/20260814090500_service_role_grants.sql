@@ -1,5 +1,5 @@
 -- ============================================================================
--- MoonOdds — service_role grants
+-- MoonOdds, service_role grants
 --
 -- The RLS migration does `revoke all ... from anon, authenticated` and then
 -- hands back exactly what each client surface needs. That default-deny stance
@@ -7,7 +7,7 @@
 -- by migrations rather than through the dashboard, so Supabase's default
 -- privileges never applied to them.
 --
--- The symptom is nasty precisely because it fails safe — the pipeline read
+-- The symptom is nasty precisely because it fails safe, the pipeline read
 -- zero rows from every table and reported "no active engine config" instead of
 -- raising. PostgREST was clear about it once asked directly:
 --   permission denied for table ai_engine_config

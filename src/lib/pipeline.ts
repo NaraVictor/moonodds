@@ -10,7 +10,7 @@ import { ENGINE_PROMPT_VERSION } from "./engine/prompt";
  * The daily pipeline, ported from convex/cron_jobs and convex/football.
  *
  * Everything here runs with the service role because it writes rows no user is
- * authorised to write. None of it is reachable from the browser — the routes
+ * authorised to write. None of it is reachable from the browser, the routes
  * that call it are behind the cron bearer secret.
  */
 
@@ -21,7 +21,7 @@ type Outcome = "won" | "lost" | "void" | "review_needed";
  *
  * DELIBERATE DEVIATION from the Convex original: that version returned `false`
  * for markets it couldn't evaluate, so corners and half-goals picks were all
- * written as LOSSES — despite the code comments saying they should be marked
+ * written as LOSSES, despite the code comments saying they should be marked
  * for review. Draws on draw-no-bet were graded as losses too, when they should
  * void and refund.
  *
@@ -68,7 +68,7 @@ export function gradePrediction(
       return "review_needed";
 
     case "draw_no_bet":
-      // A draw refunds the stake — it is not a loss.
+      // A draw refunds the stake, it is not a loss.
       if (hg === ag) return "void";
       if (v === "1") return hg > ag ? "won" : "lost";
       if (v === "2") return ag > hg ? "won" : "lost";
@@ -255,11 +255,11 @@ export async function runFetchStats() {
  *
  * Form order is stated explicitly. The prompt reads trajectory off the last
  * three characters, so an unlabelled string that happens to run newest-first
- * would invert every trajectory silently — right shape, wrong answer, no error.
+ * would invert every trajectory silently, right shape, wrong answer, no error.
  */
 function statsBlock(s: Record<string, unknown> | null | undefined): string {
   if (!s) {
-    return "    (no stats for this fixture — reason from league and venue only, and lower confidence accordingly)";
+    return "    (no stats for this fixture, reason from league and venue only, and lower confidence accordingly)";
   }
   const home = (s.home_season ?? {}) as Record<string, number>;
   const away = (s.away_season ?? {}) as Record<string, number>;
@@ -331,7 +331,7 @@ export async function runDailyPicks() {
   if (rendered.warnings.length) {
     console.warn(
       `[engine] ${rendered.warnings.length} config warning(s):`,
-      rendered.warnings.map((w) => `${w.key}=${w.value} — ${w.message}`).join(" | "),
+      rendered.warnings.map((w) => `${w.key}=${w.value}, ${w.message}`).join(" | "),
     );
   }
   if (rendered.unknownKeys.length) {
@@ -342,8 +342,8 @@ export async function runDailyPicks() {
 
 Return one object per fixture, using the fixture index shown in brackets.
 Only the stats printed under a fixture are available to you. Anything not
-printed there — lineups, injuries, odds, standings, weather, travel, referee
-history — is absent for every fixture in this batch, so the steps that depend
+printed there, lineups, injuries, odds, standings, weather, travel, referee
+history, is absent for every fixture in this batch, so the steps that depend
 on it must be skipped rather than estimated.
 
 Fixtures:
@@ -392,12 +392,12 @@ ${briefs.join("\n")}`;
     const fixture = fixtures[p.fixtureIndex];
     if (!fixture || !tipster) continue;
 
-    // A selection the grader cannot parse settles as review_needed forever —
+    // A selection the grader cannot parse settles as review_needed forever,
     // never won, never lost, sitting in the Office queue. Drop it at the door.
     const value = normalisePredictedValue(p.predictionType, p.predictedValue);
     if (!value) {
       console.warn(
-        `[engine] unusable selection "${p.predictedValue}" for ${p.predictionType} on fixture ${p.fixtureIndex} — dropped`,
+        `[engine] unusable selection "${p.predictedValue}" for ${p.predictionType} on fixture ${p.fixtureIndex}, dropped`,
       );
       rejected++;
       continue;
@@ -428,7 +428,7 @@ ${briefs.join("\n")}`;
       mra_signal_away: p.mraSignalAway ?? null,
       filters_applied: p.filtersApplied ?? {},
       // The audit trail behind the number. Kept out of columns because nothing
-      // queries it — it is read when someone asks why a pick scored what it did.
+      // queries it, it is read when someone asks why a pick scored what it did.
       local_model_output: {
         promptVersion: ENGINE_PROMPT_VERSION,
         configVersion: config.version,
@@ -556,7 +556,7 @@ export async function runAutoGrade() {
             htAwayGoals: result.htAwayGoals,
           },
           void_reason:
-            outcome === "void" ? "Draw on draw-no-bet — stake refunded" : null,
+            outcome === "void" ? "Draw on draw-no-bet, stake refunded" : null,
         })
         .eq("id", p.id);
       graded++;

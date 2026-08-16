@@ -52,7 +52,7 @@ export async function currentUser() {
  * Super-admin guard for admin-only routes.
  *
  * Reads the flag from profiles via the service client rather than trusting a
- * JWT claim — app_metadata goes stale until token refresh, and user_metadata is
+ * JWT claim, app_metadata goes stale until token refresh, and user_metadata is
  * user-writable outright.
  */
 export async function requireSuperAdmin() {

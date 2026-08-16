@@ -7,7 +7,7 @@
 --
 -- The security property that mattered before still holds exactly: a prediction
 -- the viewer may not see is never serialised into the response. The difference
--- is that its *fixture* is — the teams, kickoff, venue and league are public
+-- is that its *fixture* is, the teams, kickoff, venue and league are public
 -- football facts we don't own and have no business hiding, and showing them is
 -- what makes a locked card informative rather than a blurred rectangle.
 --
@@ -26,7 +26,7 @@
  *
  * Deliberately absent: predicted_value, confidence_score, staking_unit,
  * frontier_explanation, reasoning_tags, filters_applied, the alt_* market, and
- * odds. Odds in particular have to go — a price next to a known market lets you
+ * odds. Odds in particular have to go, a price next to a known market lets you
  * infer the selection, which would hand over the call for free.
  *
  * prediction_type stays. The market alone ("both teams to score") names the

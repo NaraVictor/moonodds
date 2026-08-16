@@ -1,14 +1,14 @@
 -- Free picks shouldn't be spent on results.
 --
 -- The entitlement ranking ordered every prediction for the day by confidence
--- and unlocked the top `pick_limit`. But settled picks are public regardless —
--- a called shot whose outcome is known is a track record, not a product — so
+-- and unlocked the top `pick_limit`. But settled picks are public regardless,
+-- a called shot whose outcome is known is a track record, not a product, so
 -- whenever one happened to top the day's confidence ordering it consumed a free
 -- slot while giving the viewer nothing they couldn't already see. On a board
 -- with a strong morning result, "two free picks" quietly became one.
 --
 -- The ranking now runs over unsettled picks only. Settled ones bypass it
--- entirely and stay public, which is what they were already doing — they just
+-- entirely and stay public, which is what they were already doing, they just
 -- no longer charge for the privilege.
 
 create or replace function public.get_todays_picks(

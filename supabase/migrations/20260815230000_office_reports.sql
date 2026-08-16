@@ -1,8 +1,8 @@
 -- Office reporting.
 --
 -- The Reports tab has been showing tuning reports, which in the original app
--- lived under the AI Engine tab. The actual reporting — how the engine has done
--- by league and over a period, and what users are following — was never ported.
+-- lived under the AI Engine tab. The actual reporting, how the engine has done
+-- by league and over a period, and what users are following, was never ported.
 --
 -- Both are super-admin only and say so in the body rather than relying on the
 -- route guard: these are SECURITY DEFINER and callable by anyone who knows the
@@ -88,7 +88,7 @@ $$;
  * What users are actually following.
  *
  * Emails are included because this is an operator tool for supporting named
- * accounts — anonymising it would make it useless for the one job it has.
+ * accounts, anonymising it would make it useless for the one job it has.
  */
 create or replace function public.get_user_picks_report()
 returns jsonb

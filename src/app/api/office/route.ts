@@ -17,7 +17,7 @@ import { runClvCheck, runRecalibration } from "@/lib/tuning";
 /**
  * Next config version.
  *
- * `version` is a semver-shaped text column, not a number — bumping it
+ * `version` is a semver-shaped text column, not a number, bumping it
  * arithmetically yields NaN and the insert fails silently. Increments the patch
  * segment, and falls back to appending one for anything that isn't dotted.
  */
@@ -43,7 +43,7 @@ function autoShortName(name: string): string {
 /**
  * Office actions.
  *
- * One route with a discriminated action rather than a dozen endpoints — every
+ * One route with a discriminated action rather than a dozen endpoints, every
  * one of these needs the identical super-admin guard, and putting that in one
  * place means it cannot be forgotten on a new action.
  */
@@ -256,7 +256,7 @@ export async function POST(request: Request) {
 
       case "setFixtureResult": {
         // Entering a score settles the fixture AND re-grades every pending
-        // prediction on it, using the same grader the cron uses — so a manual
+        // prediction on it, using the same grader the cron uses, so a manual
         // correction can't diverge from automatic grading.
         const { error: fErr } = await db
           .from("fixtures")
@@ -309,14 +309,14 @@ export async function POST(request: Request) {
       }
 
       case "overridePrediction": {
-        // Records WHO and WHY — an override with no audit trail is worse than
+        // Records WHO and WHY, an override with no audit trail is worse than
         // no override, because nobody can tell later whether it was justified.
         const { error } = await db
           .from("predictions")
           .update({
             status: body.status,
             manual_override: true,
-            override_reason: `${body.reason} — ${actor}`,
+            override_reason: `${body.reason}, ${actor}`,
             settled_at:
               body.status === "pending" ? null : new Date().toISOString(),
             void_reason: body.status === "void" ? body.reason : null,
@@ -330,7 +330,7 @@ export async function POST(request: Request) {
         const sum = Object.values(body.rankingWeights).reduce((a, b) => a + b, 0);
         if (Math.abs(sum - 1) > 0.001) {
           return NextResponse.json(
-            { error: `Weights must sum to 1.0 — yours sum to ${sum.toFixed(3)}.` },
+            { error: `Weights must sum to 1.0, yours sum to ${sum.toFixed(3)}.` },
             { status: 400 },
           );
         }
@@ -488,7 +488,7 @@ export async function POST(request: Request) {
         if (count && count > 0) {
           return NextResponse.json(
             {
-              error: `This team has ${count} fixture${count === 1 ? "" : "s"} on record. Deactivate it instead — deleting would take that history with it.`,
+              error: `This team has ${count} fixture${count === 1 ? "" : "s"} on record. Deactivate it instead, deleting would take that history with it.`,
             },
             { status: 409 },
           );
@@ -500,7 +500,7 @@ export async function POST(request: Request) {
       }
 
       case "setSelectedLeagues": {
-        // These are API-Football league ids, not our uuids — the daily fetch
+        // These are API-Football league ids, not our uuids, the daily fetch
         // passes them straight through to the provider.
         const { error } = await db
           .from("ai_engine_config")
@@ -553,7 +553,7 @@ export async function POST(request: Request) {
       case "activateConfig": {
         // A partial unique index enforces one active row, so the incumbent has
         // to step down before the successor steps up. Two statements, and a
-        // failure between them leaves nothing active — which the daily job
+        // failure between them leaves nothing active, which the daily job
         // treats as "no config" and skips, rather than running on the wrong one.
         const { error: demote } = await db
           .from("ai_engine_config")
@@ -599,7 +599,7 @@ export async function POST(request: Request) {
       /* ---------------------- user management ---------------------- */
 
       case "grantPass": {
-        // Comped passes carry no payment_id — that column is what ties a pass
+        // Comped passes carry no payment_id, that column is what ties a pass
         // to money, and a gift has none. Amount 0 keeps revenue reporting
         // honest rather than inflating it with passes nobody paid for.
         const rows = Array.from({ length: body.days }, (_, i) => {

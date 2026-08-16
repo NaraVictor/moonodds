@@ -1,5 +1,5 @@
 -- ============================================================================
--- MoonOdds — scheduling
+-- MoonOdds, scheduling
 --
 -- Replaces convex/crons.ts. pg_cron drives the schedule and pg_net makes the
 -- outbound call to the Next.js route handlers.
@@ -57,35 +57,35 @@ begin
 end;
 $$;
 
--- Fetch the day's fixtures from API-Football — 00:30 UTC.
+-- Fetch the day's fixtures from API-Football, 00:30 UTC.
 select cron.schedule(
   'moonodds_fetch_fixtures',
   '30 0 * * *',
   $$select app.call_endpoint('/api/cron/fetch-fixtures')$$
 );
 
--- Generate predictions for today's scheduled fixtures — 06:00 UTC.
+-- Generate predictions for today's scheduled fixtures, 06:00 UTC.
 select cron.schedule(
   'moonodds_daily_picks',
   '0 6 * * *',
   $$select app.call_endpoint('/api/cron/daily-picks')$$
 );
 
--- Grade fixtures whose kickoff was more than ~2.5h ago — every 2 hours.
+-- Grade fixtures whose kickoff was more than ~2.5h ago, every 2 hours.
 select cron.schedule(
   'moonodds_auto_grade',
   '15 */2 * * *',
   $$select app.call_endpoint('/api/cron/auto-grade')$$
 );
 
--- Flag closing-line value moves against our position — every 2 hours.
+-- Flag closing-line value moves against our position, every 2 hours.
 select cron.schedule(
   'moonodds_clv_check',
   '45 */2 * * *',
   $$select app.call_endpoint('/api/cron/clv-check')$$
 );
 
--- Weekly weight recalibration — Mondays 03:00 UTC.
+-- Weekly weight recalibration, Mondays 03:00 UTC.
 select cron.schedule(
   'moonodds_weekly_recalibration',
   '0 3 * * 1',
@@ -100,7 +100,7 @@ select cron.schedule(
   $$select app.call_endpoint('/api/cron/drain-jobs')$$
 );
 
--- Return jobs abandoned by a crashed worker to the queue — every 10 minutes.
+-- Return jobs abandoned by a crashed worker to the queue, every 10 minutes.
 select cron.schedule(
   'moonodds_reap_stalled',
   '*/10 * * * *',

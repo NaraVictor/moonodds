@@ -11,7 +11,7 @@ import { confidencePercent, formatMarket, teamName } from "@/lib/format";
 /**
  * The board as a table.
  *
- * For the reader who is comparing rather than browsing — scanning forty calls
+ * For the reader who is comparing rather than browsing, scanning forty calls
  * for the two with the best confidence-to-price ratio is miserable in cards and
  * trivial in a table. Kept deliberately plain: no zebra striping, no borders
  * between every cell, one hover tint. The data is the texture.
@@ -184,13 +184,13 @@ export function PicksTable({ picks }: { picks: Pick[] }) {
                         {confidencePercent(p.confidenceScore)}%
                       </span>
                     ) : (
-                      <span className="text-[13px] text-muted">—</span>
+                      <span className="text-[13px] text-muted">-</span>
                     )}
                   </td>
 
                   <td className="px-4 py-3 text-right">
                     <span className="numeral text-[13px]">
-                      {p.odds != null ? p.odds.toFixed(2) : "—"}
+                      {p.odds != null ? p.odds.toFixed(2) : "-"}
                     </span>
                   </td>
 

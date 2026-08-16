@@ -1,5 +1,5 @@
 -- ============================================================================
--- MoonOdds — core schema
+-- MoonOdds, core schema
 --
 -- Ported from the Convex document model. Notable translations:
 --   Id<"table">        -> uuid, with real foreign keys
@@ -327,7 +327,7 @@ create table notification_preferences (
 --
 -- payments is new. In the Convex app, verifyPass checked Paystack status,
 -- currency and a minimum amount but never that the reference belonged to the
--- caller — so a known-good reference could activate a pass on any account.
+-- caller, so a known-good reference could activate a pass on any account.
 -- Recording the reference against its buyer at initialise time closes that.
 -- ---------------------------------------------------------------------------
 
@@ -413,7 +413,7 @@ create table ai_engine_config (
   created_at             timestamptz not null default now()
 );
 
--- Exactly one active config at a time — the daily job assumes it.
+-- Exactly one active config at a time, the daily job assumes it.
 create unique index ai_engine_config_single_active_idx on ai_engine_config (status)
   where status = 'active';
 

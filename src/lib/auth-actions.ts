@@ -51,7 +51,7 @@ export async function signUp(
   if (error) return { error: error.message };
 
   // The on_auth_user_created trigger has already created the profile and
-  // notification defaults — no client-side bootstrap call needed.
+  // notification defaults, no client-side bootstrap call needed.
   revalidatePath("/", "layout");
   redirect("/");
 }

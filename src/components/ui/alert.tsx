@@ -12,8 +12,8 @@ import type { ReactNode } from "react";
 /**
  * Alerts, on HeroUI.
  *
- * These used to be hand-rolled divs — a lost-wash background, a lost-edge
- * border, an icon and two paragraphs — repeated in ten places with small
+ * These used to be hand-rolled divs, a lost-wash background, a lost-edge
+ * border, an icon and two paragraphs, repeated in ten places with small
  * inconsistencies in each. Moving to the design system's own component means
  * the status colours, icon, spacing and ARIA role come from one definition, and
  * a change to alert styling happens once.

@@ -15,7 +15,7 @@ export function BypassBanner() {
     >
       <ShieldOff className="h-3.5 w-3.5 flex-none" />
       <p className="text-xs font-semibold">
-        Auth guards bypassed for testing — set{" "}
+        Auth guards bypassed for testing, set{" "}
         <code className="font-mono text-[0.9em]">DEV_BYPASS_AUTH=false</code> to restore them.
         Never ships: disabled in production builds.
       </p>

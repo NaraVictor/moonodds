@@ -13,8 +13,8 @@ export const metadata: Metadata = {
 /**
  * Privacy policy.
  *
- * Describes what the application actually stores — profiles, passes, payment
- * references, notification preferences, saved slips — rather than the generic
+ * Describes what the application actually stores, profiles, passes, payment
+ * references, notification preferences, saved slips, rather than the generic
  * superset a template would list. A policy claiming to collect things we don't,
  * or omitting things we do, is worse than none.
  */
@@ -73,7 +73,7 @@ export default async function PolicyPage() {
           <p>
             Our database and authentication run on Supabase. Payments are
             processed by Paystack. Fixture data comes from API-Football, which
-            receives no information about you — we ask it about matches, not
+            receives no information about you, we ask it about matches, not
             about people. Email and SMS alerts are delivered by a messaging
             provider that receives only the address needed to deliver them.
           </p>
@@ -92,7 +92,7 @@ export default async function PolicyPage() {
           <p>
             You can edit your profile and turn any alert off from your account
             page at any time. You can ask us for a copy of your data, ask us to
-            correct it, or ask us to delete your account — write to
+            correct it, or ask us to delete your account, write to
             hello@moonodds.app and we will confirm within a working day.
           </p>
           <p>
@@ -104,7 +104,7 @@ export default async function PolicyPage() {
         <Section title="Security">
           <p>
             Access to your data is enforced in the database itself through
-            row-level security, not only in application code — so a bug in the
+            row-level security, not only in application code, so a bug in the
             interface cannot expose another user&rsquo;s slips, passes or
             payments. If you believe you have found a way around that, please
             write to security@moonodds.app before telling anyone else.

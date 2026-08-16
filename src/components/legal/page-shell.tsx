@@ -5,7 +5,7 @@ import { Alert } from "@/components/ui/alert";
  * Shell for the standing content pages.
  *
  * One measure, one rhythm, one place to change them. Text is capped near 68
- * characters — these are pages to be read rather than scanned, and the board's
+ * characters, these are pages to be read rather than scanned, and the board's
  * full-bleed width would make them unreadable.
  */
 export function PageShell({
@@ -45,7 +45,7 @@ export function PageShell({
       </header>
 
       {needsReview && (
-        <Alert status="warning" title="Draft — not yet reviewed by a lawyer" className="mb-8">
+        <Alert status="warning" title="Draft, not yet reviewed by a lawyer" className="mb-8">
           This document was written to describe how MoonOdds actually works and
           is accurate to the product, but it has not been reviewed by a
           qualified lawyer and should not be relied on as it stands. It needs

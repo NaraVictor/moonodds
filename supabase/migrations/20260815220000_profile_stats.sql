@@ -1,12 +1,12 @@
 -- Your record, and the engine's record by league.
 --
 -- Two different questions that the profile page asks side by side:
---   * how have MY slips gone?          — private, derived from slips
---   * where is the engine actually good? — public, derived from settled picks
+--   * how have MY slips gone?, private, derived from slips
+--   * where is the engine actually good?, public, derived from settled picks
 --
 -- League performance is computed live rather than read from
 -- league_performance_log. That table exists and is indexed but nothing has ever
--- written to it — it was designed as a cache for the recalibration job, and
+-- written to it, it was designed as a cache for the recalibration job, and
 -- reading a cache that is never filled would show every league at zero. When
 -- the job starts populating it this can become a read of that table; until
 -- then, deriving from the source is the only version that tells the truth.
@@ -15,7 +15,7 @@
  * The signed-in user's own betting record.
  *
  * ROI assumes one flat unit staked per slip, which is the only assumption
- * available — we never see what anyone actually staked, and inventing a
+ * available, we never see what anyone actually staked, and inventing a
  * variable stake would make the number look precise while meaning less.
  */
 create or replace function public.get_profile_stats()

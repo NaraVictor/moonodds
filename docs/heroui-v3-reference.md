@@ -1,4 +1,4 @@
-# HeroUI v3 — API reference for this project
+# HeroUI v3: API reference for this project
 
 HeroUI v3 (3.2.4) is a ground-up rewrite and its API differs from v2 in ways that
 matter. Extracted from the installed package, not from memory.
@@ -21,7 +21,7 @@ Import once in `globals.css`:
 ```
 
 Then override the semantic variables. Light lives on `:root, .light, [data-theme="light"]`;
-dark on `.dark, [data-theme="dark"]`. We invert that — dark is the default, set via
+dark on `.dark, [data-theme="dark"]`. We invert that, dark is the default, set via
 `data-theme="dark"` on `<html>`.
 
 Variables worth knowing: `--background` `--foreground` `--surface`
@@ -29,7 +29,7 @@ Variables worth knowing: `--background` `--foreground` `--surface`
 `--accent` `--success` `--warning` `--danger` `--border` `--separator` `--focus`
 `--link` `--field-background` `--field-border` `--radius` `--backdrop`.
 
-Hover states are derived automatically via `color-mix` — don't set them by hand.
+Hover states are derived automatically via `color-mix`, don't set them by hand.
 
 ## Variant vocabulary
 
@@ -55,7 +55,7 @@ Getting these wrong fails silently (the component renders unstyled rather than e
 | `Typography` | `type`: body·code·h1–h6 · `color`: default·muted · `weight`: normal·medium·semibold·bold · `truncate` | body |
 | `Skeleton` | `animationType`: none·pulse·shimmer | shimmer |
 
-**Note:** `Button` has no `accent` variant — `primary` already uses `--accent`.
+**Note:** `Button` has no `accent` variant, `primary` already uses `--accent`.
 `Chip`/`Badge`/`Alert` take colour on a separate prop from variant, and the default
 `secondary` variant mutes the colour; use `variant="soft"` or `"primary"` when the
 outcome colour should read at a glance.
@@ -65,5 +65,5 @@ outcome colour should read at a glance.
 - Outcome semantics are fixed: **teal `success` = won**, **red `danger` = lost**,
   **orange `warning` = pending/at-risk**, **blue `accent` = live**.
 - The blue→orange gradient (`.bg-brand-gradient`) is reserved for primary
-  conversion actions — buying a pass or extra picks. Never decorative.
+  conversion actions, buying a pass or extra picks. Never decorative.
 - Figures use `font-mono` and `tabular-nums` so columns align.

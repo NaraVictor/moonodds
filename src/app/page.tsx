@@ -8,8 +8,8 @@ import { RoleSwitcher } from "@/components/dev/role-switcher";
 /**
  * The board, for everyone.
  *
- * There is no marketing page any more. A visitor lands on the actual market —
- * the Polymarket and Kalshi pattern — and sees every fixture we cover, with the
+ * There is no marketing page any more. A visitor lands on the actual market,
+ * the Polymarket and Kalshi pattern, and sees every fixture we cover, with the
  * AI call locked until they have access. Selling the product by showing it beats
  * describing it, and it means the page a stranger arrives on is the same page a
  * subscriber uses.

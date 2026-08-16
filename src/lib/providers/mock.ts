@@ -14,7 +14,7 @@ import type { Market } from "@/lib/types";
 /**
  * Canned providers. No network, no keys, no spend.
  *
- * These aren't stubs that return empty arrays — they generate plausible,
+ * These aren't stubs that return empty arrays, they generate plausible,
  * varied data so the pipeline, grading and payment flows can be exercised
  * end to end and the UI has something real-shaped to render.
  */
@@ -232,7 +232,7 @@ export const mockFootball: FootballProvider = {
  * The searchable catalogue is deliberately wider than the six leagues that
  * generate fixtures: importing a league you already have proves nothing about
  * the import path. The extras carry no team pool, so a mock fixture fetch will
- * return nothing for them — correct behaviour, not a bug.
+ * return nothing for them, correct behaviour, not a bug.
  */
 const SEARCHABLE_LEAGUES: RawLeague[] = [
   ...Object.entries(LEAGUE_META).map(([id, meta]) => ({
@@ -277,7 +277,7 @@ const REASONS = [
   "Home side converts big chances at nearly twice the visitors' rate, and the away back four has conceded from set pieces in four of five. The goal line is the cleaner expression of that edge than the result.",
   "Both sides have gone over this line in four of their last five. Neither keeper is behind a settled defence, and the referee's cards profile suggests the game stays open.",
   "The market has drifted since midweek while the underlying numbers have not moved. We are taking the earlier price on form the closing line has not caught up to.",
-  "Away form flatters them — three of four recent wins came against bottom-third opposition. Against this press, expect them to sit deep and concede territory.",
+  "Away form flatters them, three of four recent wins came against bottom-third opposition. Against this press, expect them to sit deep and concede territory.",
   "Rest advantage decides this one: the visitors played 72 hours ago and travelled over 1,500km. The rest-rule penalty applies, so we have pivoted to the safer market.",
 ];
 
@@ -343,7 +343,7 @@ export const mockAi: AiProvider = {
         confidenceRaw,
         anchorCapApplied: capped,
         anchorCapReason: capped
-          ? "No confirmed lineup and no odds in the payload — anchoring conditions 4 and 6 unmet."
+          ? "No confirmed lineup and no odds in the payload, anchoring conditions 4 and 6 unmet."
           : null,
         consistencyOverride: false,
         originalPredictedValue: null,

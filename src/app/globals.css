@@ -4,7 +4,7 @@
  * The references share a language: a light, airy base; generous whitespace
  * doing the work that borders and shadows usually do; large rounded surfaces;
  * one dark "feature" card carrying the hero content; and oversized, confident
- * numerals. That's what's borrowed — not the palettes, which belong to their
+ * numerals. That's what's borrowed, not the palettes, which belong to their
  * own products.
  *
  * MoonOdds sits on near-white with a single violet brand accent (intelligence,
@@ -26,7 +26,7 @@
     --border-width: 1px;
 
     /*
-     * Grounds — the Oddstar palette, carried over wholesale.
+     * Grounds, the Oddstar palette, carried over wholesale.
      *
      * Neutrals are not grey: they carry a trace of the brand green (hue 150),
      * and the near-black leans blue (hue 250). That pairing is what stops a
@@ -63,7 +63,7 @@
     --info: oklch(0.5 0.16 252);
     --info-foreground: oklch(0.99 0 0);
 
-    /* Outcome system. Reserved — never decorative. */
+    /* Outcome system. Reserved, never decorative. */
     --success: oklch(0.53 0.15 150);
     --success-foreground: oklch(0.99 0 0);
     --warning: oklch(0.55 0.13 70);
@@ -91,7 +91,7 @@
 
     /* --- app tokens --------------------------------------------------- */
 
-    /* The dark feature surface — the hero match card. */
+    /* The dark feature surface, the hero match card. */
     --feature: oklch(0.16 0.022 252);
     --feature-foreground: oklch(0.99 0 0);
     --feature-muted: oklch(0.68 0.015 250);
@@ -206,7 +206,7 @@
   /*
    * Radius scale, tightened 10%.
    *
-   * This affects inner geometry only — panels, fields, chips, stat tiles, the
+   * This affects inner geometry only, panels, fields, chips, stat tiles, the
    * things that sit *inside* a card. Cards themselves are set with an explicit
    * rounded-[1.5rem] and buttons with rounded-full, so neither reads from this
    * scale and neither moves. The result is slightly crisper interior detail
@@ -244,7 +244,7 @@
   --font-sans: var(--font-body), ui-sans-serif, system-ui, sans-serif;
   --font-display: var(--font-display), ui-sans-serif, system-ui, sans-serif;
 
-  /* Layout scale — spacing does the structural work, not borders. */
+  /* Layout scale, spacing does the structural work, not borders. */
   --spacing-gutter: 1.25rem;
   --spacing-section: 4rem;
 }
@@ -358,7 +358,7 @@
   /*
    * Card hover.
    *
-   * Cards sit flat — no resting shadow — so the hover cue is a small rise plus
+   * Cards sit flat, no resting shadow, so the hover cue is a small rise plus
    * a firmer border rather than a drop shadow appearing from nowhere. On a
    * bordered, shadowless card a shadow on hover reads as the card lifting off
    * the page; a border darkening reads as it becoming active, which is what a
@@ -390,7 +390,7 @@
     }
   }
 
-  /* Acknowledges a change in place — used by the slip counter, which has to
+  /* Acknowledges a change in place, used by the slip counter, which has to
      register an addition without stealing the screen the way opening the sheet
      did. */
   @keyframes bump {

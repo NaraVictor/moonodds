@@ -14,7 +14,7 @@ const Body = z.object({
  * Persist a bet slip.
  *
  * Convex ran this as one ACID mutation. Here the slip and its legs are two
- * writes, so both go through a single RPC — otherwise a failure between them
+ * writes, so both go through a single RPC, otherwise a failure between them
  * leaves an orphaned slip with no legs and a wrong combined odds figure.
  */
 export async function POST(request: Request) {
@@ -41,7 +41,7 @@ export async function POST(request: Request) {
   const { slipType, legs } = parsed.data;
   const db = createServiceClient();
 
-  // Every leg must still be pending — you can't back a result that's already in.
+  // Every leg must still be pending, you can't back a result that's already in.
   const { data: preds } = await db
     .from("predictions")
     .select("id, status")

@@ -43,14 +43,14 @@ export type TeamRef = {
  *
  * Since the board went public, a row can arrive in one of two shapes. An
  * unlocked pick has everything. A locked one carries the fixture facts and the
- * market, and the AI fields are genuinely absent from the payload — not blanked
+ * market, and the AI fields are genuinely absent from the payload, not blanked
  * client-side, not hidden with CSS. `locked` discriminates the two, and the
  * AI fields are optional because for a locked row they do not exist.
  */
 export type Pick = {
   id: string;
   locked?: boolean;
-  /** Absent when locked — the market is half the call, so it's sold too. */
+  /** Absent when locked, the market is half the call, so it's sold too. */
   predictionType?: Market;
   predictedValue?: string;
   confidenceScore?: number;
@@ -83,8 +83,8 @@ export type Pick = {
 /**
  * A pick with its AI content present.
  *
- * Anything that renders the call, the confidence or the reasoning — the slip,
- * the summary, the Office — operates on this rather than on `Pick`, so the
+ * Anything that renders the call, the confidence or the reasoning, the slip,
+ * the summary, the Office, operates on this rather than on `Pick`, so the
  * compiler refuses code that would read a field a locked payload never carries.
  * That is the point of the optionality above: it turns "did you handle the
  * locked case?" into a build error instead of a runtime `undefined`.
@@ -103,7 +103,7 @@ export function isUnlocked(p: Pick): p is UnlockedPick {
 
 /**
  * What every pick-returning RPC hands back. `totalCount` always reflects the
- * true total so the paywall can say how many are hidden — while `picks` only
+ * true total so the paywall can say how many are hidden, while `picks` only
  * ever contains what the caller is allowed to read.
  */
 export type GatedPicks = {

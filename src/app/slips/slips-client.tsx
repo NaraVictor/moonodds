@@ -23,7 +23,7 @@ type Slip = {
   slip_legs: Leg[];
 };
 
-/** Same outcome vocabulary as the prediction card — colour means one thing. */
+/** Same outcome vocabulary as the prediction card, colour means one thing. */
 const SLIP_STATE = {
   won: { cls: "state-won", ink: "var(--won-ink)", Icon: Check, label: "Won" },
   lost: { cls: "state-lost", ink: "var(--lost-ink)", Icon: X, label: "Lost" },
@@ -135,7 +135,7 @@ export function SlipsClient() {
                   </div>
                 </div>
 
-                {/* Legs as a progress strip — you read the shape before the rows. */}
+                {/* Legs as a progress strip, you read the shape before the rows. */}
                 <div className="mt-5 flex gap-1 px-6">
                   {legs.map((l) => (
                     <span
@@ -184,7 +184,7 @@ export function SlipsClient() {
                           {l.status}
                         </span>
 
-                        {/* Legs can only be dropped while nothing has settled —
+                        {/* Legs can only be dropped while nothing has settled,
                             editing a slip after a result would rewrite your own
                             history. The server enforces it; this just hides a
                             control that would always fail. */}

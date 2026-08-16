@@ -7,8 +7,8 @@ export const metadata: Metadata = { title: "Page not found" };
  * 404.
  *
  * Deliberately routes onward rather than apologising. Almost everything that
- * 404s here is a stale prediction link — a fixture from a previous day, or an
- * id that no longer resolves — so the useful response is a door back to today's
+ * 404s here is a stale prediction link, a fixture from a previous day, or an
+ * id that no longer resolves, so the useful response is a door back to today's
  * board, not a dead end with a sad face.
  *
  * No header or footer: those pull the session and the board query, which is a
@@ -24,7 +24,7 @@ export default function NotFound() {
       <p className="mt-3 text-[14px] leading-relaxed text-muted">
         The page you were after doesn&rsquo;t exist. If you followed a link to a
         prediction, it may have been for a fixture that has since rolled off the
-        board — today&rsquo;s calls are always on the front page.
+        board, today&rsquo;s calls are always on the front page.
       </p>
 
       <div className="mt-8 flex flex-wrap justify-center gap-2">

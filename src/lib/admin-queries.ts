@@ -6,7 +6,7 @@ import { createClient } from "./supabase/client";
 /**
  * Office data access.
  *
- * Reads go straight through PostgREST — the admin-only RLS policies already
+ * Reads go straight through PostgREST, the admin-only RLS policies already
  * restrict every one of these tables to super-admins, so a non-admin session
  * gets empty results rather than a leak. Writes go through /api/office, which
  * re-checks the flag server-side against profiles.
@@ -170,7 +170,7 @@ export function useUserPicksReport() {
   });
 }
 
-/** Every config, not just the live one — the lifecycle needs the whole set. */
+/** Every config, not just the live one, the lifecycle needs the whole set. */
 export function useAllConfigs() {
   return useQuery({
     queryKey: ["office", "configs"],
@@ -238,7 +238,7 @@ export function useAdminPredictions(page: number) {
     queryKey: adminKeys.predictions(page),
     queryFn: async () => {
       const supabase = createClient();
-      // Admins read predictions through the same gated RPC everyone uses —
+      // Admins read predictions through the same gated RPC everyone uses,
       // their access is full because access_state() says so, not because the
       // table is open to them.
       const { data, error } = await supabase.rpc("get_picks_by_status", {

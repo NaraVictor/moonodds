@@ -12,7 +12,7 @@ import { formatMarket, teamName } from "@/lib/format";
  * The prediction card.
  *
  * Kalshi's restraint, not its semantics. Their market cards work because almost
- * everything is quiet — one number carries the weight and the rest recedes — so
+ * everything is quiet, one number carries the weight and the rest recedes, so
  * the borrowing here is the calm, the generous whitespace and the way actions
  * sit present but unshouted. What is NOT borrowed is the language of a traded
  * market: no price ticks, no payout multiples, no order book. A confidence
@@ -20,7 +20,7 @@ import { formatMarket, teamName } from "@/lib/format";
  * imply a market we don't run.
  *
  * The whole card is a link to the detail page, via a stretched overlay rather
- * than by wrapping everything in an anchor — that keeps the two CTAs as real
+ * than by wrapping everything in an anchor, that keeps the two CTAs as real
  * buttons instead of nesting interactive elements inside a link, which breaks
  * both keyboard nav and the accessibility tree.
  */
@@ -97,7 +97,7 @@ export function PredictionCard({
       <Link
         href={`/predictions/${pick.id}`}
         className="absolute inset-0 z-0"
-        aria-label={`${teamName(pick.homeTeam)} versus ${teamName(pick.awayTeam)} — full analysis`}
+        aria-label={`${teamName(pick.homeTeam)} versus ${teamName(pick.awayTeam)}, full analysis`}
       />
 
       {/* ---------- header ---------- */}

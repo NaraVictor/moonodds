@@ -25,13 +25,13 @@ export function SiteHeader({ signedIn }: { signedIn: boolean }) {
     <header className="sticky top-0 z-40 border-b border-border bg-background/80 backdrop-blur-xl">
       {/* Matches the board's own width and gutters so the logo sits directly
           above the first card rather than floating in a narrower column. */}
-      <div className="mx-auto flex w-full max-w-[110rem] items-center gap-4 px-5 py-3 sm:px-8">
-        <Link href="/" className="flex-none py-1.5" aria-label="MoonOdds home">
+      <div className="mx-auto flex w-full max-w-[110rem] items-center gap-8 px-5 py-4 sm:px-8 sm:py-5">
+        <Link href="/" className="flex-none" aria-label="MoonOdds home">
           <Logo />
         </Link>
 
         {signedIn && (
-          <nav className="hidden flex-none items-center gap-1 lg:flex">
+          <nav className="hidden flex-none items-center gap-7 lg:flex">
             {NAV.map((item) => {
               const active =
                 item.href === "/"
@@ -42,10 +42,8 @@ export function SiteHeader({ signedIn }: { signedIn: boolean }) {
                   key={item.href}
                   href={item.href}
                   aria-current={active ? "page" : undefined}
-                  className={`rounded-lg px-3 py-1.5 text-sm transition-colors ${
-                    active
-                      ? "bg-surface-secondary text-foreground"
-                      : "text-muted hover:text-foreground"
+                  className={`text-[13px] font-semibold uppercase tracking-[0.06em] transition-colors ${
+                    active ? "text-foreground" : "text-muted hover:text-foreground"
                   }`}
                 >
                   {item.label}
@@ -56,12 +54,12 @@ export function SiteHeader({ signedIn }: { signedIn: boolean }) {
         )}
 
         {/* Search takes the middle and the slack, the way it does on every
-            marketplace — it's the primary way of getting somewhere specific. */}
-        <div className="hidden flex-1 justify-center px-2 md:flex">
+            marketplace. It is the primary way of getting somewhere specific. */}
+        <div className="hidden flex-1 justify-center md:flex">
           <SiteSearch />
         </div>
 
-        <div className="ml-auto flex flex-none items-center gap-2.5">
+        <div className="ml-auto flex flex-none items-center gap-3">
           {access?.hasFullAccess && (
             <Chip size="sm" color="success" variant="soft">
               Full access
@@ -90,10 +88,10 @@ export function SiteHeader({ signedIn }: { signedIn: boolean }) {
 
       {/* On a phone the header bar has no room for search beside the logo and
           the sign-in button, so it gets its own full-width row rather than
-          being hidden — search is how you reach a specific fixture, and a
+          being hidden, search is how you reach a specific fixture, and a
           marketplace that only offers it on desktop has hidden its index from
           the majority of its traffic. */}
-      <div className="border-t border-separator px-5 py-2.5 md:hidden">
+      <div className="border-t border-separator px-5 py-3 sm:px-8 md:hidden">
         <SiteSearch />
       </div>
     </header>

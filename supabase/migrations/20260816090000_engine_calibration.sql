@@ -3,7 +3,7 @@
 -- The v2.2 prompt scores a fixture twice: once from the weighted signals
 -- (confidenceRaw), then again after the anchoring ceilings bite. The gap
 -- between the two IS the calibration, and until now only the second number
--- survived — so "the engine is overconfident on thin data" was a claim nobody
+-- survived, so "the engine is overconfident on thin data" was a claim nobody
 -- could check against stored data.
 --
 -- Three columns rather than one jsonb blob, because these are the fields the

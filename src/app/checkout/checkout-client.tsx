@@ -21,7 +21,7 @@ type Stage = "idle" | "initialising" | "paying" | "verifying" | "done";
  *
  * Two calls: POST initialises and records the reference against the buyer,
  * PATCH verifies and activates. With MOCK_PROVIDERS on there is no Paystack
- * popup — the "pay" step is simulated so the whole flow stays walkable without
+ * popup, the "pay" step is simulated so the whole flow stays walkable without
  * real money moving.
  */
 export function CheckoutClient({ kind }: { kind: Kind }) {
@@ -140,7 +140,7 @@ export function CheckoutClient({ kind }: { kind: Kind }) {
       {kind === "day-pass" && access?.hasFullAccess && (
         <Alert status="success">
           <Alert.Description>
-            You already have full access today — no need to buy again.
+            You already have full access today, no need to buy again.
           </Alert.Description>
         </Alert>
       )}
@@ -244,7 +244,7 @@ export function CheckoutClient({ kind }: { kind: Kind }) {
             <ShieldCheck className="mt-0.5 h-3.5 w-3.5 flex-none" />
             <p>
               Charged in GHS at the live rate. Payments are simulated while
-              <code className="mx-1 font-mono">MOCK_PROVIDERS=true</code>— no
+              <code className="mx-1 font-mono">MOCK_PROVIDERS=true</code>, no
               card is taken and no money moves.
             </p>
           </div>

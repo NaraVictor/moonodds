@@ -4,7 +4,7 @@
  * The single highest-consequence risk in this migration is that `predictions`
  * becomes reachable through PostgREST, at which point any signed-in user can
  * read every locked pick from the browser console and the paywall is
- * decoration. This script proves that it isn't — against the running database,
+ * decoration. This script proves that it isn't, against the running database,
  * as a real client, using the same publishable key the browser gets.
  *
  * Run: pnpm verify:security
@@ -43,7 +43,7 @@ function check(name, passed, detail) {
   if (!passed) failures++;
 }
 
-/** Not run, and not counted either way — the reason is printed instead. */
+/** Not run, and not counted either way, the reason is printed instead. */
 function skip(name, detail) {
   results.push({ name, skipped: true, detail });
 }
@@ -111,7 +111,7 @@ async function main() {
 
   /**
    * The board is public now, so "how many rows came back" stopped being the
-   * security question — every viewer gets a row per fixture. What matters is
+   * security question, every viewer gets a row per fixture. What matters is
    * how many of them carry the thing we sell.
    *
    * An unlocked pick is one that exposes ANY AI output. Checking for the
@@ -170,7 +170,7 @@ async function main() {
   }
 
   {
-    // This account holds a valid, paid, active pass — and must still see nothing.
+    // This account holds a valid, paid, active pass, and must still see nothing.
     const c = await signedIn(ACCOUNTS.suspended);
     const { data } = await c.rpc("get_todays_picks", w);
     check(
@@ -191,7 +191,7 @@ async function main() {
   }
 
   {
-    // The locked projection must carry the public football facts — otherwise
+    // The locked projection must carry the public football facts, otherwise
     // the board is a wall of blank cards and the whole change was pointless.
     const anon = anonClient();
     const { data } = await anon.rpc("get_picks_by_status", { filter: "upcoming" });
@@ -317,7 +317,7 @@ async function main() {
   /**
    * These two probe HTTP guards that DEV_BYPASS_AUTH deliberately switches off.
    * Running them against a bypassed dev server reports a failure that is not
-   * one, and a suite that is expected to be red is a suite nobody reads — so
+   * one, and a suite that is expected to be red is a suite nobody reads, so
    * they're skipped explicitly, and loudly, instead.
    */
   const bypassed = process.env.DEV_BYPASS_AUTH === "true";
@@ -325,11 +325,11 @@ async function main() {
   if (bypassed) {
     skip(
       "unauthenticated cannot trigger Office actions",
-      "DEV_BYPASS_AUTH=true — guard intentionally off; unset it to test",
+      "DEV_BYPASS_AUTH=true, guard intentionally off; unset it to test",
     );
     skip(
       "cron endpoints reject a bad bearer secret",
-      "DEV_BYPASS_AUTH=true — guard intentionally off; unset it to test",
+      "DEV_BYPASS_AUTH=true, guard intentionally off; unset it to test",
     );
   } else {
     {
@@ -385,7 +385,7 @@ async function main() {
     check(
       "user cannot self-activate a pass via RPC",
       !!error,
-      error ? `blocked: ${error.code ?? error.message}` : "LEAKED — free pass",
+      error ? `blocked: ${error.code ?? error.message}` : "LEAKED, free pass",
     );
   }
 
@@ -402,7 +402,7 @@ async function main() {
     );
 
     // The whole point: locked picks must not be in the payload at all.
-    // Count PICKS, not ids — every pick carries a nested fixture id too, so
+    // Count PICKS, not ids, every pick carries a nested fixture id too, so
     // counting uuids double-counts the single preview. predictedValue appears
     // exactly once per prediction.
     const blob = JSON.stringify(data ?? {});

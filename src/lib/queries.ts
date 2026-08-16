@@ -17,8 +17,8 @@ import type {
 /**
  * The data layer that replaces Convex's reactive useQuery.
  *
- * Convex subscribed every read by default. This app is a daily-batch product —
- * picks are generated once at 06:00 UTC and graded every two hours — so
+ * Convex subscribed every read by default. This app is a daily-batch product,
+ * picks are generated once at 06:00 UTC and graded every two hours, so
  * polling-free TanStack Query with sensible staleness is the right default.
  * Liveness is added deliberately where it earns its keep (live fixtures), not
  * everywhere by reflex.
@@ -47,7 +47,7 @@ export const keys = {
   predictionDetail: (id: string) => ["picks", "detail", id] as const,
 };
 
-/** Match statistics behind the detail page. Public — these aren't ours. */
+/** Match statistics behind the detail page. Public, these aren't ours. */
 export type FixtureStats = {
   homeForm: string | null;
   awayForm: string | null;
@@ -100,7 +100,7 @@ export function useAccessState() {
 }
 
 /**
- * Today's picks. The server decides how many come back — the client never
+ * Today's picks. The server decides how many come back, the client never
  * receives a pick it may not display, so there is nothing to slice here.
  */
 export function useTodaysPicks() {
@@ -137,7 +137,7 @@ export function usePicksByStatus(filter: StatusFilter) {
   });
 }
 
-/** Settled results — public, so this powers the guest landing page too. */
+/** Settled results, public, so this powers the guest landing page too. */
 export function useRecentResults(limit = 50) {
   return useQuery({
     queryKey: [...keys.recentResults, limit],
@@ -269,7 +269,7 @@ export function useProfileStats() {
   });
 }
 
-/** Engine accuracy by league — public, and the same record as every settled pick. */
+/** Engine accuracy by league, public, and the same record as every settled pick. */
 export function useLeaguePerformance() {
   return useQuery({
     queryKey: ["stats", "leagues"],
@@ -286,7 +286,7 @@ export function useLeaguePerformance() {
  * Which of the slip's picks still exist server-side.
  *
  * The slip is held in the browser, so it can outlive the predictions it points
- * at — regenerate the board and the ids stop resolving. Checking on open lets
+ * at, regenerate the board and the ids stop resolving. Checking on open lets
  * the sheet mark the dead legs individually instead of failing the whole save
  * with a message that names none of them.
  */
@@ -432,7 +432,7 @@ export function useUpdatePhone() {
  *
  * Convex ran this as one ACID mutation. Here the slip and its legs are two
  * writes, so it goes through an RPC-shaped route handler that wraps both in a
- * single transaction — otherwise a failure between them leaves a slip with no
+ * single transaction, otherwise a failure between them leaves a slip with no
  * legs.
  */
 export function useConfirmSlip() {

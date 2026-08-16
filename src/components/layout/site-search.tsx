@@ -12,7 +12,7 @@ import type { Pick } from "@/lib/types";
  * Global search.
  *
  * Searches the board rather than a separate index: everything a visitor could
- * want to find — a club, a competition, a market — is already a field on a pick
+ * want to find, a club, a competition, a market, is already a field on a pick
  * we've loaded, and standing up a search service for a few hundred rows a day
  * would be machinery without a purpose.
  *
@@ -20,7 +20,7 @@ import type { Pick } from "@/lib/types";
  * case-insensitive) and strict on the way out (ranked, capped at eight). A
  * search box that returns forty rows has just made you scroll a second list.
  *
- * Cmd/Ctrl-K to open, arrows to move, Enter to go, Escape to leave — the
+ * Cmd/Ctrl-K to open, arrows to move, Enter to go, Escape to leave, the
  * shortcut set people already have in their fingers from every other tool.
  */
 
@@ -35,7 +35,7 @@ function scoreOf(pick: Pick, q: string): number {
     : "";
 
   // A club starting with what you typed beats one merely containing it, and a
-  // team beats a league — you're far likelier to be hunting a fixture.
+  // team beats a league, you're far likelier to be hunting a fixture.
   if (home.startsWith(q) || away.startsWith(q)) return 100;
   if (home.includes(q) || away.includes(q)) return 70;
   if (league.startsWith(q)) return 50;
@@ -53,14 +53,14 @@ export function SiteSearch() {
   const inputRef = useRef<HTMLInputElement>(null);
 
   /**
-   * The header mounts this twice — once inline for desktop, once as its own row
-   * for mobile — with CSS deciding which is shown. A hard-coded element id would
+   * The header mounts this twice, once inline for desktop, once as its own row
+   * for mobile, with CSS deciding which is shown. A hard-coded element id would
    * therefore appear twice in the document, which is invalid and leaves
    * aria-controls pointing at whichever the browser found first.
    */
   const listId = useId();
 
-  // Only fetched once something is typed — the header shouldn't pull the whole
+  // Only fetched once something is typed, the header shouldn't pull the whole
   // board on every page just in case.
   const { data } = usePicksByStatus("all");
 
@@ -75,7 +75,7 @@ export function SiteSearch() {
   }, [data, query]);
 
   // Cmd/Ctrl-K from anywhere. Both instances hear it, so each checks whether
-  // it's the one currently on screen before grabbing focus — otherwise the
+  // it's the one currently on screen before grabbing focus, otherwise the
   // shortcut would focus a display:none input and appear to do nothing.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {

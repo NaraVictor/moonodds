@@ -1,5 +1,5 @@
 -- ============================================================================
--- MoonOdds — transactional RPCs
+-- MoonOdds, transactional RPCs
 --
 -- Convex mutations were single ACID transactions. Anywhere the port turned one
 -- mutation into several writes, the writes go back into one function so a
@@ -59,8 +59,8 @@ revoke all on function public.create_slip(uuid, slip_type, numeric, jsonb)
  * Activate a daily pass against an already-verified payment.
  *
  * The payment row is what binds a Paystack reference to its buyer. The Convex
- * original checked only that the reference was valid and paid — never that it
- * belonged to the caller — so a known-good reference could unlock a pass on any
+ * original checked only that the reference was valid and paid, never that it
+ * belonged to the caller, so a known-good reference could unlock a pass on any
  * account. Here the ownership check is a WHERE clause.
  */
 create or replace function public.activate_daily_pass(

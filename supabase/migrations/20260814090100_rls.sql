@@ -1,10 +1,10 @@
 -- ============================================================================
--- MoonOdds — row level security and the gated-picks RPC
+-- MoonOdds, row level security and the gated-picks RPC
 --
 -- THE CENTRAL CONSTRAINT OF THIS FILE:
 --
 -- In the Convex app, `predictions` was unreachable except through query
--- functions that called getAccessState first. Postgres has no such guarantee —
+-- functions that called getAccessState first. Postgres has no such guarantee,
 -- if the table is granted to `authenticated`, any signed-in user can read every
 -- locked pick straight from the browser with one PostgREST call, and the
 -- paywall is decoration.
@@ -13,7 +13,7 @@
 -- that reproduce the original gating logic in one auditable place.
 --
 -- The free tier ("top 2 by confidence on your first day") is rank-based, which
--- RLS cannot express — a row policy decides WHICH rows you see, not HOW MANY.
+-- RLS cannot express, a row policy decides WHICH rows you see, not HOW MANY.
 -- That is the second reason the RPC exists rather than a policy.
 -- ============================================================================
 
@@ -164,7 +164,7 @@ $$;
 --
 -- Every one of these is SECURITY DEFINER, which means it bypasses RLS and is
 -- callable by anon/authenticated by default. Each therefore does its own
--- authorization in the body — that is not optional here.
+-- authorization in the body, that is not optional here.
 -- ---------------------------------------------------------------------------
 
 /**
@@ -278,7 +278,7 @@ end;
 $$;
 
 /**
- * The public track record. Settled picks only — the outcome is already known,
+ * The public track record. Settled picks only, the outcome is already known,
  * so there is nothing to gate, and the landing page needs it for guests.
  */
 create or replace function public.get_recent_results(max_rows integer default 50)
@@ -297,7 +297,7 @@ as $$
   ) p;
 $$;
 
-/** Headline win rate / ROI / volume. Aggregates only — safe for guests. */
+/** Headline win rate / ROI / volume. Aggregates only, safe for guests. */
 create or replace function public.get_engine_stats()
 returns jsonb
 language sql
@@ -395,7 +395,7 @@ grant select on daily_passes, extra_pick_orders, payments to authenticated;
 grant select, insert, update on notification_preferences to authenticated;
 grant select, update on profiles to authenticated;
 
--- Admin surfaces — RLS restricts these to super-admins.
+-- Admin surfaces, RLS restricts these to super-admins.
 grant select on prediction_runs, odds_snapshots, league_performance_log,
                 fixture_stats, tipsters to authenticated;
 grant select, insert, update on ai_engine_config to authenticated;
@@ -440,11 +440,11 @@ alter table otp_tokens              enable row level security;
 alter table jobs                    enable row level security;
 
 -- predictions: RLS on, zero policies. Nothing but the service role and the
--- SECURITY DEFINER RPCs can see a row. This is intentional — do not add a
+-- SECURITY DEFINER RPCs can see a row. This is intentional, do not add a
 -- "readable by authenticated" policy here without re-reading the header.
 
 -- ---------------------------------------------------------------------------
--- Policies — catalogue (public read)
+-- Policies, catalogue (public read)
 -- ---------------------------------------------------------------------------
 
 create policy leagues_read on leagues
@@ -460,7 +460,7 @@ create policy tipsters_read on tipsters
   for select to anon, authenticated using (true);
 
 -- ---------------------------------------------------------------------------
--- Policies — ownership
+-- Policies, ownership
 --
 -- Every one pairs `TO authenticated` with an ownership predicate. `TO
 -- authenticated` alone would be authentication without authorization: it checks
@@ -531,7 +531,7 @@ create policy notif_update_own on notification_preferences
   with check ((select auth.uid()) = user_id);
 
 -- ---------------------------------------------------------------------------
--- Policies — admin only
+-- Policies, admin only
 -- ---------------------------------------------------------------------------
 
 create policy runs_admin on prediction_runs
@@ -589,7 +589,7 @@ begin
   -- connection (seed, migration, psql, service-role job). That cannot be a
   -- privilege-escalation vector, because reaching this trigger through
   -- PostgREST requires passing profiles_update_own first, and that policy is
-  -- `TO authenticated` with an ownership predicate — an anonymous request can
+  -- `TO authenticated` with an ownership predicate, an anonymous request can
   -- never get here. So let those contexts through.
   if (select auth.uid()) is null
      or (select auth.role()) = 'service_role'

@@ -8,7 +8,7 @@ import { BetSlipFab, BetSlipSheet } from "@/components/slip/bet-slip";
 import "./globals.css";
 
 /**
- * Sora carries headlines and every figure — geometric, confident, with
+ * Sora carries headlines and every figure, geometric, confident, with
  * numerals that hold their shape at the sizes scorelines demand. Plus Jakarta
  * Sans handles UI text: highly legible small, with a warmth that keeps the
  * product from reading as an enterprise dashboard.
@@ -29,15 +29,15 @@ const body = Plus_Jakarta_Sans({
 
 export const metadata: Metadata = {
   title: {
-    default: "MoonOdds — AI football predictions",
+    default: "MoonOdds: AI-powered football prediction market",
     template: "%s · MoonOdds",
   },
   description:
-    "AI-powered football predictions with confidence scores and the reasoning behind every call. Smarter decisions, backed by the data.",
+    "An AI-powered football prediction market with confidence scores and the reasoning behind every call. Smarter decisions, backed by the data.",
   openGraph: {
-    title: "MoonOdds — AI football predictions",
+    title: "MoonOdds: AI-powered football prediction market",
     description:
-      "AI-ranked football predictions with confidence scores and a verifiable track record.",
+      "An AI-powered football prediction market with confidence scores and a verifiable track record.",
     type: "website",
   },
 };
@@ -67,7 +67,7 @@ export default function RootLayout({
       <body className="min-h-full flex flex-col bg-background text-foreground">
         <BypassBanner />
         <AgeGate />
-        {/* Slip lives at the root so it survives navigation — it has to follow
+        {/* Slip lives at the root so it survives navigation, it has to follow
             you from the board to a detail page and back. */}
         <Providers>
           {children}

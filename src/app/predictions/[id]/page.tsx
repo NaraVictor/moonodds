@@ -8,7 +8,7 @@ import { PredictionDetail } from "@/components/predictions/prediction-detail";
  * One prediction, in full.
  *
  * The public half of the product. Everything a visitor needs to judge the match
- * for themselves — form, head to head, season splits, the factors we weighed —
+ * for themselves, form, head to head, season splits, the factors we weighed,
  * is here regardless of access; what stays behind the pass is our call on it.
  */
 export default async function PredictionPage({

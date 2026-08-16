@@ -9,7 +9,7 @@ import type { Market, StatusFilter } from "@/lib/types";
  *
  * A marketplace is browsed by narrowing, so the controls stay on screen rather
  * than hiding behind a "Filter" button that has to be reopened for every
- * adjustment. Everything is a checkbox or a radio — no dropdowns — because the
+ * adjustment. Everything is a checkbox or a radio, no dropdowns, because the
  * point of a rail is seeing what's available and what's currently on without
  * clicking anything.
  *

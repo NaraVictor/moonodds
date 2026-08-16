@@ -15,7 +15,7 @@ import { confidencePercent, formatMarket, teamName } from "@/lib/format";
  *
  * Kalshi's information architecture: a wide analysis column with a narrow,
  * sticky decision rail beside it. You read down the left and act on the right
- * without ever losing the action — which is the whole reason their pages work.
+ * without ever losing the action, which is the whole reason their pages work.
  *
  * The ordering is deliberate. Public evidence comes first (form, head to head,
  * season splits) and our interpretation second, so a reader can reach their own
@@ -96,7 +96,7 @@ function StatRow({
   );
 }
 
-/** Recent results as W/D/L chips, most recent last — the way form is read. */
+/** Recent results as W/D/L chips, most recent last, the way form is read. */
 function FormRun({ form }: { form: string | null | undefined }) {
   if (!form) return <span className="text-[13px] text-muted">Not available</span>;
   return (
@@ -213,7 +213,7 @@ export function PredictionDetail({ id }: { id: string }) {
                   <div className="flex items-center justify-between py-2.5">
                     <dt className="text-[13px] text-muted">Average goals</dt>
                     <dd className="numeral text-[13px] font-semibold">
-                      {stats.h2hAvgGoals ?? "—"}
+                      {stats.h2hAvgGoals ?? "-"}
                     </dd>
                   </div>
                   <div className="flex items-center justify-between py-2.5">
@@ -221,7 +221,7 @@ export function PredictionDetail({ id }: { id: string }) {
                     <dd className="numeral text-[13px] font-semibold">
                       {stats.h2hBttsRate != null
                         ? `${Math.round(stats.h2hBttsRate * 100)}%`
-                        : "—"}
+                        : "-"}
                     </dd>
                   </div>
                 </dl>
@@ -306,7 +306,7 @@ export function PredictionDetail({ id }: { id: string }) {
           </Section>
 
           {/*
-            Line-ups are not fetched yet — API-Football publishes them roughly
+            Line-ups are not fetched yet. API-Football publishes them roughly
             20-40 minutes before kickoff, so a slot that says so beats a section
             that silently renders nothing.
           */}
@@ -534,7 +534,7 @@ function SummaryRail({ pick, settled }: { pick: Pick; settled: boolean }) {
           unlocked && (
             <p className="text-center text-[12px] leading-relaxed text-muted">
               {settled
-                ? "This one has settled — it can't be added to a slip."
+                ? "This one has settled, it can't be added to a slip."
                 : "This match has started, so the pre-match price no longer applies."}
             </p>
           )

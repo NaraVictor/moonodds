@@ -7,12 +7,12 @@ import { getProviders } from "@/lib/providers";
 /**
  * Confirmation code for system-prompt changes.
  *
- * The prompt IS the product — a bad edit silently degrades every pick the
+ * The prompt IS the product, a bad edit silently degrades every pick the
  * engine makes, and unlike a weight change there's no numeric bound to catch
  * it. So changing it takes a second factor, as it did in the original app.
  *
- * POST  — mint a 6-digit code and email it to the admin.
- * PATCH — redeem the code and apply the prompt in one step.
+ * POST: mint a 6-digit code and email it to the admin.
+ * PATCH: redeem the code and apply the prompt in one step.
  */
 
 const PURPOSE = "update_system_prompt";
@@ -57,15 +57,15 @@ export async function POST() {
   const { messaging, mocked } = getProviders();
   await messaging.sendEmail({
     to: email,
-    subject: "MoonOdds — confirm the system prompt change",
+    subject: "MoonOdds, confirm the system prompt change",
     html: `<p>Your confirmation code is <strong style="font-size:24px;letter-spacing:4px">${code}</strong></p>
-           <p>It expires in ${TTL_MINUTES} minutes. If you didn't request this, ignore this email — nothing has changed.</p>`,
+           <p>It expires in ${TTL_MINUTES} minutes. If you didn't request this, ignore this email, nothing has changed.</p>`,
   });
 
   const masked = email.replace(/^(.{2}).*(@.*)$/, "$1***$2");
 
   // In mock mode the email only reaches the server log, so the code comes back
-  // here — otherwise the flow is untestable. Never returned when live.
+  // here, otherwise the flow is untestable. Never returned when live.
   return NextResponse.json({
     sent: true,
     maskedEmail: masked,

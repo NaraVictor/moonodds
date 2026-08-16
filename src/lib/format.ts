@@ -8,7 +8,7 @@ import type { Market, Pick } from "./types";
  * The call, in words.
  *
  * Both arguments are optional because a locked pick carries neither. The market
- * used to survive locking as a teaser — "there's a handicap call here" — but
+ * used to survive locking as a teaser, "there's a handicap call here", but
  * that gives away where we think the mispricing is, which is the substance of
  * what a subscriber pays for. So a locked pick now says only that a call
  * exists.
@@ -52,7 +52,7 @@ export function formatMarket(market?: Market, value?: string): string {
   }
 }
 
-/** Short label for tight spaces — pick cards, table cells. */
+/** Short label for tight spaces, pick cards, table cells. */
 export function formatMarketShort(market: Market, value: string): string {
   const v = value.toLowerCase();
   switch (market) {
@@ -158,7 +158,7 @@ export function teamShort(t: Pick["homeTeam"]): string {
   return t?.shortName ?? t?.name ?? "TBD";
 }
 
-/** UTC day window — every access rule in the app is keyed to the UTC day. */
+/** UTC day window, every access rule in the app is keyed to the UTC day. */
 export function utcDayWindow(base = new Date()) {
   const start = new Date(
     Date.UTC(base.getUTCFullYear(), base.getUTCMonth(), base.getUTCDate()),

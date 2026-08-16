@@ -8,13 +8,13 @@ import type { Pick, UnlockedPick } from "@/lib/types";
 /**
  * The day's strongest calls, in a slider.
  *
- * Kalshi front the same way — a small carousel of the markets worth your
+ * Kalshi front the same way, a small carousel of the markets worth your
  * attention, with an explicit "3 of 7" pager so you know how much you haven't
  * seen. That counter matters more than the arrows: without it a carousel hides
  * its own extent and people assume they've reached the end.
  *
  * Three, not more. This is a shortlist, and a shortlist that keeps going stops
- * being one — the full board is directly underneath.
+ * being one, the full board is directly underneath.
  */
 export function HeroSlider({
   picks,

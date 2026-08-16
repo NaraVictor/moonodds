@@ -7,44 +7,53 @@ import { Facebook, Twitter, Instagram, Music2 } from "@/components/ui/icons";
  *
  * Carries the responsible-gambling notice that used to live at the bottom of
  * the marketing page. With that page gone, this line has to appear on the board
- * itself — it is the one piece of that page nobody should have had to scroll
+ * itself. It is the one piece of that page nobody should have had to scroll
  * past a sign-up form to read.
  *
- * Link columns follow the marketplace convention: what the product is, how to
- * get help, and the legal footing, in that order.
+ * Layout follows the marketplace convention: a brand column carrying the
+ * wordmark and socials, then link columns for what the product is, who makes
+ * it, and where to get help. The bottom bar splits copyright from the legal
+ * links so the small print reads as a separate register from navigation.
  */
 
 const COLUMNS: { title: string; links: { href: string; label: string }[] }[] = [
   {
-    title: "MoonOdds",
+    title: "Product",
     links: [
       { href: "/", label: "Today's board" },
-      { href: "/about", label: "About us" },
       { href: "/slips", label: "My slips" },
+      { href: "/profile", label: "Profile" },
     ],
   },
   {
-    title: "Support",
+    title: "Company",
     links: [
-      { href: "/help", label: "Help centre" },
+      { href: "/about", label: "About us" },
       { href: "/contact", label: "Contact" },
     ],
   },
   {
-    title: "Legal",
+    title: "Help",
     links: [
+      { href: "/help", label: "Help centre" },
       { href: "/terms", label: "Terms of use" },
       { href: "/policy", label: "Privacy policy" },
     ],
   },
 ];
 
+const LEGAL = [
+  { href: "/terms", label: "Terms" },
+  { href: "/policy", label: "Privacy" },
+  { href: "/help", label: "Responsible play" },
+];
+
 /**
  * Placeholders, deliberately.
  *
- * They point at the site root rather than at guessed handles: a footer icon
- * linking to a profile that isn't ours is worse than one that goes nowhere.
- * Swap the href when the accounts exist.
+ * They render as inert spans rather than links: a footer icon pointing at a
+ * profile that isn't ours is worse than one that goes nowhere. Swap in an
+ * anchor when the accounts exist.
  */
 const SOCIALS = [
   { label: "Facebook", Icon: Facebook },
@@ -55,57 +64,72 @@ const SOCIALS = [
 
 export function SiteFooter() {
   return (
-    <footer className="mt-16 border-t border-border">
-      <div className="mx-auto w-full max-w-[110rem] px-5 py-12 sm:px-8">
-        <div className="grid gap-10 lg:grid-cols-[1fr_2fr]">
+    <footer className="mt-20 border-t border-border">
+      <div className="mx-auto w-full max-w-[110rem] px-5 py-16 sm:px-8 sm:py-20">
+        <div className="grid gap-12 md:grid-cols-2 lg:grid-cols-[1.4fr_1fr_1fr_1fr] lg:gap-8">
           <div>
             <Logo />
-            <p className="mt-4 max-w-xs text-[13px] leading-relaxed text-muted">
-              AI-read football predictions for the African game and the leagues
-              it follows. Analysis, never a guarantee.
-            </p>
-
-            <div className="mt-5 flex gap-2">
+            <div className="mt-6 flex items-center gap-5">
               {SOCIALS.map(({ label, Icon }) => (
                 <span
                   key={label}
-                  aria-label={`${label} — coming soon`}
-                  title={`${label} — coming soon`}
-                  className="flex h-9 w-9 items-center justify-center rounded-full border border-border text-muted"
+                  aria-label={`${label}, coming soon`}
+                  title={`${label}, coming soon`}
+                  className="text-muted"
                 >
-                  <Icon className="h-4 w-4" />
+                  <Icon className="h-[18px] w-[18px]" />
                 </span>
               ))}
             </div>
           </div>
 
-          <nav aria-label="Footer" className="grid grid-cols-2 gap-8 sm:grid-cols-3">
-            {COLUMNS.map((col) => (
-              <div key={col.title}>
-                <p className="label mb-3">{col.title}</p>
-                <ul className="space-y-2.5">
-                  {col.links.map((l) => (
-                    <li key={l.href}>
-                      <Link
-                        href={l.href}
-                        className="text-[13px] text-muted transition-colors hover:text-foreground"
-                      >
-                        {l.label}
-                      </Link>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ))}
-          </nav>
+          {COLUMNS.map((col) => (
+            <nav key={col.title} aria-label={col.title}>
+              <p className="label">{col.title}</p>
+              <ul className="mt-6 space-y-4">
+                {col.links.map((l) => (
+                  <li key={l.href}>
+                    <Link
+                      href={l.href}
+                      className="text-[15px] text-foreground transition-colors hover:text-accent"
+                    >
+                      {l.label}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </nav>
+          ))}
         </div>
 
-        <div className="mt-10 space-y-2 border-t border-separator pt-6">
-          <p className="max-w-3xl text-xs leading-relaxed text-muted">
-            18+. MoonOdds provides analysis, not guarantees. Predictions are
-            generated by a model and nothing here is a certainty — never stake
-            more than you can afford to lose. If gambling stops being fun, take a
-            break.{" "}
+        <div className="mt-16 border-t border-separator pt-8">
+          <div className="flex flex-wrap items-center justify-between gap-x-8 gap-y-3">
+            <p className="text-[13px] text-muted">
+              &copy; {new Date().getFullYear()} MoonOdds. All rights reserved.
+            </p>
+            <nav
+              aria-label="Legal"
+              className="flex flex-wrap items-center gap-x-8 gap-y-3"
+            >
+              {LEGAL.map((l) => (
+                <Link
+                  key={l.label}
+                  href={l.href}
+                  className="text-[13px] text-muted transition-colors hover:text-foreground"
+                >
+                  {l.label}
+                </Link>
+              ))}
+            </nav>
+          </div>
+
+          <p className="mt-8 text-xs leading-relaxed text-muted">
+            18+. MoonOdds is an AI-powered football prediction market. It
+            provides analysis, not guarantees, and does not take bets or hold
+            funds. Predictions are generated by a model and nothing here is a
+            certainty, so never stake more than you can afford to lose. Past
+            performance is not necessarily indicative of future results. If
+            gambling stops being fun, take a break.{" "}
             <a
               href="https://www.begambleaware.org"
               target="_blank"
@@ -116,10 +140,6 @@ export function SiteFooter() {
               BeGambleAware
             </a>
             .
-          </p>
-          <p className="text-xs text-muted">
-            MoonOdds doesn&rsquo;t take bets or hold funds. ©{" "}
-            {new Date().getFullYear()} MoonOdds.
           </p>
         </div>
       </div>

@@ -3,21 +3,21 @@ import { z } from "zod";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { getProviders } from "@/lib/providers";
 import {
-  MIN_USD_TO_GHS,
   PASS_PRICE_USD,
   getUsdToGhsRate,
+  paymentAmountMatches,
   usdToPesewas,
 } from "@/lib/pricing";
 
 /**
  * Day pass checkout.
  *
- * POST  — initialise a payment and RECORD IT AGAINST THE BUYER.
- * PATCH — verify with the provider and activate the pass.
+ * POST: initialise a payment and RECORD IT AGAINST THE BUYER.
+ * PATCH: verify with the provider and activate the pass.
  *
  * The payments row written in POST is the fix for the vulnerability in the
  * Convex original: verifyPass there checked the reference was valid, paid, in
- * the right currency and above a floor — but never that it belonged to the
+ * the right currency and above a floor, but never that it belonged to the
  * person calling. Anyone holding a known-good reference could activate a pass
  * on their own account.
  */
@@ -138,14 +138,20 @@ export async function PATCH(request: Request) {
 
   // Ownership check #2: the amount must match what we asked for. Skipped when
   // mocked, because the mock provider has no real amount to report.
-  if (!mocked) {
-    const floor = Math.round(payment.amount_usd * MIN_USD_TO_GHS * 100);
-    if (result.currency !== payment.currency || result.amountMinor < floor) {
-      return NextResponse.json(
-        { error: "The amount paid didn't match the pass price." },
-        { status: 402 },
-      );
-    }
+  if (
+    !mocked &&
+    !paymentAmountMatches(
+      { amountMinor: payment.amount_minor, currency: payment.currency },
+      result,
+    )
+  ) {
+    console.error(
+      `[checkout/day-pass] amount mismatch on ${payment.reference}: charged ${payment.amount_minor} ${payment.currency}, settled ${result.amountMinor} ${result.currency}`,
+    );
+    return NextResponse.json(
+      { error: "The amount paid didn't match the pass price." },
+      { status: 402 },
+    );
   }
 
   const { data: passId, error } = await db.rpc("activate_daily_pass", {

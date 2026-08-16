@@ -82,7 +82,7 @@ export function ProfileClient() {
             </span>
             <div className="min-w-0">
               <p className="truncate text-[17px] font-semibold">
-                {profile?.display_name ?? "—"}
+                {profile?.display_name ?? "-"}
               </p>
               <p className="truncate text-[13px] text-muted">{profile?.email}</p>
             </div>
@@ -135,21 +135,21 @@ export function ProfileClient() {
             <h2 className="text-[15px] font-semibold">Your record</h2>
             <p className="mt-1 text-[13px] text-muted">
               Across the slips you&rsquo;ve saved. ROI assumes one unit staked
-              per slip — we never see what you actually staked.
+              per slip, we never see what you actually staked.
             </p>
 
             <dl className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
               {[
                 {
                   label: "Win rate",
-                  value: stats.winRate === null ? "—" : formatPercent(stats.winRate, 0),
+                  value: stats.winRate === null ? "-" : formatPercent(stats.winRate, 0),
                   tone: "var(--success)",
                 },
                 {
                   label: "ROI",
                   value:
                     stats.roi === null
-                      ? "—"
+                      ? "-"
                       : `${stats.roi > 0 ? "+" : ""}${Math.round(stats.roi * 100)}%`,
                   tone: stats.roi === null ? undefined : stats.roi >= 0 ? "var(--won-ink)" : "var(--lost-ink)",
                 },
@@ -158,7 +158,7 @@ export function ProfileClient() {
                   label: "Avg confidence",
                   value:
                     stats.avgConfidence === null
-                      ? "—"
+                      ? "-"
                       : `${Math.round(Number(stats.avgConfidence) * 10)}%`,
                 },
               ].map((s) => (
@@ -297,7 +297,7 @@ export function ProfileClient() {
             Appearance
           </h2>
           <p className="mt-1 text-[13px] text-muted">
-            Saved on this device — a phone at night and a desk at noon can differ.
+            Saved on this device. A phone at night and a desk at noon can differ.
           </p>
 
           <div
@@ -368,7 +368,7 @@ export function ProfileClient() {
           <ShieldCheck className="h-4 w-4 flex-none text-muted" />
           <p className="text-xs leading-relaxed text-muted">
             18+ only. MoonOdds provides analysis, not guarantees. Never stake
-            more than you can afford to lose — if it stops being fun, take a
+            more than you can afford to lose, if it stops being fun, take a
             break.
           </p>
         </section>

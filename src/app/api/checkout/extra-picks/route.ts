@@ -6,11 +6,12 @@ import {
   EXTRA_PICK_GAMES_PER_LEAGUE,
   extraPicksPriceUsd,
   getUsdToGhsRate,
+  paymentAmountMatches,
   usdToPesewas,
 } from "@/lib/pricing";
 
 /**
- * Extra league picks — a pass-holder perk.
+ * Extra league picks, a pass-holder perk.
  *
  * Price scales with the number of games actually available, not the number of
  * leagues asked for, so a league with one fixture left doesn't get billed as
@@ -149,11 +150,30 @@ export async function PATCH(request: Request) {
     );
   }
 
-  const { payments } = getProviders();
+  const { payments, mocked } = getProviders();
   const result = await payments.verify(parsed.data.reference);
 
   if (result.status !== "success") {
     return NextResponse.json({ error: "That payment hasn't completed." }, { status: 402 });
+  }
+
+  // This check was absent entirely, while the day pass beside it had one. Any
+  // settled transaction against a reference we issued unlocked the picks,
+  // whatever it was actually worth.
+  if (
+    !mocked &&
+    !paymentAmountMatches(
+      { amountMinor: payment.amount_minor, currency: payment.currency },
+      result,
+    )
+  ) {
+    console.error(
+      `[checkout/extra-picks] amount mismatch on ${payment.reference}: charged ${payment.amount_minor} ${payment.currency}, settled ${result.amountMinor} ${result.currency}`,
+    );
+    return NextResponse.json(
+      { error: "The amount paid didn't match the price quoted." },
+      { status: 402 },
+    );
   }
 
   const meta = payment.metadata as { leagueIds: string[]; fixtureIds: string[] };

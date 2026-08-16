@@ -237,7 +237,7 @@ export const liveFootball: FootballProvider = {
         externalId: entry.league.id,
         name: entry.league.name,
         type: entry.league.type ?? null,
-        country: entry.country?.name ?? "—",
+        country: entry.country?.name ?? "-",
         logo: entry.league.logo || null,
         currentSeason: current?.year ?? latest?.year ?? null,
       };
@@ -263,7 +263,7 @@ export const liveFootball: FootballProvider = {
  * Anthropic
  *
  * Three things changed moving off the Hercules OpenAI-compatible gateway:
- *   1. Model ids drop the "anthropic/" prefix — it's `claude-opus-5`.
+ *   1. Model ids drop the "anthropic/" prefix, it's `claude-opus-5`.
  *   2. `temperature` is REJECTED on current models. The old code sent 0.25;
  *      steer with the prompt instead.
  *   3. The JSON-coaxing (fence stripping, corrective retry) is replaced by
@@ -271,7 +271,7 @@ export const liveFootball: FootballProvider = {
  * ---------------------------------------------------------------------- */
 
 /**
- * The engine's confidence occasionally comes back on the wrong scale — 0–1 as
+ * The engine's confidence occasionally comes back on the wrong scale, 0–1 as
  * a probability, or 0–100 as a percentage. Left alone, a 0.92 silently fails
  * the `>= minConfidence` filter and the pick vanishes, which was the single
  * biggest cause of "no picks generated" in the original app.
@@ -304,7 +304,7 @@ export const liveAi: AiProvider = {
       messages: [
         {
           role: "user",
-          content: `${userPrompt}\n\nReturn exactly ${maxPicks} objects — one per fixture, in index order. Where you hold no edge, say so in the reasoning and score it low; where Step 3 applies, set noBetZone. Do not omit a fixture.`,
+          content: `${userPrompt}\n\nReturn exactly ${maxPicks} objects, one per fixture, in index order. Where you hold no edge, say so in the reasoning and score it low; where Step 3 applies, set noBetZone. Do not omit a fixture.`,
         },
       ],
     } as Parameters<typeof client.messages.stream>[0]);

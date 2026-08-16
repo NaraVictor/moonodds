@@ -1,5 +1,5 @@
 -- ============================================================================
--- MoonOdds — auth wiring, job queue mechanics, settings
+-- MoonOdds, auth wiring, job queue mechanics, settings
 -- ============================================================================
 
 -- ---------------------------------------------------------------------------
@@ -113,7 +113,7 @@ $$;
  * Claim a batch of due jobs.
  *
  * FOR UPDATE SKIP LOCKED is what makes this safe to run from several workers
- * at once — each transaction takes rows nobody else holds, instead of blocking.
+ * at once, each transaction takes rows nobody else holds, instead of blocking.
  */
 create or replace function app.claim_jobs(batch_size integer default 20)
 returns setof public.jobs

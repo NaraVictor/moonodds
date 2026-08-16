@@ -54,7 +54,7 @@ export default async function ContactPage() {
       <PageShell
         eyebrow="Contact"
         title="Talk to a person."
-        intro="Small team, real inboxes. Pick the one that fits and you'll get a reply — usually within a working day."
+        intro="Small team, real inboxes. Pick the one that fits and you'll get a reply, usually within a working day."
       >
         <div className="space-y-3">
           {ROUTES.map(({ Icon, title, address, detail }) => (

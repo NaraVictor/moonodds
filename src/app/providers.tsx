@@ -15,7 +15,7 @@ declare module "react-aria-components" {
 }
 
 /**
- * HeroUI v3 needs no provider of its own — styling is pure CSS variables.
+ * HeroUI v3 needs no provider of its own, styling is pure CSS variables.
  * What we do wire up:
  *   - RouterProvider, so React Aria links (Button href, Link) use the Next router
  *     instead of full page loads.

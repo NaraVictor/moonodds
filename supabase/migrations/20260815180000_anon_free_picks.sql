@@ -2,8 +2,8 @@
 --
 -- Guests previously saw a board of entirely locked cards. That is a poor
 -- shop window: it proves we have inventory but gives no evidence the calls are
--- any good. Two unlocked picks — which, because the board is ordered by
--- confidence, are necessarily among the day's top three — let a stranger judge
+-- any good. Two unlocked picks, which, because the board is ordered by
+-- confidence, are necessarily among the day's top three, let a stranger judge
 -- the product before deciding whether to pay for it.
 --
 -- The first-day trial for new accounts stays. Registering therefore doesn't buy
@@ -72,8 +72,8 @@ $$;
 -- ---------------------------------------------------------------------------
 
 /**
- * Previously this leaked prediction_type as a teaser — "there's a handicap call
- * on this match" — on the theory that naming the question without answering it
+ * Previously this leaked prediction_type as a teaser, "there's a handicap call
+ * on this match", on the theory that naming the question without answering it
  * was fair advertising. It isn't: the market IS half the call. Knowing we chose
  * the handicap rather than the 1x2 tells you what we think is mispriced, which
  * is exactly the insight a subscriber is paying for.

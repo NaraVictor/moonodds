@@ -10,7 +10,7 @@ export const metadata = { title: "Office" };
 
 /**
  * The Office is guarded on the server, before any admin UI is sent to the
- * browser. The client-side check in the header is cosmetic — this is the one
+ * browser. The client-side check in the header is cosmetic, this is the one
  * that matters, and it reads the flag from profiles rather than a JWT claim.
  */
 export default async function OfficePage() {

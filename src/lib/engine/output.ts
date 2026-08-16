@@ -6,7 +6,7 @@ import { MARKETS } from "@/lib/types";
  * Defined once, here, and consumed three ways: as the TypeScript type the
  * pipeline reads, as the JSON schema the live provider constrains generation
  * with, and as the shape the mock provider fabricates. Before this file those
- * three disagreed — the schema allowed five camelCase filter flags with
+ * three disagreed, the schema allowed five camelCase filter flags with
  * `additionalProperties: false`, the prompt asked for thirty-three snake_case
  * ones, and the mock produced a fourth thing. Under structured outputs that
  * does not degrade gracefully; it fails or silently drops the difference.
@@ -15,7 +15,7 @@ import { MARKETS } from "@/lib/types";
 /**
  * Filter flags, in the order the prompt introduces them.
  *
- * snake_case throughout — matching the prompt text rather than the camelCase
+ * snake_case throughout, matching the prompt text rather than the camelCase
  * the old schema used, because an operator reading `filters_applied` in the
  * database should see the same names they read in the prompt.
  */
@@ -135,8 +135,8 @@ export type EnginePick = {
   overrideReason?: string | null;
   stakingUnit?: number;
   /**
-   * Set when Step 3 identified a no-bet zone. The fixture is still returned —
-   * a missing index is indistinguishable from a truncated response — but the
+   * Set when Step 3 identified a no-bet zone. The fixture is still returned,
+   * a missing index is indistinguishable from a truncated response, but the
    * pipeline discards it rather than publishing.
    */
   noBetZone?: boolean;
@@ -289,7 +289,7 @@ export const PICK_SCHEMA = {
  * Selection strings the grader can actually settle.
  *
  * The prompt lists these explicitly, but a model that emits "Home" instead of
- * "1" produces a pick that grades `review_needed` forever — it never wins, never
+ * "1" produces a pick that grades `review_needed` forever, it never wins, never
  * loses, and sits in the Office queue waiting for a human. Cheaper to catch it
  * on the way in.
  */
@@ -312,7 +312,7 @@ const CORRECT_SCORE = /^\d+-\d+$/;
 /**
  * Normalise a selection to what `gradePrediction` parses, or reject it.
  *
- * Case and whitespace are forgiven — "Over" and "1x" are unambiguous. Anything
+ * Case and whitespace are forgiven, "Over" and "1x" are unambiguous. Anything
  * genuinely outside the vocabulary returns null and the pick is dropped.
  */
 export function normalisePredictedValue(

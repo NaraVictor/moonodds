@@ -10,7 +10,7 @@ import {
  * Prompt templating.
  *
  * A rendered prompt either has every placeholder filled or it does not render.
- * The alternative — shipping a literal "{{tier1Penalty}}" to the model — is the
+ * The alternative, shipping a literal "{{tier1Penalty}}" to the model, is the
  * worst outcome available: the run succeeds, the picks look normal, and one
  * threshold quietly meant nothing. Failing here costs a cron run; failing
  * silently costs a day of calibration nobody can reconstruct afterwards.
@@ -24,7 +24,7 @@ export type RenderedPrompt = {
   overrides: string[];
   /** Variables that fell back to the built-in default. */
   fallbacks: string[];
-  /** Config keys matching no known variable — typos and stale names. */
+  /** Config keys matching no known variable, typos and stale names. */
   unknownKeys: string[];
   /** Scale and coherence problems worth an operator's attention. */
   warnings: VariableWarning[];
@@ -65,7 +65,7 @@ export function renderPrompt(template: string, config: ConfigLike | null | undef
 
   const text = template.replace(PLACEHOLDER, (_, key: string) => String(values[key]));
 
-  // Report only on variables this template actually references — a config that
+  // Report only on variables this template actually references, a config that
   // omits a key no prompt uses is not a fallback worth logging.
   const usedSet = new Set(used);
   return {

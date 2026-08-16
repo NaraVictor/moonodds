@@ -2,7 +2,7 @@ import Link from "next/link";
 import type { ComponentProps } from "react";
 
 /**
- * HeroUI v3's Button is a real <button> and takes no href — navigation is a
+ * HeroUI v3's Button is a real <button> and takes no href, navigation is a
  * different element with different semantics, and the library is right about
  * that. This renders a Next <Link> that looks like a button, so client-side
  * routing and keyboard/screen-reader semantics both stay correct.

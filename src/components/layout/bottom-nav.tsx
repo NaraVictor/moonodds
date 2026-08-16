@@ -9,12 +9,12 @@ import { Home, Receipt, User } from "@/components/ui/icons";
  *
  * The primary use case is someone checking predictions on a phone, so the
  * three destinations that matter sit under the thumb. Desktop keeps the
- * horizontal nav in the header — this is hidden from `sm` up.
+ * horizontal nav in the header, this is hidden from `sm` up.
  *
  * Deliberately shallow: MoonOdds is about finding and judging predictions, so
  * there is nothing else competing for space down here.
  *
- * /office is deliberately absent. It's an internal tool, not a destination —
+ * /office is deliberately absent. It's an internal tool, not a destination,
  * operators reach it by URL, and the route's own server-side super-admin guard
  * is what actually protects it. A nav link would only advertise it.
  */

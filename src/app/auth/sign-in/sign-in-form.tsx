@@ -56,7 +56,7 @@ export function SignInForm() {
       </Button>
 
       <p className="rounded-lg border border-border bg-surface-secondary p-3 text-xs leading-relaxed text-muted">
-        <span className="font-semibold text-foreground">Demo accounts</span> —
+        <span className="font-semibold text-foreground">Demo accounts</span>,
         password <code className="font-mono text-[0.9em]">moonodds</code>
         <br />
         <code className="font-mono text-[0.9em]">pass@moonodds.test</code> · full access

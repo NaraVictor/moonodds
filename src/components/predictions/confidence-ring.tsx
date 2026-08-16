@@ -11,8 +11,8 @@ import {
  * AI confidence, as a ring.
  *
  * Built on HeroUI's ProgressCircle rather than the hand-rolled SVG this
- * replaces. The arithmetic was the same either way — circumference, dash
- * offset, a rotation to start at twelve o'clock — but the component version
+ * replaces. The arithmetic was the same either way, circumference, dash
+ * offset, a rotation to start at twelve o'clock, but the component version
  * carries the ARIA progressbar semantics and value announcements for free,
  * which the bare `role="img"` did not.
  *
@@ -20,7 +20,7 @@ import {
  * qualifies the call, it isn't the call. The label reads "AI conf." rather than
  * anything resembling a guarantee.
  *
- * The `feature` tone is ours, not HeroUI's — a white ring for the dark hero
+ * The `feature` tone is ours, not HeroUI's, a white ring for the dark hero
  * card, which no semantic colour in the system covers.
  */
 export function ConfidenceRing({

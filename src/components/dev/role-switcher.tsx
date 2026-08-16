@@ -10,7 +10,7 @@ import { signInAsDemo, signOut } from "@/lib/auth-actions";
 /**
  * Dev-only tier switcher.
  *
- * Every access state in this app is a database fact — a pass row, a suspension
+ * Every access state in this app is a database fact, a pass row, a suspension
  * flag, an account age. That makes them awkward to eyeball during development,
  * so this jumps between the seeded demo accounts. Rendered only when
  * NODE_ENV !== production; the server action refuses to run there regardless.
@@ -20,19 +20,19 @@ const TIERS = [
   {
     email: "pass@moonodds.test",
     label: "Pass holder",
-    detail: "Bought today's pass — sees every pick",
+    detail: "Bought today's pass, sees every pick",
     color: "success" as const,
   },
   {
     email: "new@moonodds.test",
     label: "First day",
-    detail: "Signed up today — 2 free picks",
+    detail: "Signed up today, 2 free picks",
     color: "accent" as const,
   },
   {
     email: "locked@moonodds.test",
     label: "Locked out",
-    detail: "Returning, no pass — sees nothing",
+    detail: "Returning, no pass, sees nothing",
     color: "warning" as const,
   },
   {

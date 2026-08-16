@@ -1,7 +1,7 @@
 -- How a user likes to read the board.
 --
 -- Lives on the profile rather than in localStorage alone so the choice follows
--- someone between devices — a table-first user is table-first on their phone
+-- someone between devices, a table-first user is table-first on their phone
 -- too. Signed-out visitors still get localStorage; there is nowhere else to put
 -- it for them.
 --

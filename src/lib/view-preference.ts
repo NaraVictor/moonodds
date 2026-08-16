@@ -43,7 +43,7 @@ function writeLocal(next: BoardView) {
   try {
     localStorage.setItem(STORAGE_KEY, next);
   } catch {
-    // Private mode — the profile write is the durable copy.
+    // Private mode, the profile write is the durable copy.
   }
   cache = next;
   for (const fn of listeners) fn();
@@ -65,7 +65,7 @@ function writeLocal(next: BoardView) {
  * looking at would be absurd. The server write follows in the background and
  * only decides what a *fresh* device sees.
  *
- * Storage is read through useSyncExternalStore rather than an effect — it is
+ * Storage is read through useSyncExternalStore rather than an effect, it is
  * genuinely an external store, and the effect version both tripped the
  * cascading-render rule and risked a hydration mismatch.
  */

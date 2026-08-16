@@ -10,7 +10,7 @@ const STORAGE_KEY = "moonodds.theme";
  * Light, dark or follow the system.
  *
  * The dark palette has existed in globals.css since the reskin but was
- * unreachable — layout.tsx hard-coded data-theme="light". This is the control
+ * unreachable, layout.tsx hard-coded data-theme="light". This is the control
  * that was missing, not new styling.
  *
  * Preference is per-device rather than on the profile: it's a property of the
@@ -63,7 +63,7 @@ export function useTheme() {
     try {
       localStorage.setItem(STORAGE_KEY, next);
     } catch {
-      // Private mode — the choice just won't survive the session.
+      // Private mode, the choice just won't survive the session.
     }
     applyTheme(next);
     for (const fn of listeners) fn();

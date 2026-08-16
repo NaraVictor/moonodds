@@ -70,7 +70,7 @@ function tally(map: Record<string, Bucket>, key: string, won: boolean) {
  * Analyse recently settled picks and propose weight changes.
  *
  * As in the original, this writes a report for a human to approve rather than
- * mutating the live config — unless selfTuning.autoApply is on.
+ * mutating the live config, unless selfTuning.autoApply is on.
  */
 export async function runRecalibration() {
   const db = createServiceClient();

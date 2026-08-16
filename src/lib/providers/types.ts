@@ -37,7 +37,7 @@ export type RawFixtureTeam = {
  * Crest and badge URLs.
  *
  * API-Football serves these from a public CDN at a path derived purely from the
- * entity id — no key, no request, no quota. Since our `external_id` columns
+ * entity id, no key, no request, no quota. Since our `external_id` columns
  * hold real API-Football ids, we can produce genuine artwork while the rest of
  * the pipeline is still mocked. That matters: the card design leans on crests,
  * and monograms everywhere make a finished layout look unfinished.
@@ -97,7 +97,7 @@ export interface FootballProvider {
   searchLeagues(query: string): Promise<RawLeague[]>;
   /** Catalogue lookup by name, for adding a team we don't track yet. */
   searchTeams(query: string): Promise<RawTeam[]>;
-  /** Every team in a league for a season — bulk import after adding a league. */
+  /** Every team in a league for a season, bulk import after adding a league. */
   fetchTeamsByLeague(leagueExternalId: number, season: number): Promise<RawTeam[]>;
 }
 

@@ -9,7 +9,7 @@
 -- The rule on editing: you may remove a leg only while the whole slip is still
 -- unsettled. Once any leg has a result, the slip is a record of what you
 -- actually followed, and quietly dropping the losing leg from it would turn
--- your own history into fiction. Deleting the slip outright stays allowed —
+-- your own history into fiction. Deleting the slip outright stays allowed,
 -- discarding a record is honest in a way that editing one is not.
 
 grant delete on slips to authenticated;
@@ -57,7 +57,7 @@ $$;
  * stored figure: repeated division on a rounded numeric drifts, and a slip
  * whose odds no longer match its own legs is worse than one you cannot edit.
  *
- * Removing the last leg removes the slip — an empty slip is not a thing.
+ * Removing the last leg removes the slip, an empty slip is not a thing.
  */
 create or replace function public.remove_slip_leg(p_leg_id uuid)
 returns jsonb

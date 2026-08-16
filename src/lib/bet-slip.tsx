@@ -14,7 +14,7 @@ import type { Pick } from "./types";
 /**
  * The bet slip.
  *
- * Lives client-side until confirmed — a slip in progress isn't worth a round
+ * Lives client-side until confirmed, a slip in progress isn't worth a round
  * trip, and losing it on a refresh is worse than the storage cost, so it
  * persists to localStorage keyed per day.
  *
@@ -47,7 +47,7 @@ const MAX_LEGS = 12;
  * The price for a leg.
  *
  * Comes from the pick payload, which reads odds_snapshots server-side. An
- * earlier version derived this as 1/confidence — that was wrong: model
+ * earlier version derived this as 1/confidence, that was wrong: model
  * confidence is not market probability, so a 97% call priced at 1.03 and an
  * accumulator of strong picks never cleared 1.10. The gap between our
  * confidence and the book's price is the edge; collapsing it erased the point.
@@ -64,7 +64,7 @@ export function legOdds(pick: Pick): number {
  * It used to be React state mirrored INTO storage by a pair of effects: one to
  * restore on mount, one to write on every change. That needed a `hydrated` flag
  * to stop the write effect clobbering storage before the read had run, and the
- * restore was a setState during an effect — a cascading render, and the thing
+ * restore was a setState during an effect, a cascading render, and the thing
  * the lint rule is right to complain about.
  *
  * Inverting it removes all three problems. Storage is the single source of
@@ -104,7 +104,7 @@ function write(next: SlipEntry[]) {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ day: today(), entries: next }));
   } catch {
-    // Private mode / quota — the slip just won't survive a refresh.
+    // Private mode / quota, the slip just won't survive a refresh.
   }
   for (const fn of listeners) fn();
 }
@@ -125,7 +125,7 @@ export function BetSlipProvider({ children }: { children: ReactNode }) {
    *
    * It used to, and that was the bug behind "the slip button never appears":
    * the sheet covered the screen the instant you added anything, and the FAB
-   * hides itself while the sheet is open — so the affordance was never seen.
+   * hides itself while the sheet is open, so the affordance was never seen.
    * Worse, it interrupted the browsing you were in the middle of. Feedback for
    * an add belongs on the counter, not in a takeover.
    */

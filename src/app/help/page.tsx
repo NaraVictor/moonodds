@@ -24,8 +24,8 @@ const FAQS: { q: string; a: React.ReactNode }[] = [
     q: "What do I get for free?",
     a: (
       <>
-        Two predictions a day, in full — the call, the confidence score and the
-        reasoning — without an account. They&rsquo;re drawn from the day&rsquo;s
+        Two predictions a day, in full: the call, the confidence score and the
+        reasoning, without an account. They&rsquo;re drawn from the day&rsquo;s
         three highest-confidence picks, so they&rsquo;re genuinely the ones
         we&rsquo;d lead with. Every settled prediction is also free to everyone,
         permanently.
@@ -37,7 +37,7 @@ const FAQS: { q: string; a: React.ReactNode }[] = [
     a: (
       <>
         Every prediction published that day, with full reasoning, for one day.
-        There is no subscription, no minimum term and nothing to cancel — a pass
+        There is no subscription, no minimum term and nothing to cancel. A pass
         covers a single day and then expires on its own.
       </>
     ),
@@ -48,7 +48,7 @@ const FAQS: { q: string; a: React.ReactNode }[] = [
       <>
         How strongly the model rates its own call, from 0 to 100. It is not a
         probability that the outcome occurs and it is not a guarantee. A 90 means
-        the model found unusually clear support in the data — it does not mean
+        the model found unusually clear support in the data, it does not mean
         nine times in ten.
       </>
     ),
@@ -58,7 +58,7 @@ const FAQS: { q: string; a: React.ReactNode }[] = [
     a: (
       <>
         Because you have used your free picks for the day. The fixture, teams,
-        kickoff, venue, form and head-to-head stay public — those are football
+        kickoff, venue, form and head-to-head stay public, those are football
         facts and not ours to hide. What&rsquo;s behind the pass is the call
         itself, its confidence and its reasoning.
       </>
@@ -81,7 +81,7 @@ const FAQS: { q: string; a: React.ReactNode }[] = [
     a: (
       <>
         A way to record which predictions you followed, so you can track how they
-        did as a group. MoonOdds does not take bets and holds no money — saving a
+        did as a group. MoonOdds does not take bets and holds no money, saving a
         slip places nothing anywhere. It is a notebook, not a bet.
       </>
     ),
@@ -96,7 +96,7 @@ const FAQS: { q: string; a: React.ReactNode }[] = [
           billing
         </Link>{" "}
         and we&rsquo;ll put it right. We can&rsquo;t refund a pass because the
-        predictions lost — that is the nature of the thing being sold, and any
+        predictions lost, that is the nature of the thing being sold, and any
         service promising otherwise is not being straight with you.
       </>
     ),
@@ -124,7 +124,7 @@ export default async function HelpPage() {
       <PageShell
         eyebrow="Help centre"
         title="How MoonOdds works."
-        intro="The questions we get asked most. If yours isn't here, write to us — the address is on the contact page."
+        intro="The questions we get asked most. If yours isn't here, write to us, the address is on the contact page."
       >
         <div className="divide-y divide-separator overflow-hidden rounded-[1.25rem] border border-border bg-surface">
           {FAQS.map(({ q, a }) => (

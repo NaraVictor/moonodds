@@ -1,12 +1,12 @@
 -- ============================================================================
--- MoonOdds — carry odds on the pick payload
+-- MoonOdds, carry odds on the pick payload
 --
 -- The bet slip needs a price per leg. Deriving one from the confidence score
 -- (1/p) was wrong and looked it: a 97%-confidence call became 1.03, and an
 -- accumulator of strong picks barely cleared 1.10.
 --
 -- Model confidence is not market probability. The engine can be far more
--- certain than the book — that gap IS the edge, and collapsing it to 1/p
+-- certain than the book, that gap IS the edge, and collapsing it to 1/p
 -- destroys exactly the number a slip exists to show.
 --
 -- odds_snapshots already carries a real price per prediction, so use it, and

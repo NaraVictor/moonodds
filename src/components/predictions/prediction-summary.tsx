@@ -21,7 +21,7 @@ import { confidencePercent, formatMarket, teamName } from "@/lib/format";
  * Structured after the match-details reference: a dark header carrying the
  * fixture, then centred comparison rows reading home-figure / label /
  * away-figure. Those rows show the season and head-to-head numbers we actually
- * hold rather than the in-play stats the reference used — we have no live feed
+ * hold rather than the in-play stats the reference used, we have no live feed
  * for shots or possession, and inventing rows for them would be decoration.
  *
  * Anything deeper belongs on the detail page, which this links to rather than
@@ -44,11 +44,11 @@ function CompareRow({
   return (
     <div className="grid grid-cols-[3rem_1fr_3rem] items-center gap-3 py-2.5">
       <span className="numeral text-left text-[15px] font-semibold">
-        {home == null ? "—" : format(home)}
+        {home == null ? "-" : format(home)}
       </span>
       <span className="text-center text-[12px] text-muted">{label}</span>
       <span className="numeral text-right text-[15px] font-semibold">
-        {away == null ? "—" : format(away)}
+        {away == null ? "-" : format(away)}
       </span>
     </div>
   );

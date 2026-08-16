@@ -11,12 +11,12 @@ import { teamShort } from "@/lib/format";
  *
  * The board answers "what should I look at today"; this answers "what already
  * happened". Live matches first because they're the only rows that change while
- * you watch, then the most recent results — which double as evidence, since a
+ * you watch, then the most recent results, which double as evidence, since a
  * visitor deciding whether to trust the engine can see calls landing and
  * missing in real time rather than taking a headline win rate on faith.
  *
  * Deliberately compact: crest, crest, score, outcome. No reasoning, no
- * confidence, nothing to read — it's a ticker, and a ticker that needs study
+ * confidence, nothing to read, it's a ticker, and a ticker that needs study
  * has failed.
  */
 

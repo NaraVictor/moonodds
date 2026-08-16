@@ -11,7 +11,7 @@ import { formatMarket, teamShort } from "@/lib/format";
 /**
  * Floating slip button + sheet.
  *
- * The FAB only appears once there's something in the slip — an empty affordance
+ * The FAB only appears once there's something in the slip, an empty affordance
  * following you around the page is noise. It sits above the mobile bottom nav.
  *
  * The counter re-keys on every change so it replays the bump animation. That
@@ -54,7 +54,7 @@ export function BetSlipFab() {
  *
  * The body used to live here behind an `if (!isOpen) return null`, which meant
  * it stayed mounted across opens and needed an effect to clear the "saved"
- * confirmation each time the sheet closed — a setState during an effect, and a
+ * confirmation each time the sheet closed, a setState during an effect, and a
  * cascading render to undo the previous one.
  *
  * Splitting it means the body mounts fresh on every open, so that state starts
@@ -79,7 +79,7 @@ function SlipSheetBody() {
    *
    * Checked when the sheet opens rather than on save, so a stale slip announces
    * itself before someone commits to the button and gets an error naming none
-   * of the offenders. While the check is in flight nothing is marked — assuming
+   * of the offenders. While the check is in flight nothing is marked, assuming
    * everything is dead until proven otherwise would flash the whole slip red.
    */
   const { data: liveIds } = useLivePredictionIds(entries.map((e) => e.pick.id));

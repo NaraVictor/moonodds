@@ -2,8 +2,8 @@
 --
 -- Backs /predictions/[id]. Same entitlement rule as the board: the fixture and
 -- its statistics are public football facts, the AI output is not. A viewer
--- without access gets a complete, genuinely useful match page — form, head to
--- head, season splits, recent meetings — with the call itself withheld.
+-- without access gets a complete, genuinely useful match page, form, head to
+-- head, season splits, recent meetings, with the call itself withheld.
 --
 -- Entitlement is recomputed here rather than trusted from the client. It has to
 -- reproduce the board's rule exactly, or a user could reach a locked pick's

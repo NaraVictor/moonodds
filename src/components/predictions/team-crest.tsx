@@ -5,7 +5,7 @@ import { useState } from "react";
 /**
  * Team crest.
  *
- * The references make logos substantially larger than dashboard icons — they
+ * The references make logos substantially larger than dashboard icons, they
  * are how you identify the match at a glance, so they get the space. When a
  * logo is missing we fall back to a monogram rather than a broken image or a
  * grey circle, so the card never looks unfinished.
