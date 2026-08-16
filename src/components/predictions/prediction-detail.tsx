@@ -172,9 +172,17 @@ export function PredictionDetail({ id }: { id: string }) {
 
       <MatchHeader pick={pick} />
 
+      {/*
+        Source order is desktop order: analysis on the left, the call in the
+        right rail. On a phone the grid collapses to one column and that order
+        buries the call under every analysis section, so the reader scrolls past
+        form, head-to-head and line-ups to reach the one thing the page is for.
+        The rail is reordered to sit directly under the match header instead,
+        and returns to the right-hand column at lg.
+      */}
       <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_22rem] lg:items-start">
         {/* ---------------------- analysis column ---------------------- */}
-        <div className="space-y-4">
+        <div className="order-2 space-y-4 lg:order-none">
           <Section
             title="Recent form"
             description="Each side's last five, oldest first."
@@ -322,7 +330,7 @@ export function PredictionDetail({ id }: { id: string }) {
         </div>
 
         {/* ---------------------- decision rail ---------------------- */}
-        <aside className="lg:sticky lg:top-20">
+        <aside className="order-1 lg:order-none lg:sticky lg:top-20">
           <SummaryRail pick={pick} settled={settled} />
         </aside>
       </div>
