@@ -305,6 +305,33 @@
     line-height: 1;
   }
 
+  /*
+   * A scrollbar you only notice when it matters.
+   *
+   * The Live Board is a fixed height with a variable number of matches in it,
+   * so the scrollbar is the only signal that there is more below the fold.
+   * Hiding it entirely would lose that; leaving it at platform default puts a
+   * heavy grey trough inside a rounded card. This keeps the thumb and drops
+   * the track.
+   */
+  .scroll-subtle {
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+  }
+  .scroll-subtle::-webkit-scrollbar {
+    width: 6px;
+  }
+  .scroll-subtle::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .scroll-subtle::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border-radius: 999px;
+  }
+  .scroll-subtle::-webkit-scrollbar-thumb:hover {
+    background: var(--muted);
+  }
+
   .label {
     font-size: 0.6875rem;
     font-weight: 600;

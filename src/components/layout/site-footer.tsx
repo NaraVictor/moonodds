@@ -21,6 +21,7 @@ const COLUMNS: { title: string; links: { href: string; label: string }[] }[] = [
     title: "Product",
     links: [
       { href: "/", label: "Today's board" },
+      { href: "/history", label: "Prediction history" },
       { href: "/slips", label: "My slips" },
       { href: "/profile", label: "Profile" },
     ],

@@ -2,14 +2,14 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, Receipt, User } from "@/components/ui/icons";
+import { Home, Receipt, User, BarChart3 } from "@/components/ui/icons";
 
 /**
  * Mobile bottom navigation.
  *
  * The primary use case is someone checking predictions on a phone, so the
- * three destinations that matter sit under the thumb. Desktop keeps the
- * horizontal nav in the header, this is hidden from `sm` up.
+ * destinations that matter sit under the thumb. Desktop keeps the horizontal
+ * nav in the header, this is hidden from `sm` up.
  *
  * Deliberately shallow: MoonOdds is about finding and judging predictions, so
  * there is nothing else competing for space down here.
@@ -21,6 +21,7 @@ import { Home, Receipt, User } from "@/components/ui/icons";
 
 const items = [
   { href: "/", label: "Predictions", Icon: Home },
+  { href: "/history", label: "History", Icon: BarChart3 },
   { href: "/slips", label: "Slips", Icon: Receipt },
   { href: "/profile", label: "Account", Icon: User },
 ];

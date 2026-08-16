@@ -30,8 +30,12 @@ export function HeroSlider({
   const go = (next: number) => setI(((next % count) + count) % count);
 
   return (
+    // No bottom margin: the grid wrapping this and the Live Board already
+    // carries one, and a margin here would make the slider's column taller than
+    // the card you can see, so the Live Board beside it stretches 32px past the
+    // slider's visible edge instead of sitting level with it.
     <section
-      className="mb-8 min-w-0"
+      className="flex h-full min-w-0 flex-col"
       aria-roledescription="carousel"
       aria-label="Top predictions today"
     >

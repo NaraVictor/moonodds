@@ -13,7 +13,7 @@ import {
 import { PredictionCard } from "@/components/predictions/prediction-card";
 import { PredictionSummary } from "@/components/predictions/prediction-summary";
 import { HeroSlider } from "./hero-slider";
-import { ActivityPanel } from "./activity-panel";
+import { LiveBoard } from "./live-board";
 import { PicksTable } from "./picks-table";
 import { EMPTY_FILTERS, FilterRail, type Filters } from "./filter-rail";
 import { LinkButton } from "@/components/ui/link-button";
@@ -281,7 +281,18 @@ export function PicksHome() {
               <div className="min-w-0 xl:col-span-2">
                 <HeroSlider picks={hero} onSummary={setSummary} />
               </div>
-              <ActivityPanel picks={all} excludeIds={hero.map((p) => p.id)} />
+              {/* The Live Board must not drive this row's height, or a busy
+                  evening stretches the row and the slider grows with it.
+                  min-h-0 lets the panel shrink but nothing stops it pushing
+                  the row taller, so at xl the panel is taken out of flow
+                  entirely: the wrapper stretches to whatever the slider sets,
+                  the panel fills it absolutely, and the list scrolls inside.
+                  Below xl the columns stack and it lays out normally. */}
+              <div className="relative min-w-0">
+                <div className="xl:absolute xl:inset-0">
+                  <LiveBoard picks={all} />
+                </div>
+              </div>
             </div>
           )}
 

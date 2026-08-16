@@ -13,6 +13,7 @@ import { signOut } from "@/lib/auth-actions";
 
 const NAV = [
   { href: "/", label: "Picks" },
+  { href: "/history", label: "History" },
   { href: "/slips", label: "My slips" },
   { href: "/profile", label: "Profile" },
 ];

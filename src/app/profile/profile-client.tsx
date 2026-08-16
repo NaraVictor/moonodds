@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { Toggle } from "@/components/ui/toggle";
 import { Alert } from "@/components/ui/alert";
 import { Bell, Mail, MessageSquare, ShieldCheck, Check, Sun, Moon, Monitor } from "@/components/ui/icons";
@@ -12,7 +13,7 @@ import {
   useUpdateNotificationPreferences,
   useUpdatePhone,
   useProfileStats,
-  useLeaguePerformance,
+  useMyLeaguePerformance,
 } from "@/lib/queries";
 import { formatPercent } from "@/lib/format";
 import { LinkButton } from "@/components/ui/link-button";
@@ -42,7 +43,7 @@ export function ProfileClient() {
   const updatePhone = useUpdatePhone();
   const { theme, choose: chooseTheme } = useTheme();
   const { data: stats } = useProfileStats();
-  const { data: leagues } = useLeaguePerformance();
+  const { data: leagues } = useMyLeaguePerformance();
 
   const [phone, setPhone] = useState<string | null>(null);
   const prefsRow = prefs as Record<string, boolean> | null;
@@ -199,11 +200,21 @@ export function ProfileClient() {
         {leagues && leagues.length > 0 && (
           <section className="overflow-hidden rounded-[1.75rem] border border-border bg-surface">
             <div className="px-6 pt-6">
-              <h2 className="text-[15px] font-semibold">Engine accuracy by league</h2>
+              <h2 className="text-[15px] font-semibold">
+                Accuracy in your leagues
+              </h2>
               <p className="mt-1 text-[13px] text-muted">
-                Where the model has actually been right. Leagues with fewer than
-                three settled calls are left out rather than shown at 100% off
-                one result.
+                How the model has done in the leagues you have actually backed,
+                not across the whole product. Add a slip in a new league and it
+                appears here.{" "}
+                <Link
+                  href="/history"
+                  className="underline underline-offset-2"
+                  style={{ color: "var(--link)" }}
+                >
+                  See the full record
+                </Link>
+                .
               </p>
             </div>
 
@@ -219,6 +230,11 @@ export function ProfileClient() {
                     <p className="truncate text-[11px] text-muted">{l.country}</p>
                   </div>
                   <span className="numeral flex-none text-[11px] text-muted">
+                    {l.yourLegs != null && l.yourLegs > 0 && (
+                      <span className="mr-2">
+                        {l.yourLegs} {l.yourLegs === 1 ? "leg" : "legs"}
+                      </span>
+                    )}
                     {l.wins}W&ndash;{l.losses}L
                   </span>
                   <span

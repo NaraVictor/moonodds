@@ -254,6 +254,8 @@ export type LeagueRecord = {
   losses: number;
   settled: number;
   accuracyRate: number;
+  /** Only on the personal view: how many of your own legs sat in this league. */
+  yourLegs?: number;
 };
 
 /** The signed-in user's own record. Null when signed out. */
@@ -278,6 +280,170 @@ export function useLeaguePerformance() {
       const { data, error } = await supabase.rpc("get_league_performance");
       if (error) throw error;
       return (data as LeagueRecord[]) ?? [];
+    },
+  });
+}
+
+/**
+ * The same accuracy, narrowed to leagues the caller has actually backed.
+ *
+ * On a personal page the whole-product table answered a question nobody asked:
+ * most of those leagues the reader has never touched. `yourLegs` says how many
+ * of their own legs sat in each one, which is what makes the row theirs.
+ */
+export function useMyLeaguePerformance() {
+  return useQuery({
+    queryKey: ["stats", "leagues", "mine"],
+    queryFn: async (): Promise<LeagueRecord[]> => {
+      const supabase = createClient();
+      const { data, error } = await supabase.rpc("get_my_league_performance");
+      if (error) throw error;
+      return (data as LeagueRecord[]) ?? [];
+    },
+  });
+}
+
+/* --------------------------- prediction history --------------------------- */
+
+export type HistoryFilters = {
+  league?: string | null;
+  market?: string | null;
+  outcome?: string | null;
+};
+
+export type HistoryPage = {
+  rows: Pick[];
+  total: number;
+  limit: number;
+  offset: number;
+  hasMore: boolean;
+};
+
+export type HistoryStats = {
+  settled: number;
+  won: number;
+  lost: number;
+  void: number;
+  winRate: number | null;
+  roi: number | null;
+  avgOdds: number | null;
+  avgConfidence: number | null;
+  bestMarket: string | null;
+  byMarket: {
+    market: string;
+    wins: number;
+    losses: number;
+    settled: number;
+    winRate: number;
+    roi: number;
+  }[];
+  byMonth: {
+    month: string;
+    wins: number;
+    losses: number;
+    settled: number;
+    winRate: number;
+  }[];
+};
+
+const HISTORY_PAGE_SIZE = 24;
+
+/** One page of settled calls. Public, and the point of the history page. */
+export function usePredictionHistory(page: number, filters: HistoryFilters) {
+  return useQuery({
+    queryKey: ["history", page, filters.league, filters.market, filters.outcome],
+    placeholderData: (prev) => prev,
+    queryFn: async (): Promise<HistoryPage> => {
+      const supabase = createClient();
+      const { data, error } = await supabase.rpc("get_prediction_history", {
+        p_limit: HISTORY_PAGE_SIZE,
+        p_offset: page * HISTORY_PAGE_SIZE,
+        p_league: filters.league ?? null,
+        p_market: filters.market ?? null,
+        p_outcome: filters.outcome ?? null,
+      });
+      if (error) throw error;
+      return data as HistoryPage;
+    },
+  });
+}
+
+export function useHistoryStats() {
+  return useQuery({
+    queryKey: ["history", "stats"],
+    queryFn: async (): Promise<HistoryStats> => {
+      const supabase = createClient();
+      const { data, error } = await supabase.rpc("get_history_stats");
+      if (error) throw error;
+      return data as HistoryStats;
+    },
+  });
+}
+
+export function useHistoryFacets() {
+  return useQuery({
+    queryKey: ["history", "facets"],
+    staleTime: 5 * 60_000,
+    queryFn: async (): Promise<{ leagues: string[]; markets: string[] }> => {
+      const supabase = createClient();
+      const { data, error } = await supabase.rpc("get_history_facets");
+      if (error) throw error;
+      return data as { leagues: string[]; markets: string[] };
+    },
+  });
+}
+
+/* -------------------------------- slips ---------------------------------- */
+
+export type SavedSlipLeg = {
+  id: string;
+  predictionId: string;
+  odds: number;
+  status: "pending" | "won" | "lost" | "void";
+  market: string;
+  predictedValue: string;
+  confidenceScore: number;
+  kickoff: string;
+  fixtureStatus: "scheduled" | "live" | "finished";
+  homeGoals: number | null;
+  awayGoals: number | null;
+  homeTeam: { name: string; shortName: string | null; logo: string | null };
+  awayTeam: { name: string; shortName: string | null; logo: string | null };
+  league: { name: string; country: string; logo: string | null };
+};
+
+export type SlipRecord = {
+  id: string;
+  slipType: "single" | "accumulator";
+  status: "open" | "confirmed" | "won" | "lost" | "partial" | "void";
+  combinedOdds: number;
+  legCount: number;
+  confirmedAt: string;
+  settledAt: string | null;
+  legs: SavedSlipLeg[];
+};
+
+export type SlipStats = {
+  settled: number;
+  won: number;
+  lost: number;
+  void: number;
+  open: number;
+  winRate: number | null;
+  roi: number | null;
+  bestWin: number | null;
+  avgLegs: number | null;
+};
+
+/** Settled-slip performance. Open slips have no outcome and are excluded. */
+export function useSlipStats() {
+  return useQuery({
+    queryKey: ["slips", "stats"],
+    queryFn: async (): Promise<SlipStats> => {
+      const supabase = createClient();
+      const { data, error } = await supabase.rpc("get_my_slip_stats");
+      if (error) throw error;
+      return data as SlipStats;
     },
   });
 }
@@ -341,17 +507,21 @@ export function useRemoveSlipLeg() {
   });
 }
 
+/**
+ * Slips, with each leg's fixture attached.
+ *
+ * Was a plain select of slips + slip_legs, which carry a prediction_id and
+ * nothing else, so a leg could only ever render as the words "View prediction".
+ * The RPC joins the fixture through so a leg reads as the match it is about.
+ */
 export function useSlips() {
   return useQuery({
     queryKey: keys.slips,
-    queryFn: async () => {
+    queryFn: async (): Promise<SlipRecord[]> => {
       const supabase = createClient();
-      const { data, error } = await supabase
-        .from("slips")
-        .select("*, slip_legs(*)")
-        .order("confirmed_at", { ascending: false });
+      const { data, error } = await supabase.rpc("get_my_slips");
       if (error) throw error;
-      return data ?? [];
+      return (data as SlipRecord[]) ?? [];
     },
   });
 }
