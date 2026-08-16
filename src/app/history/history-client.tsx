@@ -78,11 +78,22 @@ function StatsPanel() {
   }
   if (!stats || stats.settled === 0) return null;
 
-  const tiles = [
+  const tiles: {
+    label: string;
+    value: string;
+    ink?: string;
+    note?: string | null;
+  }[] = [
     {
       label: "Win rate",
       value: stats.winRate == null ? "-" : formatPercent(stats.winRate),
       ink: stats.winRate != null && stats.winRate >= 0.5 ? "var(--success)" : undefined,
+      // A point estimate on a young record reads as a promise. The interval is
+      // what turns it back into evidence.
+      note:
+        stats.winRateInterval?.low != null && stats.winRateInterval?.high != null
+          ? `${formatPercent(stats.winRateInterval.low, 0)} to ${formatPercent(stats.winRateInterval.high, 0)}`
+          : null,
     },
     {
       label: "Return",
@@ -117,9 +128,72 @@ function StatsPanel() {
               {t.value}
             </dd>
             <dt className="label mt-1.5">{t.label}</dt>
+            {t.note && (
+              <p className="numeral mt-1 text-[11px] text-muted">{t.note}</p>
+            )}
           </div>
         ))}
       </dl>
+
+      {stats.winRateInterval?.low != null && (
+        <p className="mt-3 text-[11px] leading-relaxed text-muted">
+          The range under the win rate is the 95% confidence interval on{" "}
+          <span className="numeral">{stats.settled}</span> settled calls. It is
+          the honest width of the claim: with this much evidence the true rate
+          is very likely somewhere in that band, not exactly the headline
+          figure. It narrows as the record grows.
+        </p>
+      )}
+
+      {stats.calibration?.length > 0 && (
+        <div className="mt-3 rounded-[1.25rem] border border-border bg-surface p-5">
+          <h2 className="text-[13px] font-semibold">Is the confidence honest?</h2>
+          <p className="mt-1 text-[12px] leading-relaxed text-muted">
+            Each band compares what the engine claimed against what actually
+            landed. A well-calibrated model tracks the diagonal: a 90% call
+            should win about nine times in ten.
+          </p>
+
+          <ul className="mt-4 space-y-3">
+            {stats.calibration.map((c) => {
+              const gap = c.actualRate - c.impliedRate;
+              return (
+                <li key={c.band} className="flex items-center gap-3">
+                  <span className="numeral w-14 flex-none text-[12px]">
+                    {c.band}
+                  </span>
+                  <span className="relative h-2 flex-1 overflow-hidden rounded-full bg-surface-secondary">
+                    <span
+                      className="absolute inset-y-0 left-0 rounded-full opacity-40"
+                      style={{
+                        width: `${Math.round(c.impliedRate * 100)}%`,
+                        background: "var(--muted)",
+                      }}
+                    />
+                    <span
+                      className="absolute inset-y-0 left-0 rounded-full"
+                      style={{
+                        width: `${Math.round(c.actualRate * 100)}%`,
+                        background:
+                          gap >= -0.05 ? "var(--success)" : "var(--danger)",
+                      }}
+                    />
+                  </span>
+                  <span className="numeral w-24 flex-none text-right text-[11px] text-muted">
+                    said {formatPercent(c.impliedRate, 0)}
+                  </span>
+                  <span className="numeral w-20 flex-none text-right text-[12px] font-semibold">
+                    got {formatPercent(c.actualRate, 0)}
+                  </span>
+                  <span className="numeral w-10 flex-none text-right text-[11px] text-muted">
+                    {c.settled}
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
 
       {stats.byMarket.length > 0 && (
         <div className="mt-3 rounded-[1.25rem] border border-border bg-surface p-5">

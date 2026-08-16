@@ -325,10 +325,17 @@ export type HistoryStats = {
   lost: number;
   void: number;
   winRate: number | null;
+  winRateInterval: { low: number | null; high: number | null };
   roi: number | null;
   avgOdds: number | null;
   avgConfidence: number | null;
   bestMarket: string | null;
+  calibration: {
+    band: string;
+    settled: number;
+    actualRate: number;
+    impliedRate: number;
+  }[];
   byMarket: {
     market: string;
     wins: number;
@@ -620,5 +627,69 @@ export function useConfirmSlip() {
       return json;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: keys.slips }),
+  });
+}
+
+/* -------------------------- player protection --------------------------- */
+
+export type PlayLimits = {
+  excludedUntil: string | null;
+  isExcluded: boolean;
+  monthlyCapUsd: number | null;
+  realityCheckMinutes: number | null;
+  spentThisMonthUsd: number;
+};
+
+export function usePlayLimits() {
+  return useQuery({
+    queryKey: ["play-limits"],
+    queryFn: async (): Promise<PlayLimits> => {
+      const supabase = createClient();
+      const { data, error } = await supabase.rpc("get_play_limits");
+      if (error) throw error;
+      return data as PlayLimits;
+    },
+  });
+}
+
+export function useSetPlayLimits() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (v: {
+      monthlyCapUsd: number | null;
+      realityCheckMinutes: number | null;
+    }) => {
+      const supabase = createClient();
+      const { error } = await supabase.rpc("set_play_limits", {
+        p_monthly_cap_usd: v.monthlyCapUsd,
+        p_reality_check_minutes: v.realityCheckMinutes,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["play-limits"] });
+      qc.invalidateQueries({ queryKey: keys.access });
+    },
+  });
+}
+
+/**
+ * Self-exclusion.
+ *
+ * Extending works; shortening is refused server-side. The whole point of the
+ * control is that the person who set it cannot undo it in the moment they most
+ * want to, so the error the server returns is the feature working.
+ */
+export function useSelfExclude() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (days: number) => {
+      const supabase = createClient();
+      const { error } = await supabase.rpc("set_self_exclusion", { p_days: days });
+      if (error) throw new Error(error.message);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries();
+    },
   });
 }

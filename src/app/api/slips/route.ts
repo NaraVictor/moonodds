@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { enforceRateLimit } from "@/lib/rate-limit";
 import { z } from "zod";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 
@@ -18,6 +19,14 @@ const Body = z.object({
  * leaves an orphaned slip with no legs and a wrong combined odds figure.
  */
 export async function POST(request: Request) {
+  const limited = enforceRateLimit(request, {
+    scope: "slip-create",
+    limit: 30,
+    windowSeconds: 60,
+    message: "You're saving slips very quickly. Give it a moment.",
+  });
+  if (limited) return limited;
+
   const supabase = await createClient();
   const {
     data: { user },

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { enforceRateLimit } from "@/lib/rate-limit";
 import { z } from "zod";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { getProviders } from "@/lib/providers";
@@ -6,9 +7,9 @@ import {
   EXTRA_PICK_GAMES_PER_LEAGUE,
   extraPicksPriceUsd,
   getUsdToGhsRate,
-  paymentAmountMatches,
   usdToPesewas,
 } from "@/lib/pricing";
+import { settlePayment } from "@/lib/payments";
 
 /**
  * Extra league picks, a pass-holder perk.
@@ -48,6 +49,14 @@ async function selectFixtures(
 }
 
 export async function POST(request: Request) {
+  const limited = enforceRateLimit(request, {
+    scope: "checkout-extra",
+    limit: 10,
+    windowSeconds: 10 * 60,
+    message: "Too many checkout attempts. Wait a few minutes and try again.",
+  });
+  if (limited) return limited;
+
   const supabase = await createClient();
   const {
     data: { user },
@@ -81,7 +90,42 @@ export async function POST(request: Request) {
     );
   }
 
-  const priceUsd = extraPicksPriceUsd(fixtureIds.length);
+  // Don't sell the same fixtures twice. The day pass has always had this check
+  // and this route did not, so a double-tap on a slow connection charged twice
+  // and unlocked nothing the second time.
+  const { data: owned } = await db
+    .from("extra_pick_orders")
+    .select("fixture_ids")
+    .eq("user_id", user.id)
+    .eq("date_key", new Date().toISOString().slice(0, 10))
+    .eq("status", "active");
+
+  const alreadyOwned = new Set(
+    (owned ?? []).flatMap((o) => (o.fixture_ids ?? []) as string[]),
+  );
+  const fresh = fixtureIds.filter((id) => !alreadyOwned.has(id));
+
+  if (!fresh.length) {
+    return NextResponse.json(
+      {
+        alreadyActive: true,
+        message: "You've already unlocked every game in those leagues today.",
+      },
+      { status: 200 },
+    );
+  }
+
+  const priceUsd = extraPicksPriceUsd(fresh.length);
+  const { data: gate } = await supabase.rpc("can_purchase", {
+    p_amount_usd: priceUsd,
+  });
+  if (!(gate as { allowed?: boolean })?.allowed) {
+    return NextResponse.json(
+      { error: (gate as { reason?: string })?.reason ?? "This purchase isn't available." },
+      { status: 403 },
+    );
+  }
+
   const rate = await getUsdToGhsRate();
   const amountMinor = usdToPesewas(priceUsd, rate);
   const today = new Date().toISOString().slice(0, 10);
@@ -95,7 +139,7 @@ export async function POST(request: Request) {
     currency: "GHS",
     amount_usd: priceUsd,
     status: "pending",
-    metadata: { rate, leagueIds: parsed.data.leagueIds, fixtureIds },
+    metadata: { rate, leagueIds: parsed.data.leagueIds, fixtureIds: fresh },
   });
 
   if (payErr) {
@@ -112,7 +156,7 @@ export async function POST(request: Request) {
     metadata: { purpose: "extra_picks", dateKey: today, priceUsd },
   });
 
-  return NextResponse.json({ ...init, numGames: fixtureIds.length, priceUsd });
+  return NextResponse.json({ ...init, numGames: fresh.length, priceUsd });
 }
 
 const Verify = z.object({ reference: z.string().min(8) });
@@ -132,65 +176,14 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: "Missing reference." }, { status: 400 });
   }
 
-  const db = createServiceClient();
+  const result = await settlePayment(parsed.data.reference, user.id);
 
-  // The reference must be one we issued to THIS user.
-  const { data: payment } = await db
-    .from("payments")
-    .select("*")
-    .eq("reference", parsed.data.reference)
-    .eq("user_id", user.id)
-    .eq("purpose", "extra_picks")
-    .maybeSingle();
-
-  if (!payment) {
-    return NextResponse.json(
-      { error: "That payment reference isn't yours." },
-      { status: 403 },
-    );
+  if (!result.ok) {
+    return NextResponse.json({ error: result.reason }, { status: result.status });
   }
 
-  const { payments, mocked } = getProviders();
-  const result = await payments.verify(parsed.data.reference);
-
-  if (result.status !== "success") {
-    return NextResponse.json({ error: "That payment hasn't completed." }, { status: 402 });
-  }
-
-  // This check was absent entirely, while the day pass beside it had one. Any
-  // settled transaction against a reference we issued unlocked the picks,
-  // whatever it was actually worth.
-  if (
-    !mocked &&
-    !paymentAmountMatches(
-      { amountMinor: payment.amount_minor, currency: payment.currency },
-      result,
-    )
-  ) {
-    console.error(
-      `[checkout/extra-picks] amount mismatch on ${payment.reference}: charged ${payment.amount_minor} ${payment.currency}, settled ${result.amountMinor} ${result.currency}`,
-    );
-    return NextResponse.json(
-      { error: "The amount paid didn't match the price quoted." },
-      { status: 402 },
-    );
-  }
-
-  const meta = payment.metadata as { leagueIds: string[]; fixtureIds: string[] };
-  const { data: orderId, error } = await db.rpc("activate_extra_picks", {
-    p_user_id: user.id,
-    p_reference: parsed.data.reference,
-    p_league_ids: meta.leagueIds,
-    p_fixture_ids: meta.fixtureIds,
+  return NextResponse.json({
+    activated: true,
+    alreadyActive: result.alreadyActive,
   });
-
-  if (error) {
-    console.error("[checkout/extra-picks] activate:", error);
-    return NextResponse.json(
-      { error: "Payment went through but the picks didn't unlock. Contact support." },
-      { status: 500 },
-    );
-  }
-
-  return NextResponse.json({ activated: true, orderId });
 }

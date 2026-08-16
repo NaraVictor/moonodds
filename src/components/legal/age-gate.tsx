@@ -12,7 +12,8 @@ import { ShieldAlert } from "@/components/ui/icons";
  *
  * Deliberately not dismissible, and deliberately not tied to an account:
  * the person who needs stopping is the one who never signs in. Confirmation is
- * per-device in localStorage, which is the honest limit of what a client-side
+ * For a SIGNED-OUT visitor this is all we can do, and it is per-device in
+ * localStorage, which is the honest limit of what a client-side
  * gate can claim, it records that the question was asked and answered, not
  * that the answer was true.
  *

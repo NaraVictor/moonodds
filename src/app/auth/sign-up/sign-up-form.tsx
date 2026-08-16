@@ -64,6 +64,23 @@ export function SignUpForm() {
         />
       </div>
 
+      <div className="space-y-1.5">
+        <label htmlFor="dateOfBirth" className="text-sm font-medium">
+          Date of birth
+        </label>
+        <input
+          id="dateOfBirth"
+          name="dateOfBirth"
+          type="date"
+          required
+          autoComplete="bday"
+          className="w-full rounded-xl border border-field-border bg-field px-3.5 py-2.5 text-sm text-field-foreground outline-none focus-visible:ring-2 focus-visible:ring-focus"
+        />
+        <p className="text-xs text-muted">
+          MoonOdds is for over-18s. We store this to check that and nothing else.
+        </p>
+      </div>
+
       <Button
         type="submit"
         fullWidth

@@ -187,6 +187,24 @@ export async function POST(request: Request) {
   const db = createServiceClient();
   const actor = guard.user.email ?? guard.user.id;
 
+  /**
+   * Every Office action is written to an append-only log before it runs.
+   *
+   * Before this, only prediction overrides recorded who did them: comping a
+   * pass, deleting an account, promoting a config and rewriting the system
+   * prompt all left nothing behind. Logged up front rather than on success,
+   * because an action that failed halfway is exactly the one you want to find
+   * afterwards.
+   */
+  await db.rpc("record_admin_action", {
+    p_actor_id: guard.user.id,
+    p_actor_email: guard.user.email ?? null,
+    p_action: body.action,
+    p_target_type: targetTypeOf(body.action),
+    p_target_id: targetIdOf(body),
+    p_detail: redactForAudit(body),
+  });
+
   try {
     switch (body.action) {
       case "fetchFixtures":
@@ -671,4 +689,50 @@ export async function POST(request: Request) {
       { status: 500 },
     );
   }
+}
+
+
+/* ------------------------------ audit helpers ------------------------------ */
+
+/** What the action acts on, for grouping the log by subject. */
+function targetTypeOf(action: string): string {
+  if (action.endsWith("User") || action === "grantPass" || action === "revokePass") {
+    return "user";
+  }
+  if (action.includes("Config") || action.includes("Weights") || action.includes("Prompt")) {
+    return "engine_config";
+  }
+  if (action.includes("Prediction") || action === "gradeFixture") return "prediction";
+  if (action.includes("Report")) return "tuning_report";
+  if (action.includes("League") || action.includes("Team")) return "catalog";
+  return "other";
+}
+
+function targetIdOf(body: Record<string, unknown>): string | null {
+  for (const key of ["userId", "configId", "predictionId", "fixtureId", "reportId", "leagueId", "teamId"]) {
+    const v = body[key];
+    if (typeof v === "string") return v;
+  }
+  return null;
+}
+
+/**
+ * The action's payload, minus anything that should not be duplicated into a log.
+ *
+ * The system prompt is the obvious one: writing every draft of it into an
+ * append-only table would copy the product's core IP into a second place for no
+ * investigative benefit. The fact that it changed, and who changed it, is the
+ * part worth keeping.
+ */
+function redactForAudit(body: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(body)) {
+    if (k === "action") continue;
+    if (k === "systemPrompt" || k === "code") {
+      out[k] = typeof v === "string" ? `[redacted, ${v.length} chars]` : "[redacted]";
+      continue;
+    }
+    out[k] = v;
+  }
+  return out;
 }

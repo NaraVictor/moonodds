@@ -363,11 +363,30 @@ ${briefs.join("\n")}`;
   const qualifying = analysed.filter((p) => p.confidenceScore >= minConfidence);
 
   if (!qualifying.length) {
+    // The Terms promise a refund for a day we fail to publish, so a zero-pick
+    // run is a contractual event, not just an empty board. Nothing detected it
+    // before: the run returned quietly and passes kept selling for a day that
+    // would never have a board.
+    await db.from("jobs").insert({
+      kind: "engine_published_nothing",
+      payload: {
+        date: now.toISOString().slice(0, 10),
+        considered: picks.length,
+        noBetZone: picks.length - analysed.length,
+        floor: minConfidence,
+      },
+    });
+
+    console.error(
+      `[engine] published NOTHING for ${now.toISOString().slice(0, 10)}: ${picks.length} considered, none cleared ${minConfidence}`,
+    );
+
     return {
       generated: 0,
       considered: picks.length,
       noBetZone: picks.length - analysed.length,
       note: "none cleared the floor",
+      alerted: true,
     };
   }
 
@@ -679,6 +698,31 @@ async function handleJob(
       }
       if (pref.sms_enabled && profile?.phone) {
         await messaging.sendSms({ to: profile.phone, message: `MoonOdds: ${line}` });
+      }
+      return;
+    }
+
+    case "engine_published_nothing": {
+      // Goes to the operators, not to customers. A quiet day is our problem to
+      // investigate before it becomes a refund conversation.
+      const p = job.payload as {
+        date: string; considered: number; floor: number;
+      };
+      const { data: admins } = await db
+        .from("profiles")
+        .select("email")
+        .eq("is_super_admin", true);
+
+      for (const a of admins ?? []) {
+        if (!a.email) continue;
+        await messaging.sendEmail({
+          to: a.email,
+          subject: `No predictions published for ${p.date}`,
+          html:
+            `<p>The engine ran and published nothing for ${p.date}.</p>` +
+            `<p>${p.considered} fixtures considered, none cleared the ${p.floor} floor.</p>` +
+            `<p>Passes sold for this day may be refundable under the Terms.</p>`,
+        });
       }
       return;
     }

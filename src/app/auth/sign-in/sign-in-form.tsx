@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
+import Link from "next/link";
 import { Button } from "@heroui/react/button";
 import { Alert } from "@heroui/react/alert";
 import { signIn } from "@/lib/auth-actions";
@@ -32,9 +33,18 @@ export function SignInForm() {
       </div>
 
       <div className="space-y-1.5">
-        <label htmlFor="password" className="text-sm font-medium">
-          Password
-        </label>
+        <div className="flex items-baseline justify-between gap-3">
+          <label htmlFor="password" className="text-sm font-medium">
+            Password
+          </label>
+          <Link
+            href="/auth/forgot"
+            className="text-[12px] font-medium underline underline-offset-2"
+            style={{ color: "var(--link)" }}
+          >
+            Forgot it?
+          </Link>
+        </div>
         <input
           id="password"
           name="password"

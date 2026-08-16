@@ -1,0 +1,109 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Everything that needs no database. Fast, and the gate most changes hit.
+  static:
+    name: Types, lint, unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Unit tests
+        run: pnpm test
+
+      # The prompt lives in TypeScript and is injected into seed.sql. If the two
+      # drift, the app shows one prompt and the engine runs the other.
+      - name: Engine prompt is in sync
+        run: pnpm engine:check
+
+      - name: Build
+        run: pnpm build
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder
+
+  # The security suite runs against a real database as a real client, which is
+  # the only way it can prove RLS actually holds. Worth the extra minutes.
+  security:
+    name: Security suite
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Start Supabase
+        run: |
+          supabase start
+          # The local keys are deterministic, but reading them back beats
+          # hardcoding a value that changes the day the CLI regenerates them.
+          supabase status -o env | sed 's/^/SUPABASE_/' >> "$GITHUB_ENV"
+
+      # Two of the checks assert on HTTP route guards, so the app has to be up.
+      - name: Build and start the app
+        run: |
+          pnpm build
+          pnpm start &
+          for i in $(seq 1 60); do
+            curl -sf http://localhost:3100/ >/dev/null && break
+            sleep 2
+          done
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: http://127.0.0.1:54321
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ env.SUPABASE_ANON_KEY }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ env.SUPABASE_SERVICE_ROLE_KEY }}
+          CRON_SECRET: ci-cron-secret
+          MOCK_PROVIDERS: "true"
+          DEV_BYPASS_AUTH: "false"
+          NEXT_PUBLIC_DEV_BYPASS_AUTH: "false"
+
+      - name: Verify security
+        run: pnpm verify:security
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: http://127.0.0.1:54321
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ env.SUPABASE_ANON_KEY }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ env.SUPABASE_SERVICE_ROLE_KEY }}
+          CRON_SECRET: ci-cron-secret
+          # The suite asserts on the HTTP route guards too, so the bypass has to
+          # be off or two checks fail for a reason that is not a regression.
+          DEV_BYPASS_AUTH: "false"
+          NEXT_PUBLIC_DEV_BYPASS_AUTH: "false"
+
+      - name: Supabase logs on failure
+        if: failure()
+        run: supabase status || true

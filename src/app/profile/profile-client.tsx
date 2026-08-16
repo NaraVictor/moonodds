@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Toggle } from "@/components/ui/toggle";
 import { Alert } from "@/components/ui/alert";
 import { Bell, Mail, MessageSquare, ShieldCheck, Check, Sun, Moon, Monitor } from "@/components/ui/icons";
@@ -14,6 +15,9 @@ import {
   useUpdatePhone,
   useProfileStats,
   useMyLeaguePerformance,
+  usePlayLimits,
+  useSetPlayLimits,
+  useSelfExclude,
 } from "@/lib/queries";
 import { formatPercent } from "@/lib/format";
 import { LinkButton } from "@/components/ui/link-button";
@@ -256,6 +260,12 @@ export function ProfileClient() {
           </section>
         )}
 
+        {/* --------------------- staying in control --------------------- */}
+        <PlayControls />
+
+        {/* --------------------- your data --------------------- */}
+        <DataRights />
+
         {/* --------------------- channels --------------------- */}
         <section className="rounded-[1.75rem] border border-border bg-surface p-6">
           <h2 className="text-[15px] font-semibold">How we reach you</h2>
@@ -390,5 +400,272 @@ export function ProfileClient() {
         </section>
       </div>
     </main>
+  );
+}
+
+
+/**
+ * Staying in control.
+ *
+ * The product sells betting analysis, so these are not a settings nicety, they
+ * are the tools a person needs to bound their own use of it. A spend cap is
+ * checked before any charge; a self-exclusion blocks access outright, including
+ * on days already paid for.
+ */
+function PlayControls() {
+  const { data: limits } = usePlayLimits();
+  const setLimits = useSetPlayLimits();
+  const exclude = useSelfExclude();
+  const [cap, setCap] = useState<string | null>(null);
+  const [confirming, setConfirming] = useState<{ days: number; until: Date } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const capValue = cap ?? (limits?.monthlyCapUsd?.toString() ?? "");
+
+  if (limits?.isExcluded) {
+    return (
+      <section className="rounded-[1.75rem] border border-border bg-surface p-6">
+        <h2 className="text-[15px] font-semibold">You are self-excluded</h2>
+        <p className="mt-2 text-[13px] leading-relaxed text-muted">
+          Predictions are closed to you until{" "}
+          <span className="font-semibold text-foreground">
+            {new Date(limits.excludedUntil!).toLocaleDateString(undefined, {
+              day: "numeric",
+              month: "long",
+              year: "numeric",
+            })}
+          </span>
+          . This cannot be shortened from here, which is the point of it. If you
+          need help before then,{" "}
+          <a
+            href="https://www.begambleaware.org"
+            target="_blank"
+            rel="noreferrer noopener"
+            className="underline underline-offset-2"
+            style={{ color: "var(--link)" }}
+          >
+            BeGambleAware
+          </a>{" "}
+          is independent and free.
+        </p>
+      </section>
+    );
+  }
+
+  return (
+    <section className="rounded-[1.75rem] border border-border bg-surface p-6">
+      <h2 className="text-[15px] font-semibold">Staying in control</h2>
+      <p className="mt-1 text-[13px] text-muted">
+        Limits you set here are enforced by us, not by you.
+      </p>
+
+      {error && (
+        <Alert status="danger" className="mt-4">
+          {error}
+        </Alert>
+      )}
+
+      <div className="mt-5 space-y-1.5">
+        <label htmlFor="cap" className="text-sm font-medium">
+          Monthly spend limit
+        </label>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-sm text-muted">$</span>
+          <input
+            id="cap"
+            type="number"
+            min="1"
+            step="1"
+            inputMode="numeric"
+            value={capValue}
+            placeholder="No limit"
+            onChange={(e) => setCap(e.target.value)}
+            className="h-11 w-32 rounded-xl border border-field-border bg-field px-3 font-mono text-sm"
+          />
+          <button
+            type="button"
+            disabled={setLimits.isPending}
+            onClick={() =>
+              setLimits.mutate({
+                monthlyCapUsd: capValue === "" ? null : Number(capValue),
+                realityCheckMinutes: limits?.realityCheckMinutes ?? null,
+              })
+            }
+            className="press h-11 rounded-full bg-accent px-5 text-[13px] font-semibold text-accent-foreground disabled:opacity-40"
+          >
+            Save limit
+          </button>
+        </div>
+        <p className="text-[12px] text-muted">
+          Spent in the last 30 days:{" "}
+          <span className="numeral font-semibold text-foreground">
+            ${limits?.spentThisMonthUsd ?? 0}
+          </span>
+          . A purchase that would cross your limit is refused at checkout.
+        </p>
+      </div>
+
+      <div className="mt-6 border-t border-separator pt-5">
+        <p className="text-sm font-medium">Take a break</p>
+        <p className="mt-1 text-[12px] leading-relaxed text-muted">
+          Closes predictions to you for the period you choose, including days
+          you have already paid for. It cannot be undone early.
+        </p>
+
+        <div className="mt-3 flex flex-wrap gap-2">
+          {[7, 30, 90, 182].map((days) => (
+            <button
+              key={days}
+              type="button"
+              onClick={() => {
+                setError(null);
+                setConfirming({
+                  days,
+                  until: new Date(Date.now() + days * 86400000),
+                });
+              }}
+              className={`press rounded-full border px-4 py-2 text-[13px] font-semibold transition-colors ${
+                confirming?.days === days
+                  ? "border-transparent"
+                  : "border-border hover:bg-surface-secondary"
+              }`}
+              style={
+                confirming?.days === days
+                  ? { background: "var(--lost-wash)", color: "var(--lost-ink)" }
+                  : undefined
+              }
+            >
+              {days < 30 ? `${days} days` : `${Math.round(days / 30)} months`}
+            </button>
+          ))}
+        </div>
+
+        {confirming !== null && (
+          <div className="mt-4 rounded-2xl border border-border bg-surface-secondary p-4">
+            <p className="text-[13px] leading-relaxed">
+              This closes predictions to you until{" "}
+              <span className="font-semibold">
+                {confirming.until.toLocaleDateString(undefined, {
+                  day: "numeric",
+                  month: "long",
+                  year: "numeric",
+                })}
+              </span>
+              . We will not reopen it early, and any pass you hold will not be
+              refunded.
+            </p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button
+                type="button"
+                disabled={exclude.isPending}
+                onClick={() =>
+                  exclude.mutate(confirming.days, {
+                    onError: (e) =>
+                      setError(e instanceof Error ? e.message : "Could not set that."),
+                    onSuccess: () => setConfirming(null),
+                  })
+                }
+                className="press rounded-full px-4 py-2 text-[13px] font-semibold disabled:opacity-40"
+                style={{ background: "var(--lost-wash)", color: "var(--lost-ink)" }}
+              >
+                Yes, close my access
+              </button>
+              <button
+                type="button"
+                onClick={() => setConfirming(null)}
+                className="press rounded-full px-4 py-2 text-[13px] font-semibold text-muted"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+/** Export and deletion. Rights rather than features, so no upsell around them. */
+function DataRights() {
+  const router = useRouter();
+  const [confirming, setConfirming] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function remove() {
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/account", { method: "DELETE" });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error);
+      // The session is gone with the account, so refresh the server components
+      // rather than leaving a signed-in shell pointing at a deleted user.
+      router.replace("/");
+      router.refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not delete the account.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className="rounded-[1.75rem] border border-border bg-surface p-6">
+      <h2 className="text-[15px] font-semibold">Your data</h2>
+      <p className="mt-1 text-[13px] text-muted">
+        Take a copy whenever you like, or close the account for good.
+      </p>
+
+      {error && (
+        <Alert status="danger" className="mt-4">
+          {error}
+        </Alert>
+      )}
+
+      <div className="mt-5 flex flex-wrap gap-2">
+        <a
+          href="/api/account"
+          className="press inline-flex h-11 items-center rounded-full border border-border px-5 text-[13px] font-semibold hover:bg-surface-secondary"
+        >
+          Download my data
+        </a>
+
+        {confirming ? (
+          <>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={remove}
+              className="press h-11 rounded-full px-5 text-[13px] font-semibold disabled:opacity-40"
+              style={{ background: "var(--lost-wash)", color: "var(--lost-ink)" }}
+            >
+              {busy ? "Deleting…" : "Really delete everything"}
+            </button>
+            <button
+              type="button"
+              onClick={() => setConfirming(false)}
+              className="press h-11 rounded-full px-5 text-[13px] font-semibold text-muted"
+            >
+              Cancel
+            </button>
+          </>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setConfirming(true)}
+            className="press h-11 rounded-full border border-border px-5 text-[13px] font-semibold text-muted hover:text-foreground"
+          >
+            Delete my account
+          </button>
+        )}
+      </div>
+
+      <p className="mt-3 text-[12px] leading-relaxed text-muted">
+        Deleting removes your profile, slips and preferences immediately. Payment
+        records are kept but unlinked from you: they are financial records with
+        their own retention rules.
+      </p>
+    </section>
   );
 }

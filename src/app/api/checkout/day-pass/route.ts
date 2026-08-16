@@ -1,19 +1,18 @@
 import { NextResponse } from "next/server";
+import { enforceRateLimit } from "@/lib/rate-limit";
 import { z } from "zod";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { getProviders } from "@/lib/providers";
-import {
-  PASS_PRICE_USD,
-  getUsdToGhsRate,
-  paymentAmountMatches,
-  usdToPesewas,
-} from "@/lib/pricing";
+import { PASS_PRICE_USD, getUsdToGhsRate, usdToPesewas } from "@/lib/pricing";
+import { settlePayment } from "@/lib/payments";
 
 /**
  * Day pass checkout.
  *
  * POST: initialise a payment and RECORD IT AGAINST THE BUYER.
- * PATCH: verify with the provider and activate the pass.
+ * PATCH: verify with the provider and activate the pass. The Paystack webhook
+ * and the reconciliation sweep call the same settlePayment, so whichever of the
+ * three arrives first grants access and the rest become no-ops.
  *
  * The payments row written in POST is the fix for the vulnerability in the
  * Convex original: verifyPass there checked the reference was valid, paid, in
@@ -22,7 +21,15 @@ import {
  * on their own account.
  */
 
-export async function POST() {
+export async function POST(request: Request) {
+  const limited = enforceRateLimit(request, {
+    scope: "checkout-pass",
+    limit: 10,
+    windowSeconds: 10 * 60,
+    message: "Too many checkout attempts. Wait a few minutes and try again.",
+  });
+  if (limited) return limited;
+
   const supabase = await createClient();
   const {
     data: { user },
@@ -48,6 +55,18 @@ export async function POST() {
     return NextResponse.json(
       { alreadyActive: true, message: "You already have today's pass." },
       { status: 200 },
+    );
+  }
+
+  // Player protection is checked before any money moves. A self-exclusion or a
+  // monthly cap the customer set for themselves outranks their wish to buy.
+  const { data: gate } = await supabase.rpc("can_purchase", {
+    p_amount_usd: PASS_PRICE_USD,
+  });
+  if (!(gate as { allowed?: boolean })?.allowed) {
+    return NextResponse.json(
+      { error: (gate as { reason?: string })?.reason ?? "This purchase isn't available." },
+      { status: 403 },
     );
   }
 
@@ -104,68 +123,14 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: "Missing reference." }, { status: 400 });
   }
 
-  const db = createServiceClient();
+  const result = await settlePayment(parsed.data.reference, user.id);
 
-  // Ownership check #1: the reference must be one we issued to THIS user.
-  const { data: payment } = await db
-    .from("payments")
-    .select("*")
-    .eq("reference", parsed.data.reference)
-    .eq("user_id", user.id)
-    .eq("purpose", "daily_pass")
-    .maybeSingle();
-
-  if (!payment) {
-    return NextResponse.json(
-      { error: "That payment reference isn't yours." },
-      { status: 403 },
-    );
+  if (!result.ok) {
+    return NextResponse.json({ error: result.reason }, { status: result.status });
   }
 
-  const { payments, mocked } = getProviders();
-  const result = await payments.verify(parsed.data.reference);
-
-  if (result.status !== "success") {
-    await db
-      .from("payments")
-      .update({ status: result.status === "failed" ? "failed" : "pending" })
-      .eq("id", payment.id);
-    return NextResponse.json(
-      { error: "That payment hasn't completed." },
-      { status: 402 },
-    );
-  }
-
-  // Ownership check #2: the amount must match what we asked for. Skipped when
-  // mocked, because the mock provider has no real amount to report.
-  if (
-    !mocked &&
-    !paymentAmountMatches(
-      { amountMinor: payment.amount_minor, currency: payment.currency },
-      result,
-    )
-  ) {
-    console.error(
-      `[checkout/day-pass] amount mismatch on ${payment.reference}: charged ${payment.amount_minor} ${payment.currency}, settled ${result.amountMinor} ${result.currency}`,
-    );
-    return NextResponse.json(
-      { error: "The amount paid didn't match the pass price." },
-      { status: 402 },
-    );
-  }
-
-  const { data: passId, error } = await db.rpc("activate_daily_pass", {
-    p_user_id: user.id,
-    p_reference: parsed.data.reference,
+  return NextResponse.json({
+    activated: true,
+    alreadyActive: result.alreadyActive,
   });
-
-  if (error) {
-    console.error("[checkout/day-pass] activate:", error);
-    return NextResponse.json(
-      { error: "Payment went through but the pass didn't activate. Contact support." },
-      { status: 500 },
-    );
-  }
-
-  return NextResponse.json({ activated: true, passId });
 }

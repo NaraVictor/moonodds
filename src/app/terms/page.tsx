@@ -55,10 +55,13 @@ export default async function TermsPage() {
 
         <Section title="2. Eligibility">
           <p>
-            You must be at least 18 years old to use MoonOdds. You must also
-            comply with the law where you are. Betting is restricted or
-            prohibited in some jurisdictions and it is your responsibility to
-            know your own position, we do not verify it for you.
+            You must be at least 18 years old to use MoonOdds. We ask for your
+            date of birth when you create an account and refuse the account if
+            it puts you under 18. That is a declared age, not identity
+            verification. You must also comply with the law where you are.
+            Betting is restricted or prohibited in some jurisdictions and it is
+            your responsibility to know your own position, we do not verify it
+            for you.
           </p>
         </Section>
 

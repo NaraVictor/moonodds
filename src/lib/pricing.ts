@@ -100,7 +100,25 @@ export function paymentAmountMatches(
   );
 }
 
+/**
+ * Cached rate.
+ *
+ * The lookup used to run on every checkout, putting a free unauthenticated
+ * third party in the critical path of taking money. An hour is short enough
+ * that a real move is picked up the same session and long enough that a slow
+ * upstream stops being felt by every customer at once.
+ */
+let cached: { rate: number; at: number } | null = null;
+const RATE_TTL_MS = 60 * 60 * 1000;
+
+/** Test seam. Exported so a suite can force a cold lookup. */
+export function clearRateCache() {
+  cached = null;
+}
+
 export async function getUsdToGhsRate(): Promise<number> {
+  if (cached && Date.now() - cached.at < RATE_TTL_MS) return cached.rate;
+
   try {
     const res = await fetch("https://open.er-api.com/v6/latest/USD", {
       cache: "no-store",
@@ -115,12 +133,14 @@ export async function getUsdToGhsRate(): Promise<number> {
       return FALLBACK_USD_TO_GHS;
     }
     if (rate < MIN_USD_TO_GHS || rate > MAX_USD_TO_GHS) {
+      // Not cached: a bad reading should not be held for an hour.
       console.warn(
         `[pricing] USD/GHS came back as ${rate}, outside ${MIN_USD_TO_GHS} to ${MAX_USD_TO_GHS}. Using the fallback.`,
       );
       return FALLBACK_USD_TO_GHS;
     }
 
+    cached = { rate, at: Date.now() };
     return rate;
   } catch {
     return FALLBACK_USD_TO_GHS;

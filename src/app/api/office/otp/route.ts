@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { enforceRateLimit } from "@/lib/rate-limit";
 import { z } from "zod";
 import { requireSuperAdmin } from "@/lib/api-auth";
 import { createServiceClient } from "@/lib/supabase/server";
@@ -18,7 +19,16 @@ import { getProviders } from "@/lib/providers";
 const PURPOSE = "update_system_prompt";
 const TTL_MINUTES = 10;
 
-export async function POST() {
+export async function POST(request: Request) {
+  // Minting is cheap for us and noisy for the admin whose inbox it fills.
+  const limited = enforceRateLimit(request, {
+    scope: "otp-mint",
+    limit: 5,
+    windowSeconds: 10 * 60,
+    message: "Too many codes requested. Try again in a few minutes.",
+  });
+  if (limited) return limited;
+
   const guard = await requireSuperAdmin();
   if ("error" in guard) return guard.error;
 
@@ -80,6 +90,16 @@ const Apply = z.object({
 });
 
 export async function PATCH(request: Request) {
+  // Six digits is a million combinations, which an unthrottled loop exhausts in
+  // minutes. This is the control that makes the code worth having.
+  const limited = enforceRateLimit(request, {
+    scope: "otp-redeem",
+    limit: 5,
+    windowSeconds: 15 * 60,
+    message: "Too many attempts. Wait 15 minutes and request a fresh code.",
+  });
+  if (limited) return limited;
+
   const guard = await requireSuperAdmin();
   if ("error" in guard) return guard.error;
 
