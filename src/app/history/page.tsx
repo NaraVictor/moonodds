@@ -1,13 +1,30 @@
+import type { Metadata } from "next";
 import { createClient } from "@/lib/supabase/server";
 import { SiteHeader } from "@/components/layout/site-header";
 import { BottomNav } from "@/components/layout/bottom-nav";
 import { RoleSwitcher } from "@/components/dev/role-switcher";
 import { HistoryClient } from "./history-client";
 
-export const metadata = {
+const DESCRIPTION =
+  "Every settled MoonOdds football prediction and how it finished, with the win rate, return and per-market breakdown behind them. Wins and misses, all of it public.";
+
+export const metadata: Metadata = {
   title: "Prediction history",
-  description:
-    "Every settled MoonOdds call and how it finished, with the win rate and return behind them.",
+  description: DESCRIPTION,
+  alternates: { canonical: "/history" },
+  openGraph: {
+    type: "website",
+    url: "/history",
+    title: "Prediction history · MoonOdds",
+    description: DESCRIPTION,
+    siteName: "MoonOdds",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Prediction history · MoonOdds",
+    description: DESCRIPTION,
+  },
+  robots: { index: true, follow: true },
 };
 
 /**

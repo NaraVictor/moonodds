@@ -27,19 +27,70 @@ const body = Plus_Jakarta_Sans({
   display: "swap",
 });
 
+/**
+ * Site metadata.
+ *
+ * metadataBase is the load-bearing part: without it Next cannot turn a relative
+ * OG image path into the absolute URL that Facebook, X, WhatsApp and Slack all
+ * require, so every share card falls back to no image at all. It reads from
+ * NEXT_PUBLIC_SITE_URL so previews and production resolve to themselves rather
+ * than to a hardcoded host.
+ *
+ * The title template appends the brand to every child page, so a page only ever
+ * declares its own subject and still arrives as "Subject · MoonOdds".
+ */
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://moonodds.app";
+
+const DESCRIPTION =
+  "An AI-powered football prediction market with confidence scores and the reasoning behind every call. Every settled prediction stays public, wins and misses alike.";
+
 export const metadata: Metadata = {
+  metadataBase: new URL(SITE_URL),
   title: {
     default: "MoonOdds: AI-powered football prediction market",
     template: "%s · MoonOdds",
   },
-  description:
-    "An AI-powered football prediction market with confidence scores and the reasoning behind every call. Smarter decisions, backed by the data.",
+  description: DESCRIPTION,
+  applicationName: "MoonOdds",
+  keywords: [
+    "football predictions",
+    "AI football predictions",
+    "prediction market",
+    "football betting tips",
+    "match predictions",
+    "football analytics",
+    "Premier League predictions",
+    "confidence scores",
+  ],
+  authors: [{ name: "MoonOdds" }],
+  creator: "MoonOdds",
+  publisher: "MoonOdds",
+  alternates: { canonical: "/" },
   openGraph: {
-    title: "MoonOdds: AI-powered football prediction market",
-    description:
-      "An AI-powered football prediction market with confidence scores and a verifiable track record.",
     type: "website",
+    siteName: "MoonOdds",
+    url: "/",
+    title: "MoonOdds: AI-powered football prediction market",
+    description: DESCRIPTION,
+    locale: "en_GB",
   },
+  twitter: {
+    card: "summary_large_image",
+    title: "MoonOdds: AI-powered football prediction market",
+    description: DESCRIPTION,
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      "max-image-preview": "large",
+      "max-snippet": -1,
+      "max-video-preview": -1,
+    },
+  },
+  formatDetection: { telephone: false, address: false, email: false },
 };
 
 export const viewport: Viewport = {
@@ -65,6 +116,35 @@ export default function RootLayout({
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
       </head>
       <body className="min-h-full flex flex-col bg-background text-foreground">
+        {/* Site-level structured data. The SearchAction is what lets a result
+            carry its own search box, and the Organization block is what ties
+            every page back to one named publisher rather than to a bare host. */}
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify({
+              "@context": "https://schema.org",
+              "@graph": [
+                {
+                  "@type": "Organization",
+                  "@id": `${SITE_URL}/#organization`,
+                  name: "MoonOdds",
+                  url: SITE_URL,
+                  description: DESCRIPTION,
+                },
+                {
+                  "@type": "WebSite",
+                  "@id": `${SITE_URL}/#website`,
+                  url: SITE_URL,
+                  name: "MoonOdds",
+                  description: DESCRIPTION,
+                  publisher: { "@id": `${SITE_URL}/#organization` },
+                  inLanguage: "en-GB",
+                },
+              ],
+            }),
+          }}
+        />
         <BypassBanner />
         <AgeGate />
         {/* Slip lives at the root so it survives navigation, it has to follow

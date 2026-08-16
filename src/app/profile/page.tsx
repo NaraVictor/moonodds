@@ -6,7 +6,10 @@ import { RoleSwitcher } from "@/components/dev/role-switcher";
 import { devBypassEnabled } from "@/lib/dev-bypass";
 import { ProfileClient } from "./profile-client";
 
-export const metadata = { title: "Profile" };
+export const metadata = {
+  title: "Profile",
+  robots: { index: false, follow: false },
+};
 
 export default async function ProfilePage() {
   const supabase = await createClient();

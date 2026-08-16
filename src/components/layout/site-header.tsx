@@ -11,9 +11,21 @@ import { SiteSearch } from "./site-search";
 import { useAccessState } from "@/lib/queries";
 import { signOut } from "@/lib/auth-actions";
 
-const NAV = [
+/**
+ * Public destinations, shown to everyone.
+ *
+ * History is here rather than behind the sign-in check because it is entirely
+ * settled results: public data, no pass required, and the single best reason a
+ * visitor has to believe the product before paying for it. Hiding the track
+ * record from the people who have not bought yet gets the incentive backwards.
+ */
+const PUBLIC_NAV = [
   { href: "/", label: "Picks" },
   { href: "/history", label: "History" },
+];
+
+/** Destinations that need an account to mean anything. */
+const PRIVATE_NAV = [
   { href: "/slips", label: "My slips" },
   { href: "/profile", label: "Profile" },
 ];
@@ -31,28 +43,29 @@ export function SiteHeader({ signedIn }: { signedIn: boolean }) {
           <Logo />
         </Link>
 
-        {signedIn && (
-          <nav className="hidden flex-none items-center gap-7 lg:flex">
-            {NAV.map((item) => {
-              const active =
-                item.href === "/"
-                  ? pathname === "/"
-                  : pathname.startsWith(item.href);
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  aria-current={active ? "page" : undefined}
-                  className={`text-[13px] font-semibold uppercase tracking-[0.06em] transition-colors ${
-                    active ? "text-foreground" : "text-muted hover:text-foreground"
-                  }`}
-                >
-                  {item.label}
-                </Link>
-              );
-            })}
-          </nav>
-        )}
+        {/* The whole nav renders for guests now, not just for signed-in users.
+            It used to be inside a signedIn check, which took the track record
+            away from exactly the people still deciding whether to trust it. */}
+        <nav className="hidden flex-none items-center gap-7 lg:flex">
+          {[...PUBLIC_NAV, ...(signedIn ? PRIVATE_NAV : [])].map((item) => {
+            const active =
+              item.href === "/"
+                ? pathname === "/"
+                : pathname.startsWith(item.href);
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                aria-current={active ? "page" : undefined}
+                className={`text-[13px] font-semibold uppercase tracking-[0.06em] transition-colors ${
+                  active ? "text-foreground" : "text-muted hover:text-foreground"
+                }`}
+              >
+                {item.label}
+              </Link>
+            );
+          })}
+        </nav>
 
         {/* Search takes the middle and the slack, the way it does on every
             marketplace. It is the primary way of getting somewhere specific. */}

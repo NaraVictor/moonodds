@@ -6,7 +6,12 @@ import { RoleSwitcher } from "@/components/dev/role-switcher";
 import { devBypassEnabled } from "@/lib/dev-bypass";
 import { SlipsClient } from "./slips-client";
 
-export const metadata = { title: "My slips" };
+export const metadata = {
+  title: "My slips",
+  // Personal and behind a sign-in. robots.txt already excludes it; this is the
+  // half that travels with the page if the link is shared.
+  robots: { index: false, follow: false },
+};
 
 export default async function SlipsPage() {
   const supabase = await createClient();
