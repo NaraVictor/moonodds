@@ -26,6 +26,11 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
+      # First, because a leaked credential is the one failure where the fix
+      # starts with rotating a key rather than with editing code.
+      - name: No credentials in the repo
+        run: pnpm verify:secrets
+
       - name: Typecheck
         run: pnpm typecheck
 

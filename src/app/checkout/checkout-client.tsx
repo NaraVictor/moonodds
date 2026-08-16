@@ -12,6 +12,7 @@ import { Check, ShieldCheck, Sparkles } from "@/components/ui/icons";
 import { useAccessState, useLeagueOptions } from "@/lib/queries";
 import { LinkButton } from "@/components/ui/link-button";
 import { extraPicksPriceUsd } from "@/lib/pricing";
+import { openPaystack } from "@/lib/paystack-popup";
 
 type Kind = "day-pass" | "extra-picks";
 type Stage = "idle" | "initialising" | "paying" | "verifying" | "done";
@@ -65,9 +66,20 @@ export function CheckoutClient({ kind }: { kind: Kind }) {
         return;
       }
 
-      // With a live Paystack key this is where the popup opens and resolves.
       setStage("paying");
-      await new Promise((r) => setTimeout(r, 700));
+
+      // Mocked providers return no access code, so there is no popup to open
+      // and the flow goes straight to verification. With a real key this is the
+      // Paystack window, and nothing is charged until the customer completes it.
+      if (init.accessCode) {
+        const outcome = await openPaystack(init.accessCode);
+        if (outcome.status === "cancelled") {
+          // Not an error. The payment row stays pending and the reconcile sweep
+          // will leave it alone, because nothing was ever charged.
+          setStage("idle");
+          return;
+        }
+      }
 
       setStage("verifying");
       const verifyRes = await fetch(endpoint, {

@@ -338,34 +338,121 @@ export const liveAi: AiProvider = {
 
 const PAYSTACK = "https://api.paystack.co";
 
-export const livePayments: PaymentProvider = {
-  async initialize({ email, amountMinor, currency, reference, metadata }) {
-    const secret = process.env.PAYSTACK_SECRET_KEY;
-    const publicKey = process.env.NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY;
-    if (!secret || !publicKey) throw new Error("Paystack keys are not set.");
+/**
+ * Paystack currency minor units.
+ *
+ * GHS is quoted in pesewas and NGN in kobo, both 1/100. Paystack rejects a
+ * non-integer amount outright rather than rounding, which is why every amount
+ * reaching here has already been through usdToPesewas.
+ */
+const PAYSTACK_TIMEOUT_MS = 20_000;
 
-    const res = await fetch(`${PAYSTACK}/transaction/initialize`, {
-      method: "POST",
+/**
+ * Read the keys, and refuse an obviously wrong pair.
+ *
+ * The failure this exists for: a live secret alongside a test public key (or
+ * the reverse) initialises fine and then fails at the popup with a message that
+ * blames the customer's card. Paystack prefixes tell us the mode, so a mismatch
+ * is caught here where it can say what is actually wrong.
+ */
+function paystackKeys(): { secret: string; publicKey: string; live: boolean } {
+  const secret = process.env.PAYSTACK_SECRET_KEY;
+  const publicKey = process.env.NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY;
+
+  if (!secret) throw new Error("PAYSTACK_SECRET_KEY is not set.");
+  if (!publicKey) throw new Error("NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY is not set.");
+
+  const secretLive = secret.startsWith("sk_live_");
+  const publicLive = publicKey.startsWith("pk_live_");
+
+  if (!secret.startsWith("sk_")) {
+    throw new Error("PAYSTACK_SECRET_KEY does not look like a Paystack secret key.");
+  }
+  if (!publicKey.startsWith("pk_")) {
+    throw new Error("NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY does not look like a Paystack public key.");
+  }
+  if (secretLive !== publicLive) {
+    throw new Error(
+      `Paystack key mismatch: the secret key is ${secretLive ? "live" : "test"} and the public key is ${publicLive ? "live" : "test"}. Both must be the same mode.`,
+    );
+  }
+
+  return { secret, publicKey, live: secretLive };
+}
+
+/**
+ * One call to Paystack.
+ *
+ * Timed out, because an unbounded fetch here holds a checkout request open for
+ * as long as the upstream feels like it. Errors never carry the response body
+ * verbatim into a thrown message that might reach a customer, and the key is
+ * never logged.
+ */
+async function paystack<T>(
+  path: string,
+  init: { method?: string; secret: string; body?: unknown },
+): Promise<{ status: boolean; message: string; data?: T }> {
+  let res: Response;
+  try {
+    res = await fetch(`${PAYSTACK}${path}`, {
+      method: init.method ?? "GET",
       headers: {
-        Authorization: `Bearer ${secret}`,
+        Authorization: `Bearer ${init.secret}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        email,
-        amount: amountMinor,
-        currency,
-        reference,
-        metadata,
-      }),
+      body: init.body === undefined ? undefined : JSON.stringify(init.body),
+      cache: "no-store",
+      signal: AbortSignal.timeout(PAYSTACK_TIMEOUT_MS),
     });
+  } catch (err) {
+    // A timeout or a network failure is ours, not the customer's. The webhook
+    // and the reconcile sweep are what recover a payment that settled anyway.
+    console.error(`[paystack] ${path} failed:`, err);
+    throw new Error("Could not reach the payment provider. Try again shortly.");
+  }
 
-    const json = (await res.json()) as {
-      status: boolean;
-      message: string;
-      data?: { access_code: string; reference: string };
-    };
+  const json = (await res.json().catch(() => null)) as {
+    status: boolean;
+    message: string;
+    data?: T;
+  } | null;
 
-    if (!res.ok || !json.status || !json.data) {
+  if (!json) {
+    console.error(`[paystack] ${path} returned ${res.status} with an unreadable body`);
+    throw new Error("The payment provider returned something unexpected.");
+  }
+
+  return json;
+}
+
+export const livePayments: PaymentProvider = {
+  async initialize({ email, amountMinor, currency, reference, metadata, callbackUrl }) {
+    const { secret, publicKey } = paystackKeys();
+
+    const json = await paystack<{ access_code: string; reference: string }>(
+      "/transaction/initialize",
+      {
+        method: "POST",
+        secret,
+        body: {
+          email,
+          amount: amountMinor,
+          currency,
+          reference,
+          metadata,
+          // Where Paystack returns the customer if they complete on the hosted
+          // page rather than in the popup. Without it they land on Paystack's
+          // own confirmation and never come back to verify.
+          ...(callbackUrl ? { callback_url: callbackUrl } : {}),
+          // Ghana's actual payment mix. Mobile money is the majority rail here,
+          // so omitting it would exclude most of the market.
+          channels: ["card", "mobile_money", "bank_transfer", "ussd"],
+        },
+      },
+    );
+
+    if (!json.status || !json.data) {
+      console.error(`[paystack] initialize rejected: ${json.message}`);
       throw new Error(json.message || "Could not start the payment.");
     }
 
@@ -379,21 +466,17 @@ export const livePayments: PaymentProvider = {
   },
 
   async verify(reference) {
-    const secret = process.env.PAYSTACK_SECRET_KEY;
-    if (!secret) throw new Error("PAYSTACK_SECRET_KEY is not set.");
+    const { secret } = paystackKeys();
 
-    const res = await fetch(
-      `${PAYSTACK}/transaction/verify/${encodeURIComponent(reference)}`,
-      { headers: { Authorization: `Bearer ${secret}` }, cache: "no-store" },
-    );
+    const json = await paystack<{
+      status: string;
+      amount: number;
+      currency: string;
+      reference: string;
+    }>(`/transaction/verify/${encodeURIComponent(reference)}`, { secret });
 
-    const json = (await res.json()) as {
-      status: boolean;
-      message: string;
-      data?: { status: string; amount: number; currency: string; reference: string };
-    };
-
-    if (!res.ok || !json.status || !json.data) {
+    if (!json.status || !json.data) {
+      console.error(`[paystack] verify rejected for ${reference}: ${json.message}`);
       throw new Error(json.message || "Could not verify the payment.");
     }
 
@@ -401,7 +484,7 @@ export const livePayments: PaymentProvider = {
       status:
         json.data.status === "success"
           ? "success"
-          : json.data.status === "failed"
+          : json.data.status === "failed" || json.data.status === "reversed"
             ? "failed"
             : "pending",
       reference: json.data.reference,
@@ -409,11 +492,41 @@ export const livePayments: PaymentProvider = {
       currency: json.data.currency,
     };
   },
-};
 
-/* -------------------------------------------------------------------------
- * Email + SMS
- * ---------------------------------------------------------------------- */
+  async refund({ reference, amountMinor, reason }) {
+    const { secret } = paystackKeys();
+
+    const json = await paystack<{
+      id: number;
+      amount: number;
+      currency: string;
+      status: string;
+    }>("/refund", {
+      method: "POST",
+      secret,
+      body: {
+        transaction: reference,
+        // Omitted means the full amount. Paystack treats a partial refund as
+        // final for that transaction, so a caller wanting the rest has to say
+        // so in one call.
+        ...(amountMinor ? { amount: amountMinor } : {}),
+        ...(reason ? { merchant_note: reason } : {}),
+      },
+    });
+
+    if (!json.status || !json.data) {
+      console.error(`[paystack] refund rejected for ${reference}: ${json.message}`);
+      throw new Error(json.message || "Could not refund that payment.");
+    }
+
+    return {
+      refunded: json.data.status !== "failed",
+      amountMinor: json.data.amount,
+      currency: json.data.currency,
+      providerRef: json.data.id ? String(json.data.id) : null,
+    };
+  },
+};
 
 export const liveMessaging: MessagingProvider = {
   async sendEmail({ to, subject, html }) {

@@ -419,10 +419,26 @@ export const mockAi: AiProvider = {
 };
 
 export const mockPayments: PaymentProvider = {
+  /**
+   * Refunds always succeed here, which is the useful behaviour for exercising
+   * the Office flow. A mock that could fail would only ever test the mock.
+   */
+  async refund({ reference, amountMinor }) {
+    return {
+      refunded: true,
+      amountMinor: amountMinor ?? 0,
+      currency: "GHS",
+      providerRef: `mock-refund-${reference}`,
+    };
+  },
+
   async initialize({ reference, amountMinor, currency }) {
     return {
       reference,
-      accessCode: `mock_access_${reference.slice(-8)}`,
+      // Deliberately empty. The checkout client opens the Paystack popup only
+      // when it gets an access code, so an empty one is what keeps mock mode
+      // from trying to resume a transaction that does not exist upstream.
+      accessCode: "",
       publicKey: process.env.NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY ?? "pk_test_mock",
       amountMinor,
       currency,

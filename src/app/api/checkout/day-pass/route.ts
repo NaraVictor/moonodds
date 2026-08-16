@@ -100,6 +100,10 @@ export async function POST(request: Request) {
     amountMinor,
     currency: "GHS",
     reference,
+    // Where Paystack returns someone who completed on the hosted page instead
+    // of in the popup. Without it they stop on Paystack's confirmation screen
+    // and never reach the verify call.
+    callbackUrl: `${process.env.NEXT_PUBLIC_SITE_URL ?? ""}/checkout/day-pass`,
     metadata: { purpose: "daily_pass", dateKey: today, priceUsd: PASS_PRICE_USD },
   });
 

@@ -169,3 +169,95 @@ export async function runReconcilePayments(minAgeMinutes = 10) {
 
   return { checked: stranded.length, recovered, failed };
 }
+
+
+/**
+ * Refund a payment, and take back what it bought.
+ *
+ * The Terms promise a refund when a pass is charged in error or when we fail to
+ * publish on a day someone paid for. There was no code path for either, so every
+ * refund was a manual Paystack operation with nothing linking it back to the
+ * payments row, and the app's revenue figures drifted the moment one happened.
+ *
+ * Access is revoked in the same call. A refunded pass that still unlocks the
+ * board is worse than no refund at all: the customer has their money and the
+ * product too, and the reporting says neither.
+ */
+export async function refundPayment(
+  reference: string,
+  opts: { reason?: string; actor?: string } = {},
+): Promise<SettleResult> {
+  const db = createServiceClient();
+
+  const { data: payment } = await db
+    .from("payments")
+    .select("*")
+    .eq("reference", reference)
+    .maybeSingle();
+
+  if (!payment) {
+    return { ok: false, reason: "No payment matches that reference.", status: 404 };
+  }
+  if (payment.status === "refunded") {
+    return { ok: true, alreadyActive: true, purpose: payment.purpose };
+  }
+  if (payment.status !== "succeeded") {
+    return {
+      ok: false,
+      reason: `That payment is ${payment.status}, so there is nothing to refund.`,
+      status: 409,
+    };
+  }
+
+  const { payments } = getProviders();
+
+  let providerRef: string | null = null;
+  try {
+    const result = await payments.refund({
+      reference,
+      amountMinor: payment.amount_minor,
+      reason: opts.reason,
+    });
+    if (!result.refunded) {
+      return { ok: false, reason: "The provider declined the refund.", status: 502 };
+    }
+    providerRef = result.providerRef;
+  } catch (err) {
+    console.error(`[payments] refund failed for ${reference}:`, err);
+    return {
+      ok: false,
+      reason: err instanceof Error ? err.message : "Could not refund that payment.",
+      status: 502,
+    };
+  }
+
+  // Only after the money is actually back. Marking first and failing second
+  // would show a refund in our reporting that never left the account.
+  await db
+    .from("payments")
+    .update({
+      status: "refunded",
+      metadata: {
+        ...(payment.metadata as Record<string, unknown>),
+        refundedAt: new Date().toISOString(),
+        refundReason: opts.reason ?? null,
+        refundedBy: opts.actor ?? null,
+        providerRefundRef: providerRef,
+      },
+    })
+    .eq("id", payment.id);
+
+  if (payment.purpose === "daily_pass") {
+    await db
+      .from("daily_passes")
+      .update({ status: "refunded" })
+      .eq("payment_id", payment.id);
+  } else if (payment.purpose === "extra_picks") {
+    await db
+      .from("extra_pick_orders")
+      .update({ status: "refunded" })
+      .eq("payment_id", payment.id);
+  }
+
+  return { ok: true, alreadyActive: false, purpose: payment.purpose };
+}

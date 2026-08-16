@@ -103,6 +103,14 @@ with `assertCronRequest`.
 
 ## 3. Paystack
 
+Both keys go in Vercel and nowhere else. `pnpm verify:secrets` runs in CI and
+fails the build if either reaches a tracked file; it scans new files as well as
+committed ones, so a key cannot slip in ahead of its first commit.
+
+If a secret key is ever pasted into a chat, an issue, a screenshot or a log,
+treat it as compromised and rotate it. A Paystack secret key can charge cards
+and issue refunds on the account, so exposure is not theoretical.
+
 Set the webhook URL in the Paystack dashboard
 (`Settings → API Keys & Webhooks`):
 

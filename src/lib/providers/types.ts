@@ -146,6 +146,14 @@ export type PaymentVerification = {
   currency: string;
 };
 
+export type PaymentRefund = {
+  refunded: boolean;
+  amountMinor: number;
+  currency: string;
+  /** Paystack's own id for the refund, for reconciliation against a statement. */
+  providerRef: string | null;
+};
+
 export interface PaymentProvider {
   initialize(input: {
     email: string;
@@ -153,8 +161,22 @@ export interface PaymentProvider {
     currency: string;
     reference: string;
     metadata: Record<string, unknown>;
+    /** Where the provider sends the customer back to. */
+    callbackUrl?: string;
   }): Promise<PaymentInit>;
   verify(reference: string): Promise<PaymentVerification>;
+  /**
+   * Refund a settled transaction, in full or in part.
+   *
+   * The Terms promise a refund in two circumstances and there was no code path
+   * for either, so every one was a manual dashboard operation with no link back
+   * to the payments row.
+   */
+  refund(input: {
+    reference: string;
+    amountMinor?: number;
+    reason?: string;
+  }): Promise<PaymentRefund>;
 }
 
 export interface MessagingProvider {

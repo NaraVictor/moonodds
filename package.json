@@ -15,7 +15,8 @@
     "engine:sync": "node scripts/sync-engine-prompt.mjs",
     "engine:check": "node scripts/sync-engine-prompt.mjs --check",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "verify:secrets": "node scripts/verify-no-secrets.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.116.0",
