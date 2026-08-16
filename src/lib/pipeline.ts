@@ -1,6 +1,10 @@
 import { createServiceClient } from "./supabase/server";
 import { getProviders } from "./providers";
 import type { Market } from "./types";
+import { renderPrompt } from "./engine/template";
+import { resolveEngineVariables } from "./engine/variables";
+import { normalisePredictedValue } from "./engine/output";
+import { ENGINE_PROMPT_VERSION } from "./engine/prompt";
 
 /**
  * The daily pipeline, ported from convex/cron_jobs and convex/football.
@@ -246,16 +250,24 @@ export async function runFetchStats() {
   return { fetched: stats.length, upserted };
 }
 
-/** Format one fixture's stats for the prompt. */
+/**
+ * Format one fixture's stats for the prompt.
+ *
+ * Form order is stated explicitly. The prompt reads trajectory off the last
+ * three characters, so an unlabelled string that happens to run newest-first
+ * would invert every trajectory silently — right shape, wrong answer, no error.
+ */
 function statsBlock(s: Record<string, unknown> | null | undefined): string {
-  if (!s) return "    (no stats available — lower your confidence accordingly)";
+  if (!s) {
+    return "    (no stats for this fixture — reason from league and venue only, and lower confidence accordingly)";
+  }
   const home = (s.home_season ?? {}) as Record<string, number>;
   const away = (s.away_season ?? {}) as Record<string, number>;
   return [
-    `    Form: home ${s.home_form ?? "?"} | away ${s.away_form ?? "?"}`,
-    `    H2H: ${s.h2h_home_wins ?? 0}W-${s.h2h_draws ?? 0}D-${s.h2h_away_wins ?? 0}L, avg ${s.h2h_avg_goals ?? "?"} goals, BTTS ${s.h2h_btts_rate ?? "?"}`,
-    `    Home season: ${home.avgGoalsScored ?? "?"} scored / ${home.avgGoalsConceded ?? "?"} conceded, CS ${home.cleanSheetRate ?? "?"}, BTTS ${home.bttsRate ?? "?"}`,
-    `    Away season: ${away.avgGoalsScored ?? "?"} scored / ${away.avgGoalsConceded ?? "?"} conceded, CS ${away.cleanSheetRate ?? "?"}, BTTS ${away.bttsRate ?? "?"}`,
+    `    Form (oldest result first, rightmost is most recent): home ${s.home_form ?? "?"} | away ${s.away_form ?? "?"}`,
+    `    H2H totals: ${s.h2h_home_wins ?? 0} home wins, ${s.h2h_draws ?? 0} draws, ${s.h2h_away_wins ?? 0} away wins; avg ${s.h2h_avg_goals ?? "?"} goals, both scored ${s.h2h_btts_rate ?? "?"}`,
+    `    Home season: ${home.avgGoalsScored ?? "?"} scored / ${home.avgGoalsConceded ?? "?"} conceded per game, clean sheets ${home.cleanSheetRate ?? "?"}, both scored ${home.bttsRate ?? "?"}`,
+    `    Away season: ${away.avgGoalsScored ?? "?"} scored / ${away.avgGoalsConceded ?? "?"} conceded per game, clean sheets ${away.cleanSheetRate ?? "?"}, both scored ${away.bttsRate ?? "?"}`,
   ].join("\n");
 }
 
@@ -288,9 +300,12 @@ export async function runDailyPicks() {
 
   if (!fixtures?.length) return { skipped: "no upcoming fixtures today" };
 
-  const thresholds = config.confidence_thresholds ?? {};
-  const minConfidence = thresholds.primarySlipFloor ?? 8.5;
-  const floor = thresholds.absoluteMinimumFloor ?? 7;
+  // Resolve every tunable once. The prompt gets them substituted into its text;
+  // the pipeline reads the same values for its cutoffs, so the number the engine
+  // was told to stake against is the number we stake against.
+  const vars = resolveEngineVariables(config);
+  const minConfidence = Number(vars.values.primarySlipFloor);
+  const floor = Number(vars.values.absoluteMinimumFloor);
 
   // Pull the stats the engine is supposed to reason over.
   const { data: statRows } = await db
@@ -307,31 +322,53 @@ export async function runDailyPicks() {
     return `${head}\n${statsBlock(statsByFixture.get(f.id))}`;
   });
 
-  const userPrompt = `## ACTIVE WEIGHTS (v${config.version})
-${JSON.stringify(config.ranking_weights)}
+  // The thresholds used to be pasted into the user prompt as raw JSON next to a
+  // system prompt carrying its own conflicting prose defaults. Now they are
+  // substituted into the system prompt itself, so there is exactly one copy of
+  // every number and the model is never asked to reconcile two.
+  const rendered = renderPrompt(config.system_prompt, config);
 
-Confidence thresholds: ${JSON.stringify(thresholds)}
-Filter thresholds: ${JSON.stringify(config.filter_thresholds)}
-Market pivots: ${JSON.stringify(config.market_pivots)}
+  if (rendered.warnings.length) {
+    console.warn(
+      `[engine] ${rendered.warnings.length} config warning(s):`,
+      rendered.warnings.map((w) => `${w.key}=${w.value} — ${w.message}`).join(" | "),
+    );
+  }
+  if (rendered.unknownKeys.length) {
+    console.warn(`[engine] config keys matching no variable: ${rendered.unknownKeys.join(", ")}`);
+  }
 
-Analyse these ${fixtures.length} fixtures for ${now.toISOString().slice(0, 10)}.
-Use the stats given under each fixture. Where stats are missing, say so and
-lower your confidence rather than guessing.
-Minimum confidence: ${minConfidence} on the 0-10 scale.
-Apply every filter from the system prompt and report which ones triggered.
+  const userPrompt = `Analyse these ${fixtures.length} fixtures for ${now.toISOString().slice(0, 10)}.
+
+Return one object per fixture, using the fixture index shown in brackets.
+Only the stats printed under a fixture are available to you. Anything not
+printed there — lineups, injuries, odds, standings, weather, travel, referee
+history — is absent for every fixture in this batch, so the steps that depend
+on it must be skipped rather than estimated.
 
 Fixtures:
 ${briefs.join("\n")}`;
 
   const picks = await ai.generatePicks({
-    systemPrompt: config.system_prompt,
+    systemPrompt: rendered.text,
     userPrompt,
-    maxPicks: 10,
+    // One object per fixture. The old cap of 10 silently contradicted the
+    // prompt's "emit for every fixture" whenever a day carried more than ten.
+    maxPicks: fixtures.length,
   });
 
-  const qualifying = picks.filter((p) => p.confidenceScore >= minConfidence);
+  // No-bet fixtures are returned so a missing index still means a truncated
+  // response rather than a deliberate decline. They are dropped here.
+  const analysed = picks.filter((p) => !p.noBetZone);
+  const qualifying = analysed.filter((p) => p.confidenceScore >= minConfidence);
+
   if (!qualifying.length) {
-    return { generated: 0, considered: picks.length, note: "none cleared the floor" };
+    return {
+      generated: 0,
+      considered: picks.length,
+      noBetZone: picks.length - analysed.length,
+      note: "none cleared the floor",
+    };
   }
 
   const { data: tipster } = await db
@@ -341,7 +378,7 @@ ${briefs.join("\n")}`;
     .limit(1)
     .maybeSingle();
 
-  const modelVersion = `moonodds-quant-v${config.version}`;
+  const modelVersion = `moonodds-quant-v${config.version}-p${ENGINE_PROMPT_VERSION}`;
   const { data: run } = await db
     .from("prediction_runs")
     .insert({ num_picks: qualifying.length, model_version: modelVersion })
@@ -349,19 +386,38 @@ ${briefs.join("\n")}`;
     .single();
 
   let written = 0;
+  let rejected = 0;
+
   for (const p of qualifying) {
     const fixture = fixtures[p.fixtureIndex];
     if (!fixture || !tipster) continue;
 
+    // A selection the grader cannot parse settles as review_needed forever —
+    // never won, never lost, sitting in the Office queue. Drop it at the door.
+    const value = normalisePredictedValue(p.predictionType, p.predictedValue);
+    if (!value) {
+      console.warn(
+        `[engine] unusable selection "${p.predictedValue}" for ${p.predictionType} on fixture ${p.fixtureIndex} — dropped`,
+      );
+      rejected++;
+      continue;
+    }
+
+    // Clamped, not raised: the floor is a publication gate, and anything below
+    // it was already filtered out above.
     const confidence = Math.min(Math.max(p.confidenceScore, floor), 9.8);
+
     const { error } = await db.from("predictions").insert({
       fixture_id: fixture.id,
       tipster_id: tipster.id,
       prediction_run_id: run?.id ?? null,
       prediction_type: p.predictionType,
-      predicted_value: p.predictedValue,
+      predicted_value: value,
       confidence_score: confidence,
-      staking_unit: stakingUnit(confidence, thresholds),
+      confidence_raw: p.confidenceRaw ?? null,
+      anchor_cap_applied: p.anchorCapApplied ?? false,
+      consistency_override: p.consistencyOverride ?? false,
+      staking_unit: stakingUnit(confidence, vars.values),
       frontier_explanation: p.reasoning,
       model_version: modelVersion,
       reasoning_tags: p.reasoningTags?.slice(0, 3) ?? [],
@@ -371,6 +427,21 @@ ${briefs.join("\n")}`;
       mra_signal_home: p.mraSignalHome ?? null,
       mra_signal_away: p.mraSignalAway ?? null,
       filters_applied: p.filtersApplied ?? {},
+      // The audit trail behind the number. Kept out of columns because nothing
+      // queries it — it is read when someone asks why a pick scored what it did.
+      local_model_output: {
+        promptVersion: ENGINE_PROMPT_VERSION,
+        configVersion: config.version,
+        configFallbacks: rendered.fallbacks,
+        anchorCapReason: p.anchorCapReason ?? null,
+        originalPredictedValue: p.originalPredictedValue ?? null,
+        overrideReason: p.overrideReason ?? null,
+        environmentalLog: p.environmentalLog ?? null,
+        h2hLog: p.h2hLog ?? null,
+        formLog: p.formLog ?? null,
+        personnelLog: p.personnelLog ?? null,
+        penaltyLog: p.penaltyLog ?? null,
+      },
     });
     if (!error) written++;
   }
@@ -404,7 +475,14 @@ ${briefs.join("\n")}`;
     );
   }
 
-  return { generated: written, considered: picks.length };
+  return {
+    generated: written,
+    considered: picks.length,
+    noBetZone: picks.length - analysed.length,
+    rejected,
+    configFallbacks: rendered.fallbacks.length,
+    warnings: rendered.warnings.length,
+  };
 }
 
 /** Find overdue fixtures, fetch their results, grade the predictions. */
@@ -621,14 +699,13 @@ export function slugify(s: string): string {
     .replace(/(^-|-$)/g, "");
 }
 
-function stakingUnit(
-  confidence: number,
-  t: Record<string, number>,
-): number {
-  if (confidence >= (t.stakingUnit5Threshold ?? 9.5)) return 5;
-  if (confidence >= (t.stakingUnit4Threshold ?? 9.0)) return 4;
-  if (confidence >= (t.stakingUnit3Threshold ?? 8.5)) return 3;
-  if (confidence >= (t.stakingUnit2Threshold ?? 8.0)) return 2;
+/** Staking band. Thresholds come from the same resolved table the prompt was rendered with. */
+function stakingUnit(confidence: number, v: Record<string, number | string>): number {
+  const at = (key: string) => Number(v[key]);
+  if (confidence >= at("stakingUnit5Threshold")) return 5;
+  if (confidence >= at("stakingUnit4Threshold")) return 4;
+  if (confidence >= at("stakingUnit3Threshold")) return 3;
+  if (confidence >= at("stakingUnit2Threshold")) return 2;
   return 1;
 }
 

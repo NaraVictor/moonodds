@@ -281,67 +281,135 @@ const REASONS = [
   "Rest advantage decides this one: the visitors played 72 hours ago and travelled over 1,500km. The rest-rule penalty applies, so we have pivoted to the safer market.",
 ];
 
+// Drawn from the prompt's tag vocabulary. The old list used slugs the prompt
+// never mentions, so the mock exercised a shape the live engine cannot produce.
 const TAGS = [
-  "xg-edge",
-  "form-divergence",
-  "h2h-strong",
-  "rest-advantage",
-  "market-drift",
-  "set-piece-threat",
-  "press-mismatch",
+  "Home advantage",
+  "Away form",
+  "H2H dominance",
+  "Defensive matchup",
+  "Form streak",
+  "Set-piece threat",
+  "Thin data",
+  "Calibration capped",
 ];
+
+/** Selections the grader accepts, per market. Mirrors the prompt's value table. */
+const VALUES: Record<string, string[]> = {
+  "1x2": ["1", "X", "2"],
+  double_chance: ["1X", "X2", "12"],
+  draw_no_bet: ["1", "2"],
+  btts: ["yes", "no"],
+  handicap: ["home -1.5", "away +0.5"],
+  over_under_1_5: ["over", "under"],
+  over_under_2_5: ["over", "under"],
+  over_under_3_5: ["over", "under"],
+};
+
+const TRAJECTORIES = ["Positive", "Negative", "Neutral"] as const;
+const MRA = ["Stable", "Overperforming", "Underperforming"] as const;
 
 export const mockAi: AiProvider = {
   async generatePicks({ userPrompt, maxPicks }) {
     // Count the fixtures the prompt described so picks map to real indices.
     const fixtureCount = (userPrompt.match(/^\[\d+\]/gm) ?? []).length || 8;
     const rand = rng(fixtureCount * 31 + new Date().getUTCDate());
+    const pick = <T,>(xs: readonly T[]): T => xs[Math.floor(rand() * xs.length)];
     const picks: EnginePick[] = [];
 
-    // Deliberately not one pick per fixture — the engine is supposed to decline
-    // fixtures where it has no edge, and the UI should handle that.
+    // One object per fixture, matching the prompt: the engine declines by
+    // flagging a no-bet zone or scoring low, never by omitting an index.
     for (let i = 0; i < fixtureCount && picks.length < maxPicks; i++) {
-      if (rand() < 0.3) continue;
+      const noBetZone = rand() < 0.08;
+      const market = pick(MARKETS);
+      const value = pick(VALUES[market] ?? ["over", "under"]);
 
-      const market = MARKETS[Math.floor(rand() * MARKETS.length)];
-      const value =
-        market === "1x2"
-          ? ["1", "X", "2"][Math.floor(rand() * 3)]
-          : market === "btts"
-            ? ["yes", "no"][Math.floor(rand() * 2)]
-            : market === "double_chance"
-              ? ["1X", "X2", "12"][Math.floor(rand() * 3)]
-              : market === "draw_no_bet"
-                ? ["1", "2"][Math.floor(rand() * 2)]
-                : market === "handicap"
-                  ? ["home -1.5", "away +0.5"][Math.floor(rand() * 2)]
-                  : ["over", "under"][Math.floor(rand() * 2)];
+      // Anchoring bites often on this feed, so the mock exercises the capped
+      // path rather than always producing a clean high score.
+      const confidenceRaw = Number((5.2 + rand() * 4.3).toFixed(2));
+      const capped = confidenceRaw > 7 && rand() < 0.45;
+      const confidenceScore = noBetZone
+        ? 0
+        : Number((capped ? Math.min(confidenceRaw, 6.5) : confidenceRaw).toFixed(2));
+
+      const globalPenaltyRaw = Number((rand() * 45).toFixed(1));
+      const globalPenaltyApplied = Math.min(globalPenaltyRaw, 35);
 
       picks.push({
         fixtureIndex: i,
         predictionType: market,
         predictedValue: value,
-        confidenceScore: Number((7.4 + rand() * 2.4).toFixed(2)),
-        reasoning: REASONS[Math.floor(rand() * REASONS.length)],
-        reasoningTags: [
-          TAGS[Math.floor(rand() * TAGS.length)],
-          TAGS[Math.floor(rand() * TAGS.length)],
-        ],
+        confidenceScore,
+        confidenceRaw,
+        anchorCapApplied: capped,
+        anchorCapReason: capped
+          ? "No confirmed lineup and no odds in the payload — anchoring conditions 4 and 6 unmet."
+          : null,
+        consistencyOverride: false,
+        originalPredictedValue: null,
+        overrideReason: null,
+        stakingUnit: confidenceScore >= 9 ? 5 : confidenceScore >= 8 ? 4 : confidenceScore >= 7 ? 3 : confidenceScore >= 6 ? 2 : 1,
+        noBetZone,
+        noBetZoneReason: noBetZone ? "Interim manager taking charge for the first time." : null,
+        reasoning: pick(REASONS),
+        reasoningTags: [pick(TAGS), pick(TAGS)],
         altMarket: "over_under_1_5",
         altPredictedValue: "over",
-        altConfidence: Number((6.8 + rand() * 1.5).toFixed(2)),
-        mraSignalHome: ["overperforming", "stable", "regressing"][
-          Math.floor(rand() * 3)
-        ],
-        mraSignalAway: ["overperforming", "stable", "regressing"][
-          Math.floor(rand() * 3)
-        ],
+        altConfidence: Number((5.8 + rand() * 1.5).toFixed(2)),
+        mraSignalHome: pick(MRA),
+        mraSignalAway: pick(MRA),
+        // Only the gates this feed can actually satisfy fire. The personnel and
+        // weather flags stay false because the mock stats block carries neither,
+        // which is what the live engine should also produce.
         filtersApplied: {
-          chaosFilter: rand() < 0.2,
-          restRule: rand() < 0.15,
-          keyMan: rand() < 0.25,
-          travel: rand() < 0.1,
-          clvDrift: rand() < 0.2,
+          capitulation_applied: rand() < 0.3,
+          recent_h2h_dominance: rand() < 0.25,
+          low_sample_warning: rand() < 0.2,
+          anchor_cap_applied: capped,
+          global_cap_applied: globalPenaltyRaw > 35,
+        },
+        environmentalLog: {
+          windSpeedKmh: null,
+          altitudeMetres: null,
+          temperatureCelsius: null,
+          refereeProfile: "Unknown",
+          refAvgYellows: null,
+          refAvgFouls: null,
+        },
+        h2hLog: {
+          meetingsAnalysed: Math.floor(rand() * 8),
+          weightedScoreHome: null,
+          weightedScoreAway: null,
+          venueH2HRecord: null,
+          recentH2HDominant: null,
+          lowSampleWarning: rand() < 0.2,
+        },
+        formLog: {
+          homeFormWindow: "WDLWW",
+          awayFormWindow: "LDWLL",
+          homeTrajectory: pick(TRAJECTORIES),
+          awayTrajectory: pick(TRAJECTORIES),
+          homeQualityFormScore: null,
+          awayQualityFormScore: null,
+        },
+        personnelLog: {
+          totalAbsencesHome: 0,
+          totalAbsencesAway: 0,
+          suspendedPlayerTierHome: "None",
+          suspendedPlayerTierAway: "None",
+          returnFromInjuryHome: false,
+          returnFromInjuryAway: false,
+          positionalCascadeHome: false,
+          positionalCascadeAway: false,
+          cascadePositionHome: null,
+          cascadePositionAway: null,
+          personnelPenaltyRaw: 0,
+          personnelPenaltyCapped: false,
+        },
+        penaltyLog: {
+          globalPenaltyRaw,
+          globalPenaltyApplied,
+          globalPenaltyCapped: globalPenaltyRaw > 35,
         },
       });
     }

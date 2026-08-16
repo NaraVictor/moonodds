@@ -9,7 +9,7 @@ import type {
   RawTeam,
 } from "./types";
 import { leagueBadgeUrl, teamCrestUrl } from "./types";
-import { MARKETS } from "@/lib/types";
+import { PICK_SCHEMA } from "@/lib/engine/output";
 
 /* -------------------------------------------------------------------------
  * API-Football
@@ -270,53 +270,6 @@ export const liveFootball: FootballProvider = {
  *      structured outputs, which removes the failure mode entirely.
  * ---------------------------------------------------------------------- */
 
-const PICK_SCHEMA = {
-  type: "object",
-  additionalProperties: false,
-  required: ["picks"],
-  properties: {
-    picks: {
-      type: "array",
-      items: {
-        type: "object",
-        additionalProperties: false,
-        required: [
-          "fixtureIndex",
-          "predictionType",
-          "predictedValue",
-          "confidenceScore",
-          "reasoning",
-          "reasoningTags",
-        ],
-        properties: {
-          fixtureIndex: { type: "integer" },
-          predictionType: { type: "string", enum: [...MARKETS] },
-          predictedValue: { type: "string" },
-          confidenceScore: { type: "number" },
-          reasoning: { type: "string" },
-          reasoningTags: { type: "array", items: { type: "string" } },
-          altMarket: { type: "string", enum: [...MARKETS] },
-          altPredictedValue: { type: "string" },
-          altConfidence: { type: "number" },
-          mraSignalHome: { type: "string" },
-          mraSignalAway: { type: "string" },
-          filtersApplied: {
-            type: "object",
-            additionalProperties: false,
-            properties: {
-              chaosFilter: { type: "boolean" },
-              restRule: { type: "boolean" },
-              keyMan: { type: "boolean" },
-              travel: { type: "boolean" },
-              clvDrift: { type: "boolean" },
-            },
-          },
-        },
-      },
-    },
-  },
-} as const;
-
 /**
  * The engine's confidence occasionally comes back on the wrong scale — 0–1 as
  * a probability, or 0–100 as a percentage. Left alone, a 0.92 silently fails
@@ -351,7 +304,7 @@ export const liveAi: AiProvider = {
       messages: [
         {
           role: "user",
-          content: `${userPrompt}\n\nReturn at most ${maxPicks} picks. An empty list is a valid answer when you hold no genuine edge.`,
+          content: `${userPrompt}\n\nReturn exactly ${maxPicks} objects — one per fixture, in index order. Where you hold no edge, say so in the reasoning and score it low; where Step 3 applies, set noBetZone. Do not omit a fixture.`,
         },
       ],
     } as Parameters<typeof client.messages.stream>[0]);

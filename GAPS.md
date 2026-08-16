@@ -1,7 +1,8 @@
-# Feature parity vs. the original Oddstar app
+# Feature parity vs. the original Convex app
 
-Cross-referenced against `~/Desktop/os/oddstar code` — 120 Convex functions and
-30 page components, compared by **capability** rather than by function name (the
+MoonOdds is the product; the Convex + Hercules build it replaces is referred to
+here as "the original". Cross-referenced against that codebase — 120 Convex
+functions and 30 page components, compared by **capability** rather than by function name (the
 port renamed nearly everything, so a name diff produced ~100 false positives and
 was discarded).
 
@@ -117,7 +118,7 @@ at zero. This can become a read of that table once the job populates it.
 ### 12. Theme switching
 
 Light / dark / system, per device. The dark palette had been in `globals.css`
-since the Oddstar reskin and unreachable the whole time, because `layout.tsx`
+since the MoonOdds reskin and unreachable the whole time, because `layout.tsx`
 hard-coded `data-theme="light"`. A blocking inline script applies the choice
 before first paint, so there is no white flash on navigation.
 
@@ -142,6 +143,48 @@ stale prediction link.
   artwork with no key, no quota and no network call in the pipeline.
 
 ---
+
+## Engine prompt v2.1 → v2.2
+
+The supplied v2.1 prompt was adopted with corrections. What changed and why:
+
+**Config resolution moved out of the model.** v2.1's Step 0 asked the engine to
+walk a 130-key table, prefer injected values, fall back to documented defaults
+and report which fell back — in its head, every run, before any analysis. That
+is deterministic work with a wrong answer available, so code does it now.
+
+**The [CORE]/[OPTIONAL] split was redrawn.** v2.1's best idea, applied to the
+wrong set. It tagged personnel, standings, odds movement, travel and rest as
+[CORE] — "always runs; backed by data your feed reliably provides" — and this
+feed provides none of them. Marking a step mandatory and pointing it at absent
+data is exactly the fabrication pressure the prompt exists to prevent. Those are
+now [GATED], each naming its required input, with the inference loopholes closed
+explicitly ("a referee name is not a history"; "venue name alone tells you
+nothing about distance, congestion or surface").
+
+**Absent data no longer manufactures confidence.** The sharpest hidden bug: the
+tier-1 anchoring ceiling required "no market-opposed flag", and with no odds in
+the payload that flag is false — which read as a *clean* fixture and helped clear
+the 9.0 ceiling. Conditions resting on absent data now count as unmet.
+
+**Contradictions resolved.** Step 3 said "skip the fixture entirely" while two
+other sections demanded an object for every fixture; no-bet fixtures are now
+emitted with a flag, because a missing index is indistinguishable from a
+truncated response. Step 9A's consistency check was 1x2-shaped while Step 8 was
+deliberately market-neutral — it is now direction-by-market-family, and
+non-directional tags are excluded from the count rather than read as agreement.
+`anchorDefaultRangeMax` 6.9 overlapped the tier-3 cap of 6.5 and became 6.4. The
+buffers and `globalPenaltyCapPct` were prose constants and are now variables.
+
+**Ungradeable picks blocked.** `corners_over_under` was in the output enum and
+named as a preferred low-variance pivot, but corner results are never settled
+here — the humidity pivot defaulted to corners too. Corners are now
+alternative-only, and the humidity pivot expresses the same directional call on
+under 2.5.
+
+Weight redistribution replaced zero-scoring for absent components: a missing
+signal is not a negative signal, and treating it as one is what made thin-data
+fixtures collapse.
 
 ## Still to wire
 

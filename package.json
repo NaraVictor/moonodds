@@ -11,7 +11,9 @@
     "supabase:start": "supabase start",
     "supabase:stop": "supabase stop",
     "supabase:reset": "supabase db reset",
-    "verify:security": "node scripts/verify-security.mjs"
+    "verify:security": "node scripts/verify-security.mjs",
+    "engine:sync": "node scripts/sync-engine-prompt.mjs",
+    "engine:check": "node scripts/sync-engine-prompt.mjs --check"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.116.0",

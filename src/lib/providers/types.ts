@@ -1,5 +1,3 @@
-import type { Market } from "@/lib/types";
-
 /**
  * External providers, behind one interface each.
  *
@@ -115,21 +113,15 @@ export type FixtureBrief = {
   stats: string;
 };
 
-/** What the engine returns. Shape is enforced by structured outputs. */
-export type EnginePick = {
-  fixtureIndex: number;
-  predictionType: Market;
-  predictedValue: string;
-  confidenceScore: number;
-  reasoning: string;
-  reasoningTags: string[];
-  altMarket?: Market;
-  altPredictedValue?: string;
-  altConfidence?: number;
-  mraSignalHome?: string;
-  mraSignalAway?: string;
-  filtersApplied?: Record<string, boolean>;
-};
+/**
+ * What the engine returns.
+ *
+ * Defined in `@/lib/engine/output` alongside the JSON schema that constrains
+ * it, so the type and the schema cannot drift apart. Re-exported here because
+ * that is where provider consumers expect to find it.
+ */
+import type { EnginePick } from "@/lib/engine/output";
+export type { EnginePick };
 
 export interface AiProvider {
   generatePicks(input: {

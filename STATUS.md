@@ -1,7 +1,7 @@
 # MoonOdds — build status
 
-Migration of the Oddstar app (Convex + Hercules) to Next.js 16 + Supabase +
-HeroUI v3, with dummy data and mocked providers.
+MoonOdds — migrated from the original Convex + Hercules build to Next.js 16 +
+Supabase + HeroUI v3, with dummy data and mocked providers.
 
 Run `pnpm dev` (port 3100) with local Supabase up (`npx supabase start`).
 
@@ -150,21 +150,51 @@ Three things keep this safe:
    pass. Turn it off and it's 20/20 again.
 3. **A red banner sits on every page** while it's active.
 
+### Engine prompt — v2.2, templated
+
+The system prompt is a **template**. Every threshold appears as `{{key}}` and is
+substituted from `ai_engine_config` before the prompt is sent, using the table in
+`src/lib/engine/variables.ts` — 105 variables, each with a unit and a default.
+
+This replaced an arrangement where the prompt carried its own prose defaults
+while the config supplied *differently named keys on a different scale*
+(`tier1Penalty: 20` percent vs `keymanTier1Penalty: 0.12` fraction). Nothing
+reconciled them, so the engine ran on prose defaults and the Office weight
+editor changed nothing. The seeded config now resolves **103 of 103**
+placeholders with zero fallbacks.
+
+Three guardrails, because the failure mode here is silence:
+
+- An unresolved placeholder **throws** at render time. Shipping a literal
+  `{{tier1Penalty}}` to the model is the worst available outcome — the run
+  succeeds and one threshold quietly meant nothing.
+- `validateEngineVariables` flags a percent written as a fraction. A
+  `redCardCarryoverPenalty` of `0.05` is arithmetically valid and functionally
+  absent; verified that the Office surfaces it.
+- Selections are normalised against what `gradePrediction` parses. A model
+  emitting `"Home"` instead of `"1"` produced a pick that graded
+  `review_needed` forever — never won, never lost.
+
+Prompt lives in `src/lib/engine/prompt.ts` and is injected into `seed.sql` by
+`pnpm engine:sync`; `pnpm engine:check` fails if the two drift.
+
+Corrections to the prompt itself are recorded in `GAPS.md`.
+
 ## Not done
 
 Nothing outstanding from the original scope.
 
 ## Known issues
 
-- **Authenticated UI not visually confirmed.** Browser automation couldn't
-  submit the sign-in form (no POST reached the server), so the signed-in views
-  are unverified in a browser. The data layer behind them is proven by the 15
-  checks above, but the rendering is not. Sign in manually with
-  `new@moonodds.test` / `moonodds` to confirm.
 - **ROI reads ~118%**, which is not believable. The formula is ported verbatim
   from the Convex `getEngineStats` (`(wins × 1.8 − losses) / staked`), which
   assumes flat 1.8 odds on every winner. Inherited, not introduced — worth
   replacing with real odds from `odds_snapshots`.
+- **Most of the prompt's machinery has no inputs.** Personnel, standings,
+  odds movement, travel, rest, venue H2H and per-meeting H2H are all written and
+  gated, but `RawFixtureStats` carries only form, aggregate H2H and season
+  averages — so they correctly skip on every fixture. Wiring the feeds is what
+  turns them on; nothing in the prompt needs to change.
 - **Grading was corrected, not ported verbatim.** The Convex original returned
   `false` for markets it couldn't evaluate, so corners and half-goals picks were
   written as LOSSES despite the code comments saying they should be flagged for

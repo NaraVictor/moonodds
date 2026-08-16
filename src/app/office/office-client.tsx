@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   Zap,
   ListChecks,
@@ -40,6 +40,12 @@ import {
 } from "@/lib/format";
 import type { Pick } from "@/lib/types";
 import { Alert } from "@/components/ui/alert";
+import {
+  resolveEngineVariables,
+  validateEngineVariables,
+  VARIABLES_BY_KEY,
+} from "@/lib/engine/variables";
+import { placeholdersIn } from "@/lib/engine/template";
 
 /**
  * The Office.
@@ -1487,6 +1493,105 @@ function ConfigVersions() {
   );
 }
 
+/**
+ * Variable resolution for the prompt currently in the editor.
+ *
+ * The question this answers is the one that used to be unanswerable: when you
+ * change a number in the config, does the engine actually see it? Before the
+ * variable table, most keys resolved to nothing — the names in the config and
+ * the names in the prompt were different vocabularies — and the interface gave
+ * no hint. Anything listed here as a default is a number you are not
+ * controlling, whatever the config says.
+ */
+function PromptVariables({
+  config,
+  prompt,
+}: {
+  config: Record<string, unknown>;
+  prompt: string;
+}) {
+  const resolved = useMemo(() => {
+    const used = new Set(placeholdersIn(prompt));
+    const { values, overrides, fallbacks, unknownKeys } = resolveEngineVariables(config);
+    return {
+      used,
+      values,
+      overrides: overrides.filter((k) => used.has(k)),
+      fallbacks: fallbacks.filter((k) => used.has(k)),
+      undefinedInTable: [...used].filter((k) => !VARIABLES_BY_KEY.has(k)),
+      unknownKeys,
+      warnings: validateEngineVariables(values),
+    };
+  }, [config, prompt]);
+
+  const tiles: [string, string | number, string?][] = [
+    ["Referenced", resolved.used.size],
+    ["From config", resolved.overrides.length],
+    ["Built-in default", resolved.fallbacks.length],
+  ];
+
+  return (
+    <Panel
+      title="Prompt variables"
+      description="Substituted into the prompt before it reaches the engine. A variable on its built-in default is one this config is not steering."
+    >
+      <div className="grid gap-3 sm:grid-cols-3">
+        {tiles.map(([label, value]) => (
+          <div key={label} className="rounded-2xl bg-surface-secondary p-4">
+            <p className="label">{label}</p>
+            <p className="numeral mt-1.5 text-xl">{value}</p>
+          </div>
+        ))}
+      </div>
+
+      {resolved.undefinedInTable.length > 0 && (
+        <Alert status="danger" className="mt-4">
+          <span className="font-semibold">
+            The prompt will not render.
+          </span>{" "}
+          {resolved.undefinedInTable.length} placeholder
+          {resolved.undefinedInTable.length === 1 ? "" : "s"} have no definition, so the daily run
+          will throw rather than send a half-filled prompt:{" "}
+          <code className="font-mono">{resolved.undefinedInTable.join(", ")}</code>
+        </Alert>
+      )}
+
+      {resolved.warnings.map((w) => (
+        <Alert status="warning" className="mt-3" key={w.key}>
+          <code className="font-mono font-semibold">
+            {w.key} = {String(w.value)}
+          </code>{" "}
+          — {w.message}
+        </Alert>
+      ))}
+
+      {resolved.unknownKeys.length > 0 && (
+        <Alert status="warning" className="mt-3">
+          {resolved.unknownKeys.length} config key
+          {resolved.unknownKeys.length === 1 ? "" : "s"} match no known variable and are ignored
+          entirely: <code className="font-mono">{resolved.unknownKeys.join(", ")}</code>
+        </Alert>
+      )}
+
+      {resolved.fallbacks.length > 0 && (
+        <details className="mt-4 rounded-2xl border border-field-border bg-field p-4">
+          <summary className="cursor-pointer text-[13px] font-semibold">
+            {resolved.fallbacks.length} on built-in defaults
+          </summary>
+          <div className="mt-3 grid gap-x-6 gap-y-1.5 sm:grid-cols-2">
+            {resolved.fallbacks.map((key) => (
+              <div key={key} className="flex items-baseline justify-between gap-3 text-[12px]">
+                <code className="font-mono text-muted">{key}</code>
+                <span className="numeral">{String(resolved.values[key])}</span>
+              </div>
+            ))}
+          </div>
+        </details>
+      )}
+    </Panel>
+  );
+}
+
 function EnginePanel() {
   const { data: config, isPending } = useEngineConfig();
   const action = useOfficeAction();
@@ -1587,9 +1692,11 @@ function EnginePanel() {
         </button>
       </Panel>
 
+      <PromptVariables config={config} prompt={prompt ?? config.system_prompt} />
+
       <Panel
         title="System prompt"
-        description="The instructions the engine runs against every fixture. Changing it needs an emailed confirmation code — a bad edit degrades every call silently."
+        description="The instructions the engine runs against every fixture. Values in double braces are substituted from the config above before the prompt is sent. Changing it needs an emailed confirmation code — a bad edit degrades every call silently."
       >
         <textarea
           rows={12}

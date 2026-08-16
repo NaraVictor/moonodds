@@ -12,6 +12,10 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Supabase writes a bundled edge runtime here on `supabase start`. It is
+    // git-ignored generated vendor code, but eslint has no reason to know that,
+    // and linting one minified line produced 154 errors that were not ours.
+    "supabase/.temp/**",
   ]),
 ]);
 
