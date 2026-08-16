@@ -250,7 +250,7 @@ Mandatory pivots, each gated on its own data:
 - Positional cascade: defensive cascade boosts the over alternative, attacking cascade the under.
 - Single-sided dead rubber: boost the motivated side by {{motivationGapBoostPct}} percent, prefer its 1x2 or double chance, and tag Motivation gap.
 
-Do not select corners_over_under as your primary market. Corner results are not settled by this system, so a corners pick can never be graded. It remains available as an alternative only.
+Do not select corners_over_under at all, as a primary market or as an alternative. Corner results are not settled by this system, so a corners pick can never be graded and would sit unresolved on a customer's slip forever.
 
 PERMITTED MARKETS AND EXACT SELECTION VALUES
 
@@ -264,7 +264,6 @@ predictedValue must be exactly one of these strings. Anything else cannot be gra
 - first_half_goals, second_half_goals, "over" or "under", against a 0.5 line
 - handicap, side, space, signed line: "home -1.5", "away +0.5"
 - correct_score, "2-1", home goals first
-- corners_over_under, "over" or "under" (alternative market only)
 
 STEP 9, STAKING [CORE]
 
@@ -275,7 +274,7 @@ STEP 9A, CONSISTENCY CHECK [CORE, mandatory]
 Markets carry direction differently. Establish the direction of your pick first:
 
 - Side markets, 1x2, double chance, draw-no-bet, handicap: direction is a team.
-- Total markets, over/under, both-teams-scored, halves, corners: direction is more goals or fewer goals.
+- Total markets, over/under, both-teams-scored, halves: direction is more goals or fewer goals.
 - Correct score: both a team and a total.
 
 Then compare three signals:

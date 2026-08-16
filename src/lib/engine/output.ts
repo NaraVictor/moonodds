@@ -1,4 +1,4 @@
-import { MARKETS } from "@/lib/types";
+import { MARKETS, GRADEABLE_MARKETS } from "@/lib/types";
 
 /**
  * The engine's output contract.
@@ -183,7 +183,7 @@ export const PICK_SCHEMA = {
       items: objectOf(
         {
           fixtureIndex: { type: "integer" },
-          predictionType: { type: "string", enum: [...MARKETS] },
+          predictionType: { type: "string", enum: [...GRADEABLE_MARKETS] },
           predictedValue: { type: "string" },
           confidenceScore: { type: "number" },
           confidenceRaw: { type: "number" },
@@ -264,7 +264,7 @@ export const PICK_SCHEMA = {
             },
             ["globalPenaltyRaw", "globalPenaltyApplied", "globalPenaltyCapped"],
           ),
-          altMarket: { type: "string", enum: [...MARKETS] },
+          altMarket: { type: "string", enum: [...GRADEABLE_MARKETS] },
           altPredictedValue: { type: "string" },
           altConfidence: { type: "number" },
         },
@@ -302,7 +302,8 @@ const VALID_VALUES: Partial<Record<(typeof MARKETS)[number], readonly string[]>>
   over_under_3_5: ["over", "under"],
   first_half_goals: ["over", "under"],
   second_half_goals: ["over", "under"],
-  corners_over_under: ["over", "under"],
+  // Deliberately absent: corners cannot be graded, so a corners selection is
+  // rejected at the door rather than written and left unsettleable.
   btts: ["yes", "no"],
 };
 

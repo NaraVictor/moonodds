@@ -91,13 +91,51 @@ export default async function PolicyPage() {
         <Section title="Your choices">
           <p>
             You can edit your profile and turn any alert off from your account
-            page at any time. You can ask us for a copy of your data, ask us to
-            correct it, or ask us to delete your account, write to
-            hello@moonodds.app and we will confirm within a working day.
+            page at any time. Two things you no longer need to ask us for:{" "}
+            <strong>Download my data</strong> gives you everything we hold about
+            you as a file, and <strong>Delete my account</strong> removes it.
+            Both are on your profile page and neither needs our involvement.
+          </p>
+          <p>
+            Deleting removes your profile, slips, preferences and play limits
+            immediately. Payment records are kept but unlinked from you: they
+            are financial records we are required to retain, and they no longer
+            identify you once the account is gone.
           </p>
           <p>
             Clearing your browser storage removes the 18+ confirmation and view
             preference held on your device.
+          </p>
+        </Section>
+
+        <Section title="Your rights over this data">
+          <p>
+            Where data-protection law applies to you, and it does under Ghana&rsquo;s
+            Data Protection Act and under the UK and EU GDPR, you have the right
+            to be told what we hold, to get a copy of it, to have it corrected,
+            to have it erased, to restrict or object to how we use it, and to
+            take it elsewhere in a portable form.
+          </p>
+          <p>
+            The copy and the erasure are both self-service on your profile page,
+            so exercising those two takes a click rather than a request. For
+            anything else, write to hello@moonodds.app and we will answer within
+            30 days, which is the outside limit the law allows rather than how
+            long we intend to take.
+          </p>
+          <p>
+            We rely on two lawful bases. Running your account and taking payment
+            for a pass is <em>performance of a contract</em>, you asked us for
+            the service and we cannot provide it otherwise. Keeping the service
+            secure and working is our <em>legitimate interest</em>. Where we ask
+            for consent, for SMS alerts, you can withdraw it from your profile
+            and it takes effect immediately.
+          </p>
+          <p>
+            If you think we have handled your data badly, tell us first so we
+            can put it right. You are also entitled to complain to the Data
+            Protection Commission in Ghana, or to the supervisory authority
+            where you live.
           </p>
         </Section>
 

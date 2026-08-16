@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireSuperAdmin } from "@/lib/api-auth";
+import { refundPayment } from "@/lib/payments";
 import { createServiceClient } from "@/lib/supabase/server";
 import {
   runAutoGrade,
@@ -162,6 +163,11 @@ const Body = z.discriminatedUnion("action", [
     phone: z.string().max(32).nullable().optional(),
   }),
   z.object({ action: z.literal("deleteUser"), userId: z.uuid() }),
+  z.object({
+    action: z.literal("refundPayment"),
+    reference: z.string().min(8),
+    reason: z.string().min(3).max(500),
+  }),
   z.object({
     action: z.literal("setSelectedLeagues"),
     configId: z.uuid(),
@@ -656,6 +662,26 @@ export async function POST(request: Request) {
         const { error } = await db.from("profiles").update(patch).eq("id", body.userId);
         if (error) throw new Error(error.message);
         return NextResponse.json({ updated: true });
+      }
+
+      case "refundPayment": {
+        // The Terms commit to a refund when a pass is charged in error or when
+        // we fail to publish on a day someone paid for. Until now both were a
+        // manual Paystack operation with nothing linking it back to the
+        // payments row, so our revenue figures drifted the first time one
+        // happened. Access is revoked in the same call.
+        const out = await refundPayment(body.reference, {
+          reason: body.reason,
+          actor,
+        });
+        if (!out.ok) {
+          return NextResponse.json({ error: out.reason }, { status: out.status });
+        }
+        return NextResponse.json({
+          refunded: true,
+          alreadyRefunded: out.alreadyActive,
+          purpose: out.purpose,
+        });
       }
 
       case "deleteUser": {

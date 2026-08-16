@@ -702,6 +702,40 @@ async function handleJob(
       return;
     }
 
+    case "payment_receipt": {
+      const p = job.payload as {
+        userId: string; reference: string; purpose: string;
+        amountMinor: number; currency: string; amountUsd: number;
+      };
+
+      const { data: profile } = await db
+        .from("profiles")
+        .select("email")
+        .eq("id", p.userId)
+        .maybeSingle();
+
+      if (!profile?.email) return;
+
+      const what =
+        p.purpose === "daily_pass" ? "Day pass" : "Extra league picks";
+      const major = (p.amountMinor / 100).toFixed(2);
+
+      await messaging.sendEmail({
+        to: profile.email,
+        subject: `Your MoonOdds receipt (${p.reference})`,
+        html:
+          `<p>Thanks, your payment went through.</p>` +
+          `<table style="border-collapse:collapse">` +
+          `<tr><td style="padding:4px 12px 4px 0">Item</td><td><strong>${what}</strong></td></tr>` +
+          `<tr><td style="padding:4px 12px 4px 0">Amount</td><td><strong>${p.currency} ${major}</strong> (about $${p.amountUsd})</td></tr>` +
+          `<tr><td style="padding:4px 12px 4px 0">Reference</td><td><code>${p.reference}</code></td></tr>` +
+          `<tr><td style="padding:4px 12px 4px 0">Date</td><td>${new Date().toUTCString()}</td></tr>` +
+          `</table>` +
+          `<p style="color:#666;font-size:13px">Keep this reference. You will need it if you ever ask us about this payment.</p>`,
+      });
+      return;
+    }
+
     case "engine_published_nothing": {
       // Goes to the operators, not to customers. A quiet day is our problem to
       // investigate before it becomes a refund conversation.

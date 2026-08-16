@@ -6,6 +6,7 @@ import type {
   MessagingProvider,
   PaymentProvider,
   RawFixture,
+  RawFixtureStats,
   RawTeam,
 } from "./types";
 import { leagueBadgeUrl, teamCrestUrl } from "./types";
@@ -168,6 +169,175 @@ function seasonsFor(date: string): number[] {
   return [...new Set([primary, year])];
 }
 
+
+/* ------------------------- fixture stats helpers ------------------------- */
+
+type ApiH2H = {
+  teams: { home: { id: number }; away: { id: number } };
+  goals: { home: number | null; away: number | null };
+  fixture: { status: { short: string } };
+};
+
+type ApiTeamStats = {
+  form: string | null;
+  fixtures: {
+    played: { total: number };
+    wins: { total: number };
+    draws: { total: number };
+    loses: { total: number };
+  };
+  goals: {
+    for: { total: { total: number }; average: { total: string } };
+    against: { total: { total: number }; average: { total: string } };
+  };
+  clean_sheet: { total: number };
+  failed_to_score: { total: number };
+};
+
+/**
+ * Recent meetings between two sides.
+ *
+ * Only finished fixtures count. An abandoned or postponed match carries null
+ * goals, and folding those in as 0-0 would invent draws that never happened.
+ */
+async function headToHead(homeId: number, awayId: number) {
+  const empty = { homeWins: 0, awayWins: 0, draws: 0, avgGoals: 0, bttsRate: 0 };
+
+  let rows: ApiH2H[];
+  try {
+    rows = await apiFootball<ApiH2H>(
+      `/fixtures/headtohead?h2h=${homeId}-${awayId}&last=10`,
+    );
+  } catch (err) {
+    console.error(`[football] h2h ${homeId}-${awayId}:`, err);
+    return empty;
+  }
+
+  return tallyH2H(rows, homeId);
+}
+
+/**
+ * Tally meetings from the perspective of one side.
+ *
+ * Pure and exported so the attribution can be tested without a network. The
+ * subtlety is that the API returns each meeting with its OWN home side, which
+ * is not necessarily the home side of the fixture being priced, so a reverse
+ * fixture has to be credited by team id rather than by position. Getting that
+ * wrong inverts the head-to-head split on exactly half the meetings, and the
+ * totals still look plausible.
+ */
+export function tallyH2H(rows: ApiH2H[], homeId: number) {
+  const empty = { homeWins: 0, awayWins: 0, draws: 0, avgGoals: 0, bttsRate: 0 };
+
+  const played = rows.filter(
+    (r) =>
+      DONE_CODES.includes(r.fixture?.status?.short ?? "") &&
+      r.goals.home != null &&
+      r.goals.away != null,
+  );
+  if (!played.length) return empty;
+
+  let homeWins = 0;
+  let awayWins = 0;
+  let draws = 0;
+  let goals = 0;
+  let btts = 0;
+
+  for (const r of played) {
+    const hg = r.goals.home as number;
+    const ag = r.goals.away as number;
+    goals += hg + ag;
+    if (hg > 0 && ag > 0) btts++;
+
+    if (hg === ag) draws++;
+    else if ((hg > ag) === (r.teams.home.id === homeId)) homeWins++;
+    else awayWins++;
+  }
+
+  return {
+    homeWins,
+    awayWins,
+    draws,
+    avgGoals: Number((goals / played.length).toFixed(2)),
+    bttsRate: Number((btts / played.length).toFixed(3)),
+  };
+}
+
+/**
+ * A team's season in one competition, memoised per run.
+ *
+ * `form` rides along inside the record and is stripped out before the value
+ * reaches the engine, because RawFixtureStats keeps form as its own field.
+ */
+async function teamSeason(
+  cache: Map<string, Record<string, number> | null>,
+  leagueId: number,
+  season: number,
+  teamId: number,
+): Promise<Record<string, number> | null> {
+  const key = `${leagueId}:${season}:${teamId}`;
+  if (cache.has(key)) return cache.get(key) ?? null;
+
+  let stats: ApiTeamStats | undefined;
+  try {
+    // This endpoint answers with a single object rather than an array.
+    const rows = await apiFootball<ApiTeamStats>(
+      `/teams/statistics?league=${leagueId}&season=${season}&team=${teamId}`,
+    );
+    stats = Array.isArray(rows) ? rows[0] : (rows as unknown as ApiTeamStats);
+  } catch (err) {
+    console.error(`[football] team stats ${teamId}:`, err);
+  }
+
+  if (!stats?.fixtures) {
+    cache.set(key, null);
+    return null;
+  }
+
+  const played = stats.fixtures.played?.total ?? 0;
+  const conceded = stats.goals?.against?.total?.total ?? 0;
+  const cleanSheets = stats.clean_sheet?.total ?? 0;
+  const failedToScore = stats.failed_to_score?.total ?? 0;
+
+  const record: Record<string, number> = {
+    gamesPlayed: played,
+    wins: stats.fixtures.wins?.total ?? 0,
+    draws: stats.fixtures.draws?.total ?? 0,
+    losses: stats.fixtures.loses?.total ?? 0,
+    avgGoalsScored: num(stats.goals?.for?.average?.total),
+    avgGoalsConceded: num(stats.goals?.against?.average?.total),
+    cleanSheetRate: played ? Number((cleanSheets / played).toFixed(3)) : 0,
+    // Both teams scored in a game this side played: they scored (did not fail
+    // to score) and they conceded at least once. Derived rather than fetched,
+    // because the endpoint does not report it and a second call per team to
+    // get it would not be worth the quota.
+    bttsRate: played
+      ? Number((((played - failedToScore) * (conceded > 0 ? 1 : 0)) / played).toFixed(3))
+      : 0,
+  };
+
+  // Carried through so fetchStats can read it, stripped before it ships.
+  (record as unknown as { form: string | null }).form = stats.form ?? null;
+
+  cache.set(key, record);
+  return record;
+}
+
+function stripForm(rec: Record<string, number> | null): Record<string, number> {
+  if (!rec) return {};
+  const out = { ...rec } as Record<string, unknown>;
+  // form rides along inside the cached record so fetchStats can read it once;
+  // RawFixtureStats keeps it as its own field, so it must not also appear here.
+  delete out.form;
+  return out as Record<string, number>;
+}
+
+/** API-Football returns averages as strings like "1.85". */
+function num(v: string | number | null | undefined): number {
+  const n = typeof v === "string" ? Number.parseFloat(v) : v;
+  return Number.isFinite(n) ? Number((n as number).toFixed(2)) : 0;
+}
+
 export const liveFootball: FootballProvider = {
   async fetchFixtures(date, leagueIds) {
     const seen = new Set<number>();
@@ -194,16 +364,68 @@ export const liveFootball: FootballProvider = {
     return out;
   },
 
+  /**
+   * Form, head-to-head and season splits for upcoming fixtures.
+   *
+   * This threw by design until now, because handing the engine empty stats
+   * while its prompt claims to have reasoned over data is worse than a loud
+   * failure. It is the feed the whole [CORE] tier of the prompt reads.
+   *
+   * Three upstream calls per fixture at worst, and the reason for the caches:
+   * a matchday has several fixtures in one league, and `/teams/statistics` is
+   * keyed on (team, league, season), so without memoising the same team is
+   * fetched once per fixture it appears in. API-Football bills per call and the
+   * daily budget in ai_engine_config assumes about four per fixture.
+   */
   async fetchStats(externalIds) {
-    // API-Football exposes these across /fixtures/headtohead and /teams/statistics.
-    // Wiring the real calls is a follow-up; failing loudly beats silently
-    // handing the engine empty stats and pretending it reasoned over data.
     if (!externalIds.length) return [];
-    throw new Error(
-      "Live fixture-stats fetching is not implemented yet. " +
-        "Run with MOCK_PROVIDERS=true, or implement liveFootball.fetchStats " +
-        "against /fixtures/headtohead and /teams/statistics.",
-    );
+
+    const out: RawFixtureStats[] = [];
+    const teamStatsCache = new Map<string, Record<string, number> | null>();
+
+    // The ids alone do not carry team, league or season, so the fixtures come
+    // first and everything else keys off them.
+    const fixtures: ApiFixture[] = [];
+    for (let i = 0; i < externalIds.length; i += 20) {
+      const chunk = externalIds.slice(i, i + 20);
+      try {
+        fixtures.push(...(await apiFootball<ApiFixture>(`/fixtures?ids=${chunk.join("-")}`)));
+      } catch (err) {
+        console.error("[football] stats: fixture chunk failed:", err);
+      }
+    }
+
+    for (const f of fixtures) {
+      const homeId = f.teams.home.id;
+      const awayId = f.teams.away.id;
+      const leagueId = f.league.id;
+      const season = f.league.season;
+
+      const [h2h, homeSeason, awaySeason] = await Promise.all([
+        headToHead(homeId, awayId),
+        teamSeason(teamStatsCache, leagueId, season, homeId),
+        teamSeason(teamStatsCache, leagueId, season, awayId),
+      ]);
+
+      out.push({
+        fixtureExternalId: f.fixture.id,
+        // Form comes from the season statistics rather than being derived
+        // here: API-Football already computes it against the right competition,
+        // and a string assembled from recent fixtures would silently mix
+        // cup games into a league form line.
+        homeForm: (homeSeason?.form as unknown as string) ?? null,
+        awayForm: (awaySeason?.form as unknown as string) ?? null,
+        h2hHomeWins: h2h.homeWins,
+        h2hAwayWins: h2h.awayWins,
+        h2hDraws: h2h.draws,
+        h2hAvgGoals: h2h.avgGoals,
+        h2hBttsRate: h2h.bttsRate,
+        homeSeason: stripForm(homeSeason),
+        awaySeason: stripForm(awaySeason),
+      });
+    }
+
+    return out;
   },
 
   async fetchResults(externalIds) {

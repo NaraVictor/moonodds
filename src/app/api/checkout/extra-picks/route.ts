@@ -10,6 +10,7 @@ import {
   usdToPesewas,
 } from "@/lib/pricing";
 import { settlePayment } from "@/lib/payments";
+import { requireVerifiedEmail } from "@/lib/require-verified";
 
 /**
  * Extra league picks, a pass-holder perk.
@@ -64,6 +65,12 @@ export async function POST(request: Request) {
 
   if (!user) {
     return NextResponse.json({ error: "Sign in first." }, { status: 401 });
+  }
+
+  // Nothing is charged to an address nobody has proven they control.
+  const verified = await requireVerifiedEmail();
+  if (!verified.ok) {
+    return NextResponse.json({ error: verified.reason }, { status: verified.status });
   }
 
   const parsed = Init.safeParse(await request.json().catch(() => null));

@@ -5,6 +5,7 @@ import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { getProviders } from "@/lib/providers";
 import { PASS_PRICE_USD, getUsdToGhsRate, usdToPesewas } from "@/lib/pricing";
 import { settlePayment } from "@/lib/payments";
+import { requireVerifiedEmail } from "@/lib/require-verified";
 
 /**
  * Day pass checkout.
@@ -37,6 +38,12 @@ export async function POST(request: Request) {
 
   if (!user) {
     return NextResponse.json({ error: "Sign in first." }, { status: 401 });
+  }
+
+  // Nothing is charged to an address nobody has proven they control.
+  const verified = await requireVerifiedEmail();
+  if (!verified.ok) {
+    return NextResponse.json({ error: verified.reason }, { status: verified.status });
   }
 
   const db = createServiceClient();

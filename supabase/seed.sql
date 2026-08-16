@@ -510,7 +510,7 @@ Mandatory pivots, each gated on its own data:
 - Positional cascade: defensive cascade boosts the over alternative, attacking cascade the under.
 - Single-sided dead rubber: boost the motivated side by {{motivationGapBoostPct}} percent, prefer its 1x2 or double chance, and tag Motivation gap.
 
-Do not select corners_over_under as your primary market. Corner results are not settled by this system, so a corners pick can never be graded. It remains available as an alternative only.
+Do not select corners_over_under at all, as a primary market or as an alternative. Corner results are not settled by this system, so a corners pick can never be graded and would sit unresolved on a customer's slip forever.
 
 PERMITTED MARKETS AND EXACT SELECTION VALUES
 
@@ -524,7 +524,6 @@ predictedValue must be exactly one of these strings. Anything else cannot be gra
 - first_half_goals, second_half_goals, "over" or "under", against a 0.5 line
 - handicap, side, space, signed line: "home -1.5", "away +0.5"
 - correct_score, "2-1", home goals first
-- corners_over_under, "over" or "under" (alternative market only)
 
 STEP 9, STAKING [CORE]
 
@@ -535,7 +534,7 @@ STEP 9A, CONSISTENCY CHECK [CORE, mandatory]
 Markets carry direction differently. Establish the direction of your pick first:
 
 - Side markets, 1x2, double chance, draw-no-bet, handicap: direction is a team.
-- Total markets, over/under, both-teams-scored, halves, corners: direction is more goals or fewer goals.
+- Total markets, over/under, both-teams-scored, halves: direction is more goals or fewer goals.
 - Correct score: both a team and a total.
 
 Then compare three signals:
@@ -592,7 +591,7 @@ declare
   market_bank text[] := array[
     '1x2', 'over_under_2_5', 'over_under_1_5', 'over_under_3_5', 'btts',
     'double_chance', 'draw_no_bet', 'handicap', 'correct_score',
-    'corners_over_under', 'first_half_goals', 'second_half_goals'
+    'first_half_goals', 'second_half_goals'
   ];
   reason_bank text[] := array[
     'Home side has converted %s%% of big chances across their last five, while the visitors concede from set pieces at nearly double the league rate. The model likes the goal line more than the result.',
@@ -647,7 +646,7 @@ begin
       'Regular Season - ' || (10 + floor(random() * 25))::text
     ) returning id into f_id;
 
-    mkt := market_bank[1 + floor(random() * 8)];
+    mkt := market_bank[1 + floor(random() * array_length(market_bank, 1))];
     conf := round((7.2 + random() * 2.5)::numeric, 2);
 
     -- Selection consistent with the market, and a result consistent with it,
@@ -804,7 +803,7 @@ begin
     ) returning id into f_id;
 
     -- Spread across the full market vocabulary so every label gets exercised.
-    mkt := market_bank[1 + ((i - 1) % 12)];
+    mkt := market_bank[1 + ((i - 1) % array_length(market_bank, 1))];
     conf := round((7.4 + random() * 2.4)::numeric, 2);
     sel := case mkt
       when '1x2' then (array['1','X','2'])[1 + floor(random() * 3)]

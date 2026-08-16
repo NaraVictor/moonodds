@@ -97,6 +97,7 @@ export async function settlePayment(
       console.error("[payments] activate_daily_pass:", error);
       return { ok: false, reason: "Could not activate the pass.", status: 500 };
     }
+    await queueReceipt(db, payment);
     return { ok: true, alreadyActive: false, purpose: payment.purpose };
   }
 
@@ -115,10 +116,43 @@ export async function settlePayment(
       console.error("[payments] activate_extra_picks:", error);
       return { ok: false, reason: "Could not unlock the picks.", status: 500 };
     }
+    await queueReceipt(db, payment);
     return { ok: true, alreadyActive: false, purpose: payment.purpose };
   }
 
   return { ok: false, reason: `Unknown purpose: ${payment.purpose}`, status: 500 };
+}
+
+/**
+ * Queue a receipt.
+ *
+ * Through the outbox, not sent inline: the pass is already active by this point
+ * and a slow mail provider must not turn a successful purchase into a failed
+ * request. Customers had no proof of purchase to quote in a dispute, which is
+ * a poor position to put someone in when the Terms promise refunds.
+ */
+async function queueReceipt(
+  db: ReturnType<typeof createServiceClient>,
+  payment: {
+    user_id: string;
+    reference: string;
+    purpose: string;
+    amount_minor: number;
+    currency: string;
+    amount_usd: number;
+  },
+) {
+  await db.from("jobs").insert({
+    kind: "payment_receipt",
+    payload: {
+      userId: payment.user_id,
+      reference: payment.reference,
+      purpose: payment.purpose,
+      amountMinor: payment.amount_minor,
+      currency: payment.currency,
+      amountUsd: payment.amount_usd,
+    },
+  });
 }
 
 /**

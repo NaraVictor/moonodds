@@ -198,11 +198,14 @@ Nothing outstanding from the original scope.
   from the Convex `getEngineStats` (`(wins × 1.8 − losses) / staked`), which
   assumes flat 1.8 odds on every winner. Inherited, not introduced, worth
   replacing with real odds from `odds_snapshots`.
-- **Most of the prompt's machinery has no inputs.** Personnel, standings,
-  odds movement, travel, rest, venue H2H and per-meeting H2H are all written and
-  gated, but `RawFixtureStats` carries only form, aggregate H2H and season
-  averages, so they correctly skip on every fixture. Wiring the feeds is what
-  turns them on; nothing in the prompt needs to change.
+- **Most of the prompt's machinery still has no inputs.** Personnel, standings,
+  odds movement, travel, rest and per-meeting H2H are written and gated, and
+  `fetchStats` now supplies form, aggregate H2H and season splits but not those.
+  They correctly skip on every fixture. Wiring the remaining feeds is what turns
+  them on; nothing in the prompt needs to change.
+- **`fetchStats` is implemented but unexercised against the live API.** The
+  transport, the H2H attribution and the season mapping are written and the
+  attribution is unit-tested, but no call has been made with a real key.
 - **Grading was corrected, not ported verbatim.** The Convex original returned
   `false` for markets it couldn't evaluate, so corners and half-goals picks were
   written as LOSSES despite the code comments saying they should be flagged for

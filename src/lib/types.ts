@@ -22,6 +22,21 @@ export const MARKETS = [
 
 export type Market = (typeof MARKETS)[number];
 
+/**
+ * Markets the engine may actually select.
+ *
+ * Corners are excluded: we do not fetch corner counts, so gradePrediction can
+ * only ever return review_needed for them. A selectable outcome that can never
+ * settle eventually reaches a customer's slip and sits there forever.
+ *
+ * The value stays in MARKETS and in the database enum because historical rows
+ * carry it and dropping an enum member would orphan them. This is the list that
+ * governs what can be created from here on.
+ */
+export const GRADEABLE_MARKETS = MARKETS.filter(
+  (m) => m !== "corners_over_under",
+) as Exclude<Market, "corners_over_under">[];
+
 export type PredictionStatus =
   | "pending"
   | "won"

@@ -167,15 +167,69 @@ select kind, status, attempts, last_error from jobs order by created_at desc lim
 
 ---
 
-## Rollback
+## Backup, restore and rollback
 
-Supabase keeps automatic backups on paid plans; confirm the retention window
-for this project before the first real customer, because that window is the
-real recovery boundary and nobody knows what it is yet.
+### What has to survive
 
-There is no down-migration in this repo. A bad migration is rolled back by
-restoring a backup, which means the answer to "how far back can we go" needs to
-be known in advance rather than discovered during an incident.
+Three things are the business, in this order:
 
-Application rollback is a Vercel redeploy of the previous commit, which is
-independent of the database and safe as long as no migration ran in between.
+1. **`predictions` and `fixtures`.** The settled record is the entire argument
+   for the product. It cannot be regenerated, because the engine's output for a
+   past day depends on data the feed no longer serves.
+2. **`ai_engine_config`.** The live prompt and its weights.
+3. **`payments`, `daily_passes`, `extra_pick_orders`.** Financial records, with
+   retention obligations of their own.
+
+Everything else, leagues, teams, stats, jobs, is refetchable or transient.
+
+### Establish the retention window before the first customer
+
+Supabase's automatic backups and their retention depend on the plan. Check it
+and write the answer here:
+
+```
+Plan:              ____________
+Backup frequency:  ____________
+Retention:         ____________   ← this is the real recovery boundary
+PITR available:    yes / no
+```
+
+Blank means nobody knows, and the first time that matters is the worst possible
+time to find out.
+
+### A weekly copy you control
+
+Platform backups are the first line, not the only one. This costs nothing and
+takes seconds:
+
+```bash
+supabase db dump --linked -f "moonodds-$(date +%F).sql"          # schema
+supabase db dump --linked --data-only -f "moonodds-$(date +%F)-data.sql"
+```
+
+Keep them somewhere that is not the same account as the database. A backup that
+dies with the provider is not a backup.
+
+### Restoring
+
+Rehearse this once, on a throwaway project, before needing it:
+
+```bash
+supabase db reset --linked      # DESTRUCTIVE. re-applies migrations only
+psql "$DB_URL" -f moonodds-YYYY-MM-DD-data.sql
+```
+
+### Rolling back a bad migration
+
+There are no down-migrations in this repo, which is a deliberate trade: a
+reverse script that has never been run is a false sense of safety. Recovery is
+restore-from-backup, and that is why the retention window above matters.
+
+The safer path is forward. Write a new migration that corrects the last one and
+push it, which keeps the history honest about what actually happened.
+
+### Rolling back the app
+
+A Vercel redeploy of the previous commit. Independent of the database and safe
+as long as no migration ran in between, which is the reason to deploy schema
+changes and app changes as separate steps rather than together.

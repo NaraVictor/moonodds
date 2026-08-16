@@ -86,10 +86,14 @@ export async function signUp(
   }
 
   const supabase = await createClient();
+  const site = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3100";
+
   const { error } = await supabase.auth.signUp({
     email,
     password,
     options: {
+      // Where Supabase sends them after they click the confirmation link.
+      emailRedirectTo: `${site}/auth/confirmed`,
       data: {
         display_name: displayName || email.split("@")[0],
         date_of_birth: dob,
