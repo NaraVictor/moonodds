@@ -180,6 +180,14 @@ Prompt lives in `src/lib/engine/prompt.ts` and is injected into `seed.sql` by
 
 Corrections to the prompt itself are recorded in `GAPS.md`.
 
+### Deploying
+
+Supabase project `sktaghkuppcqzsltuffu`. The runbook is `docs/DEPLOY.md`, and
+the step that matters most is the one that is silent when missed: `app.settings`
+ships with `host.docker.internal:3100` and the dev cron secret, so until it is
+updated on the remote every scheduled job posts into the void and no picks are
+ever generated.
+
 ## Not done
 
 Nothing outstanding from the original scope.
