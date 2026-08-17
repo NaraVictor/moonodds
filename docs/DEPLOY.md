@@ -159,6 +159,20 @@ select reference, status, settled_at from payments order by created_at desc limi
 
 ## 4. Verify the deploy
 
+**Start here.** One request answers whether the deploy is actually wired up,
+including the two things that fail silently:
+
+```bash
+curl -s https://YOUR-DOMAIN/api/health | jq
+```
+
+`200` means ready. `503` lists exactly what is not, by name. It reports whether
+values are configured and whether they still look like the local defaults,
+never the values themselves, so it is safe to leave public and safe to point an
+uptime monitor at.
+
+Then the individual checks:
+
 ```bash
 # Headers are set by next.config.ts, not by Vercel config.
 curl -sI https://YOUR-DOMAIN | grep -iE "content-security|strict-transport|x-frame"
@@ -180,11 +194,33 @@ select kind, status, attempts, last_error from jobs order by created_at desc lim
 
 ---
 
+## 4b. Check the live providers
+
+```bash
+pnpm verify:live            # everything configured
+pnpm verify:live football   # one provider
+```
+
+Read-only throughout: it authenticates, reads shapes and reports quota. Nothing
+is charged and no mail is sent.
+
+It asserts the **shape** of each response, not just a 200, because the failure
+that hides is a successful call whose fields have moved. It has already caught
+two:
+
+- **API-Football's Free plan rejects the `last` parameter**, answering HTTP 200
+  with an errors object. Head-to-head silently returned nothing. Now uses
+  `status=FT` and takes the ten most recent client-side.
+- **The Free plan allows 100 calls a day.** A 30-fixture day needs roughly
+  45-60 for stats alone, before the fixture pull and grading. That is the limit
+  that will bite first, and `verify:live` reports the headroom.
+
+---
+
 ## 5. Still required before taking real money
 
-- `MOCK_PROVIDERS` must be `false`, and `liveFootball.fetchStats` must be
-  implemented. It currently throws by design, so a live run fails loudly rather
-  than feeding the engine nothing.
+- `MOCK_PROVIDERS` must be `false`. `liveFootball.fetchStats` is implemented and
+  verified against the live API with `pnpm verify:live football`.
 - `DEV_BYPASS_AUTH` must be absent or `false`. It is ignored in production
   builds regardless, but leaving it set is a confusing signal.
 - Terms and Privacy still carry a "not reviewed by a lawyer" banner. See the

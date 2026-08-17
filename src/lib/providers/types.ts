@@ -57,11 +57,18 @@ export type RawFixtureStats = {
   fixtureExternalId: number;
   homeForm: string | null;
   awayForm: string | null;
-  h2hHomeWins: number;
-  h2hAwayWins: number;
-  h2hDraws: number;
-  h2hAvgGoals: number;
-  h2hBttsRate: number;
+  /**
+   * Null means WE HAVE NO HEAD-TO-HEAD, not "they have never beaten each
+   * other". These were non-nullable numbers, so a failed or empty upstream call
+   * produced 0/0/0 and the engine read it as a real goalless history. The whole
+   * [GATED] design of the prompt rests on absent data being absent, so absence
+   * has to be representable.
+   */
+  h2hHomeWins: number | null;
+  h2hAwayWins: number | null;
+  h2hDraws: number | null;
+  h2hAvgGoals: number | null;
+  h2hBttsRate: number | null;
   homeSeason: Record<string, number>;
   awaySeason: Record<string, number>;
 };

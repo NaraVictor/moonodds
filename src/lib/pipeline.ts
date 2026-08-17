@@ -265,7 +265,11 @@ function statsBlock(s: Record<string, unknown> | null | undefined): string {
   const away = (s.away_season ?? {}) as Record<string, number>;
   return [
     `    Form (oldest result first, rightmost is most recent): home ${s.home_form ?? "?"} | away ${s.away_form ?? "?"}`,
-    `    H2H totals: ${s.h2h_home_wins ?? 0} home wins, ${s.h2h_draws ?? 0} draws, ${s.h2h_away_wins ?? 0} away wins; avg ${s.h2h_avg_goals ?? "?"} goals, both scored ${s.h2h_btts_rate ?? "?"}`,
+    // Absent H2H is stated as absent. Rendering nulls as 0 would tell the
+    // engine these sides have met and never scored, which is a claim, not a gap.
+    s.h2h_home_wins == null
+      ? "    H2H: none available for this pairing"
+      : `    H2H totals: ${s.h2h_home_wins} home wins, ${s.h2h_draws ?? 0} draws, ${s.h2h_away_wins ?? 0} away wins; avg ${s.h2h_avg_goals ?? "?"} goals, both scored ${s.h2h_btts_rate ?? "?"}`,
     `    Home season: ${home.avgGoalsScored ?? "?"} scored / ${home.avgGoalsConceded ?? "?"} conceded per game, clean sheets ${home.cleanSheetRate ?? "?"}, both scored ${home.bttsRate ?? "?"}`,
     `    Away season: ${away.avgGoalsScored ?? "?"} scored / ${away.avgGoalsConceded ?? "?"} conceded per game, clean sheets ${away.cleanSheetRate ?? "?"}, both scored ${away.bttsRate ?? "?"}`,
   ].join("\n");

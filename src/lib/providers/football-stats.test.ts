@@ -73,9 +73,17 @@ describe("tallyH2H", () => {
     expect(t.avgGoals).toBe(3);
   });
 
+  it("reports how many it actually counted", () => {
+    // `played` is what lets the caller tell "no history" from "0-0-0", which
+    // are very different claims to put in front of the engine.
+    expect(tallyH2H([], HOME).played).toBe(0);
+    expect(tallyH2H([meeting(HOME, AWAY, null, null, "PST")], HOME).played).toBe(0);
+    expect(tallyH2H([meeting(HOME, AWAY, 2, 1)], HOME).played).toBe(1);
+  });
+
   it("returns zeroes rather than dividing by nothing", () => {
     expect(tallyH2H([], HOME)).toEqual({
-      homeWins: 0, awayWins: 0, draws: 0, avgGoals: 0, bttsRate: 0,
+      homeWins: 0, awayWins: 0, draws: 0, avgGoals: 0, bttsRate: 0, played: 0,
     });
     expect(tallyH2H([meeting(HOME, AWAY, null, null, "PST")], HOME).avgGoals).toBe(0);
   });

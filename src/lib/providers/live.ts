@@ -175,7 +175,7 @@ function seasonsFor(date: string): number[] {
 type ApiH2H = {
   teams: { home: { id: number }; away: { id: number } };
   goals: { home: number | null; away: number | null };
-  fixture: { status: { short: string } };
+  fixture: { status: { short: string }; date?: string };
 };
 
 type ApiTeamStats = {
@@ -201,19 +201,32 @@ type ApiTeamStats = {
  * goals, and folding those in as 0-0 would invent draws that never happened.
  */
 async function headToHead(homeId: number, awayId: number) {
-  const empty = { homeWins: 0, awayWins: 0, draws: 0, avgGoals: 0, bttsRate: 0 };
-
   let rows: ApiH2H[];
   try {
+    // NO `last` PARAMETER. API-Football rejects it on the Free plan with
+    // "Free plans do not have access to the Last parameter", returned as
+    // HTTP 200 plus an errors object, so the call silently yielded nothing.
+    // status=FT filters to finished games upstream, which is what we want
+    // anyway, and the ten most recent are taken below.
     rows = await apiFootball<ApiH2H>(
-      `/fixtures/headtohead?h2h=${homeId}-${awayId}&last=10`,
+      `/fixtures/headtohead?h2h=${homeId}-${awayId}&status=FT`,
     );
   } catch (err) {
     console.error(`[football] h2h ${homeId}-${awayId}:`, err);
-    return empty;
+    // Null, not zeros. Zeros are a claim that they have met and never scored.
+    return null;
   }
 
-  return tallyH2H(rows, homeId);
+  if (!rows.length) return null;
+
+  // Newest first, then the ten most recent, matching what `last=10` meant.
+  const recent = [...rows]
+    .sort((a, b) => (b.fixture?.date ?? "").localeCompare(a.fixture?.date ?? ""))
+    .slice(0, 10);
+
+  const tallied = tallyH2H(recent, homeId);
+  // Nothing finished among them is the same as having no history to read.
+  return tallied.played === 0 ? null : tallied;
 }
 
 /**
@@ -227,7 +240,7 @@ async function headToHead(homeId: number, awayId: number) {
  * totals still look plausible.
  */
 export function tallyH2H(rows: ApiH2H[], homeId: number) {
-  const empty = { homeWins: 0, awayWins: 0, draws: 0, avgGoals: 0, bttsRate: 0 };
+  const empty = { homeWins: 0, awayWins: 0, draws: 0, avgGoals: 0, bttsRate: 0, played: 0 };
 
   const played = rows.filter(
     (r) =>
@@ -260,6 +273,7 @@ export function tallyH2H(rows: ApiH2H[], homeId: number) {
     draws,
     avgGoals: Number((goals / played.length).toFixed(2)),
     bttsRate: Number((btts / played.length).toFixed(3)),
+    played: played.length,
   };
 }
 
@@ -415,11 +429,11 @@ export const liveFootball: FootballProvider = {
         // cup games into a league form line.
         homeForm: (homeSeason?.form as unknown as string) ?? null,
         awayForm: (awaySeason?.form as unknown as string) ?? null,
-        h2hHomeWins: h2h.homeWins,
-        h2hAwayWins: h2h.awayWins,
-        h2hDraws: h2h.draws,
-        h2hAvgGoals: h2h.avgGoals,
-        h2hBttsRate: h2h.bttsRate,
+        h2hHomeWins: h2h?.homeWins ?? null,
+        h2hAwayWins: h2h?.awayWins ?? null,
+        h2hDraws: h2h?.draws ?? null,
+        h2hAvgGoals: h2h?.avgGoals ?? null,
+        h2hBttsRate: h2h?.bttsRate ?? null,
         homeSeason: stripForm(homeSeason),
         awaySeason: stripForm(awaySeason),
       });
