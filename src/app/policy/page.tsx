@@ -32,7 +32,6 @@ export default async function PolicyPage() {
         title="Privacy policy"
         intro="We collect what the product needs to work, and nothing we'd struggle to justify."
         updated="15 August 2026"
-        needsReview
       >
         <Section title="What we collect">
           <p>

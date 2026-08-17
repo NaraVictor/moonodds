@@ -223,8 +223,9 @@ two:
   verified against the live API with `pnpm verify:live football`.
 - `DEV_BYPASS_AUTH` must be absent or `false`. It is ignored in production
   builds regardless, but leaving it set is a confusing signal.
-- Terms and Privacy still carry a "not reviewed by a lawyer" banner. See the
-  audit: they name no legal entity, governing law or dispute resolution.
+- Terms section 10 still has blank company details: legal entity, registration
+  number, registered address, governing law and courts. Fill these before
+  taking money from the public; they are what make the contract enforceable.
 
 ---
 

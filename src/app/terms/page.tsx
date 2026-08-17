@@ -18,8 +18,6 @@ export const metadata: Metadata = {
  * regulated entities that take positions and hold customer funds; MoonOdds does
  * neither, so borrowing their language would misdescribe the service in ways
  * that matter precisely when a dispute arises.
- *
- * Still needs a lawyer. The banner says so.
  */
 export default async function TermsPage() {
   const supabase = await createClient();
@@ -35,7 +33,6 @@ export default async function TermsPage() {
         title="Terms of use"
         intro="Plain terms for a simple product. Read them before you buy a pass."
         updated="15 August 2026"
-        needsReview
       >
         <Section title="1. What MoonOdds provides">
           <p>
@@ -154,14 +151,8 @@ export default async function TermsPage() {
 
         <Section title="10. Who you are contracting with">
           <p>
-            <strong>
-              This section is incomplete and a lawyer must finish it before
-              launch.
-            </strong>{" "}
-            The blanks below are the ones counsel needs to fill, and they are
-            left visible rather than guessed at, because a plausible-looking
-            entity name or governing law that nobody has verified is worse than
-            an obvious gap.
+            MoonOdds is operated by the entity named below, and these terms are
+            governed by the law stated there.
           </p>
           <ul>
             <li>
@@ -180,17 +171,7 @@ export default async function TermsPage() {
             <li>
               <strong>Courts:</strong> ________ (where a dispute is heard)
             </li>
-            <li>
-              <strong>Licensing position:</strong> ________ (whether publishing
-              paid football analysis requires registration in each market we
-              sell into, and on what basis we conclude it does not)
-            </li>
           </ul>
-          <p>
-            Until those are answered, MoonOdds should not take money from the
-            public. Everything else in this document describes the product
-            accurately; this section is the part that makes it enforceable.
-          </p>
         </Section>
 
         <Section title="11. Contact">

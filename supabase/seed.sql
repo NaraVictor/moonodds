@@ -273,9 +273,14 @@ insert into ai_engine_config (
     'performanceTargetWinRate', 0.62, 'underperformThreshold', 0.52,
     'outperformThreshold', 0.72, 'mode', 'assisted', 'autoApply', false
   ),
+  -- Sized for the API-Football Free plan's 100 calls/day, which is the plan
+  -- this project is actually on; `pnpm verify:live` reports the real ceiling.
+  -- dailyTotal was 500, which no plan here grants, so the budget was decorative
+  -- and runFetchStats overspent against it. Raise these in the Office AI-engine
+  -- tab if the plan is upgraded.
   jsonb_build_object(
-    'dailyTotal', 500, 'reservedForResults', 100,
-    'maxFixturesPerSession', 30, 'callsPerFixtureEstimate', 4
+    'dailyTotal', 100, 'reservedForResults', 20,
+    'maxFixturesPerSession', 15, 'callsPerFixtureEstimate', 4
   ),
   array[39, 140, 135, 78, 61, 88],
   'Seeded configuration. Keys and units match src/lib/engine/variables.ts.'

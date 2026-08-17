@@ -11,6 +11,8 @@
  * one place this has to be right.
  */
 
+import { reportError } from "./report-error";
+
 export const PASS_PRICE_USD = 3;
 
 /** Used when the FX lookup fails or returns something implausible. */
@@ -124,27 +126,45 @@ export async function getUsdToGhsRate(): Promise<number> {
       cache: "no-store",
       signal: AbortSignal.timeout(5000),
     });
-    if (!res.ok) return FALLBACK_USD_TO_GHS;
+    if (!res.ok) return fallbackRate(`rate provider returned HTTP ${res.status}`);
 
     const data = (await res.json()) as { rates?: Record<string, number> };
     const rate = data.rates?.GHS;
 
     if (typeof rate !== "number" || !Number.isFinite(rate)) {
-      return FALLBACK_USD_TO_GHS;
+      return fallbackRate("rate provider returned no usable GHS rate");
     }
     if (rate < MIN_USD_TO_GHS || rate > MAX_USD_TO_GHS) {
       // Not cached: a bad reading should not be held for an hour.
-      console.warn(
-        `[pricing] USD/GHS came back as ${rate}, outside ${MIN_USD_TO_GHS} to ${MAX_USD_TO_GHS}. Using the fallback.`,
+      return fallbackRate(
+        `USD/GHS came back as ${rate}, outside ${MIN_USD_TO_GHS} to ${MAX_USD_TO_GHS}`,
       );
-      return FALLBACK_USD_TO_GHS;
     }
 
     cached = { rate, at: Date.now() };
     return rate;
-  } catch {
-    return FALLBACK_USD_TO_GHS;
+  } catch (err) {
+    return fallbackRate(
+      err instanceof Error ? `rate lookup failed: ${err.message}` : "rate lookup failed",
+    );
   }
+}
+
+/**
+ * Fall back to the hardcoded rate, loudly.
+ *
+ * This is a pricing path. Every second it runs, customers are charged at a
+ * constant that was correct on the day it was written and drifts from then on,
+ * and the previous version reached it silently on a timeout or a bad payload:
+ * the FX provider could be down for a week and nothing would say so. The
+ * fallback is still the right behaviour, refusing the sale over a rate lookup
+ * would be worse, but it is an incident, not a default.
+ */
+function fallbackRate(reason: string): number {
+  reportError(new Error(`[pricing] ${reason}. Charging at the ${FALLBACK_USD_TO_GHS} fallback.`), {
+    scope: "pricing/usd-ghs",
+  });
+  return FALLBACK_USD_TO_GHS;
 }
 
 /** UTC day key. Every access rule is keyed to the UTC day. */

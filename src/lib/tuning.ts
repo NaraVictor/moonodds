@@ -1,4 +1,5 @@
 import { createServiceClient } from "./supabase/server";
+import { reportError } from "./report-error";
 
 /**
  * CLV check and self-tuning, ported from convex/cron_jobs/clv_check.ts and
@@ -143,6 +144,20 @@ export async function runRecalibration() {
   const under = config.self_tuning?.underperformThreshold ?? 0.52;
   const maxDelta = config.weight_constraints?.maxDeltaPerCycle ?? 0.05;
 
+  // Snapshot per-league performance for this window. Deliberately outside the
+  // proposals branch below: the record of how each league performed is worth
+  // keeping whether or not this cycle proposed a change, and a cycle that
+  // proposes nothing is exactly the one you want history for later.
+  const { data: leaguesLogged, error: leagueLogError } = await db.rpc(
+    "log_league_performance",
+    { p_since: since },
+  );
+  if (leagueLogError) {
+    // Not fatal to the tuning run, but it must not pass unnoticed: the whole
+    // point of this table is that it was silently empty for its entire life.
+    reportError(leagueLogError, { scope: "tuning/log_league_performance" });
+  }
+
   // Propose shifting weight from the weakest bucket toward the strongest,
   // bounded by the configured per-cycle delta.
   const markets = Object.entries(byMarket).filter(([, b]) => b.total >= 5);
@@ -184,6 +199,7 @@ export async function runRecalibration() {
       reviewed: settled.length,
       overallWinRate,
       proposals: 0,
+      leaguesLogged: leaguesLogged ?? 0,
       note: `performance is within target (${(target * 100).toFixed(0)}%)`,
     };
   }
@@ -219,6 +235,7 @@ export async function runRecalibration() {
     reviewed: settled.length,
     overallWinRate,
     proposals: weightChanges.length + thresholdChanges.length,
+    leaguesLogged: leaguesLogged ?? 0,
     reportId: report?.id,
     autoApplied: autoApply,
   };

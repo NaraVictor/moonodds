@@ -207,10 +207,6 @@ Nothing outstanding from the original scope.
 
 ## Known issues
 
-- **ROI reads ~118%**, which is not believable. The formula is ported verbatim
-  from the Convex `getEngineStats` (`(wins × 1.8 − losses) / staked`), which
-  assumes flat 1.8 odds on every winner. Inherited, not introduced, worth
-  replacing with real odds from `odds_snapshots`.
 - **Most of the prompt's machinery still has no inputs.** Personnel, standings,
   odds movement, travel, rest and per-meeting H2H are written and gated, and
   `fetchStats` now supplies form, aggregate H2H and season splits but not those.
@@ -219,6 +215,13 @@ Nothing outstanding from the original scope.
 - **`fetchStats` is implemented but unexercised against the live API.** The
   transport, the H2H attribution and the season mapping are written and the
   attribution is unit-tested, but no call has been made with a real key.
+- **ROI was corrected, not ported verbatim.** The Convex `getEngineStats`
+  computed `(wins × 1.8 − losses) / staked`, which paid every winner at a flat
+  1.8 and never returned the winners' own stake to the denominator. That put the
+  headline at 112% on the current seed. It now uses `app.pick_price` and stakes
+  one flat unit per settled pick, the same convention `get_history_stats` uses,
+  so the two surfaces agree at 58%. Flagging it because it changes a published
+  number. What remains high there is the seed's 71% strike rate, not the formula.
 - **Grading was corrected, not ported verbatim.** The Convex original returned
   `false` for markets it couldn't evaluate, so corners and half-goals picks were
   written as LOSSES despite the code comments saying they should be flagged for

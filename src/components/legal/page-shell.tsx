@@ -1,5 +1,4 @@
 import type { ReactNode } from "react";
-import { Alert } from "@/components/ui/alert";
 
 /**
  * Shell for the standing content pages.
@@ -13,7 +12,6 @@ export function PageShell({
   title,
   intro,
   updated,
-  needsReview = false,
   children,
 }: {
   eyebrow: string;
@@ -21,12 +19,6 @@ export function PageShell({
   intro?: string;
   /** ISO date of the last substantive edit. */
   updated?: string;
-  /**
-   * Marks a document that has not been through legal review. Shown rather than
-   * hidden: a policy page that looks finished but isn't is worse than one that
-   * says so.
-   */
-  needsReview?: boolean;
   children: ReactNode;
 }) {
   return (
@@ -43,16 +35,6 @@ export function PageShell({
           <p className="mt-4 text-[12px] text-muted">Last updated {updated}</p>
         )}
       </header>
-
-      {needsReview && (
-        <Alert status="warning" title="Draft, not yet reviewed by a lawyer" className="mb-8">
-          This document was written to describe how MoonOdds actually works and
-          is accurate to the product, but it has not been reviewed by a
-          qualified lawyer and should not be relied on as it stands. It needs
-          professional review against the law of each market we operate in
-          before launch.
-        </Alert>
-      )}
 
       <div className="space-y-8">{children}</div>
     </main>

@@ -205,6 +205,35 @@ export async function runFetchStats() {
   const db = createServiceClient();
   const { football } = getProviders();
 
+  const { data: config } = await db
+    .from("ai_engine_config")
+    .select("api_budget")
+    .eq("status", "active")
+    .maybeSingle();
+
+  // This used to take a flat 60 while runDailyPicks only ever reasons over
+  // maxFixturesPerSession (30 by default), so up to half the daily API budget
+  // bought stats for fixtures that never got a prediction. On a plan with a
+  // 100-call ceiling and roughly four calls per fixture, that overspend is the
+  // difference between covering the day and running dry before grading.
+  //
+  // Two limits, whichever binds first: the session cap, and what the daily
+  // budget can actually pay for once results are reserved.
+  const budget = config?.api_budget ?? {};
+  const perSession = budget.maxFixturesPerSession ?? 30;
+  const perFixture = Math.max(1, budget.callsPerFixtureEstimate ?? 4);
+  const spendable = (budget.dailyTotal ?? 500) - (budget.reservedForResults ?? 100);
+  const affordable = Math.max(0, Math.floor(spendable / perFixture));
+  const limit = Math.min(perSession, affordable);
+
+  if (limit === 0) {
+    return {
+      fetched: 0,
+      upserted: 0,
+      skipped: `api_budget leaves nothing for stats (${spendable} calls spendable at ~${perFixture} per fixture)`,
+    };
+  }
+
   const now = new Date();
   const horizon = new Date(now.getTime() + 36 * 3600 * 1000);
 
@@ -215,7 +244,8 @@ export async function runFetchStats() {
     .gte("fixture_date", now.toISOString())
     .lt("fixture_date", horizon.toISOString())
     .not("external_id", "is", null)
-    .limit(60);
+    .order("fixture_date")
+    .limit(limit);
 
   if (!fixtures?.length) return { fetched: 0, upserted: 0 };
 
@@ -247,7 +277,7 @@ export async function runFetchStats() {
     if (!error) upserted++;
   }
 
-  return { fetched: stats.length, upserted };
+  return { fetched: stats.length, upserted, requested: fixtures.length, limit };
 }
 
 /**

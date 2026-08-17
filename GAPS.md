@@ -111,9 +111,17 @@ predictions, and now nothing does.
 ### 11. League performance
 
 Computed live from settled predictions. `league_performance_log` exists and is
-indexed but **nothing has ever written to it**, it was designed as a cache for
+indexed but **nothing had ever written to it**, it was designed as a cache for
 the recalibration job, and reading a cache nobody fills would show every league
-at zero. This can become a read of that table once the job populates it.
+at zero.
+
+The recalibration job now writes it, via `log_league_performance`. The profile
+figures stay live, deliberately: what the table adds is the *time series*, the
+thing you cannot reconstruct once picks age out of the window. Its
+`efficiency_flag` is derived from CLV rather than win rate, because beating the
+closing line measures edge and winning measures luck plus edge. On the seed that
+distinction is visible immediately: the Premier League runs a 90% strike rate at
++0.0009 CLV and reads `standard`, not `high_edge`.
 
 ### 12. Theme switching
 
@@ -194,5 +202,6 @@ Not gaps against the original, things this port has stubbed deliberately.
   `/fixtures/headtohead` and `/teams/statistics` before a live run.
 - The app runs on `MOCK_PROVIDERS`. Fixtures, stats, AI and payments are all
   canned; only the crest URLs are real.
-- Terms and Privacy carry a visible "needs a lawyer" banner. The copy describes
-  the product accurately but has not been reviewed.
+- Terms section 10 carries blank company details (legal entity, registration
+  number, address, governing law, courts). The review banner has been removed;
+  the blanks are what remain.
