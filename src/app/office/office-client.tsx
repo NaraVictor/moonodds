@@ -46,6 +46,7 @@ import {
   VARIABLES_BY_KEY,
 } from "@/lib/engine/variables";
 import { placeholdersIn } from "@/lib/engine/template";
+import { useBacktest } from "@/lib/queries";
 
 /**
  * The Office.
@@ -1692,6 +1693,8 @@ function EnginePanel() {
         </button>
       </Panel>
 
+      <Backtest live={Number(config.confidence_thresholds?.primarySlipFloor ?? 7)} />
+
       <PromptVariables config={config} prompt={prompt ?? config.system_prompt} />
 
       <Panel
@@ -2304,5 +2307,130 @@ function EditUserForm({
         Save
       </button>
     </div>
+  );
+}
+
+
+/**
+ * What a different publish floor would have done.
+ *
+ * Every tuning decision used to be made forward, on live customers, with a
+ * feedback loop measured in weeks. This is the cheap half of fixing that.
+ *
+ * The honest limit is stated in the panel rather than buried: this replays the
+ * selection and staking rules over picks the engine actually made. It cannot
+ * tell you what the model would have SAID under different weights, because
+ * that needs a fresh inference per fixture and a stats feed that no longer
+ * serves those dates.
+ */
+function Backtest({ live }: { live: number }) {
+  const [floor, setFloor] = useState(live);
+  const [days, setDays] = useState(90);
+
+  const current = useBacktest({ floor: live, days, enabled: true });
+  const proposed = useBacktest({ floor, days, enabled: true });
+
+  const a = current.data;
+  const b = proposed.data;
+  const changed = Math.abs(floor - live) > 0.01;
+
+  const pct = (v: number | null | undefined) =>
+    v == null ? "-" : `${Math.round(v * 100)}%`;
+
+  return (
+    <Panel
+      title="What if we published differently?"
+      description="Replays the publish floor and staking bands over calls the engine already made, so a threshold change can be judged before it reaches customers."
+    >
+      <div className="flex flex-wrap items-end gap-4">
+        <label className="space-y-1.5">
+          <span className="label">Publish floor</span>
+          <input
+            type="number" step="0.1" min="0" max="10" value={floor}
+            onChange={(e) => setFloor(Number(e.target.value))}
+            className="h-11 w-28 rounded-xl border border-field-border bg-field px-3 font-mono text-sm"
+          />
+        </label>
+        <label className="space-y-1.5">
+          <span className="label">Window (days)</span>
+          <input
+            type="number" step="30" min="30" max="400" value={days}
+            onChange={(e) => setDays(Number(e.target.value))}
+            className="h-11 w-28 rounded-xl border border-field-border bg-field px-3 font-mono text-sm"
+          />
+        </label>
+        <p className="text-[12px] text-muted">
+          Live floor is <span className="numeral font-semibold">{live}</span>.
+        </p>
+      </div>
+
+      <div className="mt-5 grid gap-3 sm:grid-cols-2">
+        {[
+          { label: `Live (${live})`, r: a },
+          { label: changed ? `Proposed (${floor})` : "Proposed (same)", r: b },
+        ].map((col) => (
+          <div key={col.label} className="rounded-2xl bg-surface-secondary p-4">
+            <p className="label mb-3">{col.label}</p>
+            {!col.r ? (
+              <div className="shimmer h-24 rounded-xl bg-surface" />
+            ) : (
+              <dl className="space-y-1.5 text-[13px]">
+                <div className="flex justify-between">
+                  <dt className="text-muted">Published</dt>
+                  <dd className="numeral">
+                    {col.r.published} of {col.r.candidates}
+                  </dd>
+                </div>
+                <div className="flex justify-between">
+                  <dt className="text-muted">Win rate</dt>
+                  <dd className="numeral font-semibold">{pct(col.r.winRate)}</dd>
+                </div>
+                <div className="flex justify-between">
+                  <dt className="text-muted">95% interval</dt>
+                  <dd className="numeral text-[12px] text-muted">
+                    {pct(col.r.winRateInterval?.low)} to {pct(col.r.winRateInterval?.high)}
+                  </dd>
+                </div>
+                <div className="flex justify-between">
+                  <dt className="text-muted">Return</dt>
+                  <dd
+                    className="numeral font-semibold"
+                    style={{
+                      color:
+                        col.r.roi == null
+                          ? undefined
+                          : col.r.roi >= 0
+                            ? "var(--success)"
+                            : "var(--danger)",
+                    }}
+                  >
+                    {col.r.roi == null ? "-" : `${col.r.roi > 0 ? "+" : ""}${Math.round(col.r.roi * 100)}%`}
+                  </dd>
+                </div>
+              </dl>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {changed && b && b.discarded.count > 0 && (
+        <Alert status="warning" className="mt-4">
+          That floor discards{" "}
+          <span className="numeral font-semibold">{b.discarded.count}</span>{" "}
+          calls that themselves won{" "}
+          <span className="numeral font-semibold">{pct(b.discarded.winRate)}</span>
+          . A floor that improves the headline by throwing away profitable picks
+          is not an improvement.
+        </Alert>
+      )}
+
+      <p className="mt-4 text-[11px] leading-relaxed text-muted">
+        This replays selection and staking over the picks the engine actually
+        made. It cannot tell you what the model would have said under different
+        weights: that needs a fresh inference per fixture against a stats feed
+        that no longer serves those dates. Treat it as a threshold tool, not a
+        model backtest.
+      </p>
+    </Panel>
   );
 }

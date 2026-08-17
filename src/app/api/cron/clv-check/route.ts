@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { reportError } from "@/lib/report-error";
 import { assertCronRequest } from "@/lib/api-auth";
 import { runClvCheck } from "@/lib/tuning";
 
@@ -13,7 +14,7 @@ export async function POST(request: Request) {
     const result = await runClvCheck();
     return NextResponse.json({ ok: true, ...result });
   } catch (err) {
-    console.error("[cron/clv-check]", err);
+    reportError(err, { scope: "cron/clv-check" });
     return NextResponse.json(
       { error: err instanceof Error ? err.message : "Unknown error" },
       { status: 500 },

@@ -693,3 +693,104 @@ export function useSelfExclude() {
     },
   });
 }
+
+/* ------------------------- closing line value ---------------------------- */
+
+export type ClvSummary = {
+  measured: number;
+  beatCloseRate: number | null;
+  avgClvPct: number | null;
+  marketOpposed: number;
+  winRateWhenBeatingClose: number | null;
+  winRateWhenOpposed: number | null;
+};
+
+/**
+ * Closing line value.
+ *
+ * Measured by the clv-check cron since the beginning and read by nothing until
+ * now. Public, like the rest of the settled record: a CLV figure only means
+ * something to the people deciding whether to trust the product.
+ */
+export function useClvSummary() {
+  return useQuery({
+    queryKey: ["stats", "clv"],
+    staleTime: 5 * 60_000,
+    queryFn: async (): Promise<ClvSummary> => {
+      const supabase = createClient();
+      const { data, error } = await supabase.rpc("get_clv_summary");
+      if (error) throw error;
+      return data as ClvSummary;
+    },
+  });
+}
+
+export type TipsterRecord = {
+  id: string;
+  name: string;
+  slug: string;
+  isActive: boolean;
+  settled: number;
+  wins: number;
+  losses: number;
+  winRate: number | null;
+  winRateInterval: { low: number | null; high: number | null };
+  avgConfidence: number | null;
+  roi: number | null;
+};
+
+export function useTipsterPerformance() {
+  return useQuery({
+    queryKey: ["stats", "tipsters"],
+    staleTime: 5 * 60_000,
+    queryFn: async (): Promise<TipsterRecord[]> => {
+      const supabase = createClient();
+      const { data, error } = await supabase.rpc("get_tipster_performance");
+      if (error) throw error;
+      return (data as TipsterRecord[]) ?? [];
+    },
+  });
+}
+
+/* ----------------------------- backtesting -------------------------------- */
+
+export type BacktestResult = {
+  candidates: number;
+  published: number;
+  won: number;
+  lost: number;
+  winRate: number | null;
+  winRateInterval: { low: number | null; high: number | null };
+  unitsStaked: number;
+  unitsReturned: number;
+  roi: number | null;
+  discarded: { count: number; winRate: number | null };
+};
+
+/**
+ * Replay the selection and staking rules over picks the engine already made.
+ *
+ * NOT a full backtest, and the Office says so: re-running the model under new
+ * weights would need a fresh inference per fixture and a stats feed that no
+ * longer serves those dates. This answers "should we have published this, and
+ * at what stake", not "what would the model have said".
+ */
+export function useBacktest(params: {
+  floor: number;
+  days: number;
+  enabled: boolean;
+}) {
+  return useQuery({
+    queryKey: ["backtest", params.floor, params.days],
+    enabled: params.enabled,
+    queryFn: async (): Promise<BacktestResult> => {
+      const supabase = createClient();
+      const { data, error } = await supabase.rpc("backtest_thresholds", {
+        p_floor: params.floor,
+        p_days: params.days,
+      });
+      if (error) throw error;
+      return data as BacktestResult;
+    },
+  });
+}

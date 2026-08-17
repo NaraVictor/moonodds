@@ -26,6 +26,31 @@ in a chat window.
 Get the anon and service-role keys from
 `Project Settings → API` in the Supabase dashboard.
 
+### Which Supabase keys to use
+
+Use the **new** keys, `sb_publishable_...` and `sb_secret_...`, not the legacy
+`anon` / `service_role` JWTs. Both work today and both are correctly refused by
+RLS on `predictions`, verified against the running database. The legacy pair is
+on Supabase's deprecation path, so there is no reason to adopt it now.
+
+One confusion worth knowing about: the environment variable **names** are still
+the legacy ones (`NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`)
+while the **values** are the new publishable and secret keys. That is fine, the
+client only cares about the value, and renaming them would be churn across every
+deployment target for no behavioural gain. It is called out here because the
+mismatch reads like a mistake.
+
+The publishable key is safe in the browser. The secret key bypasses RLS
+entirely and must never be `NEXT_PUBLIC_` or reach client code.
+
+**Local keys rotate.** `supabase start` can regenerate the local pair, which
+makes a previously working `.env.local` fail with "Invalid API key" and
+`pnpm verify:security` fall over at sign-in. Resync with:
+
+```bash
+supabase status -o env
+```
+
 ---
 
 ## 1. Link and push the schema

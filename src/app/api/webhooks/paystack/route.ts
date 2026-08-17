@@ -1,5 +1,6 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
+import { reportError } from "@/lib/report-error";
 import { settlePayment } from "@/lib/payments";
 
 export const dynamic = "force-dynamic";
@@ -73,7 +74,7 @@ export async function POST(request: Request) {
       alreadyActive: result.alreadyActive,
     });
   } catch (err) {
-    console.error("[webhook/paystack]", err);
+    reportError(err, { scope: "webhook/paystack" });
     return NextResponse.json({ error: "Handler failed." }, { status: 500 });
   }
 }

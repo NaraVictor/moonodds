@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { reportError } from "@/lib/report-error";
 import { assertCronRequest } from "@/lib/api-auth";
 import { runAutoGrade } from "@/lib/pipeline";
 
@@ -13,7 +14,7 @@ export async function POST(request: Request) {
     const result = await runAutoGrade();
     return NextResponse.json({ ok: true, ...result });
   } catch (err) {
-    console.error("[cron/auto-grade]", err);
+    reportError(err, { scope: "cron/auto-grade" });
     return NextResponse.json(
       { error: err instanceof Error ? err.message : "Unknown error" },
       { status: 500 },

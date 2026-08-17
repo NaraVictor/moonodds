@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { reportError } from "@/lib/report-error";
 import { assertCronRequest } from "@/lib/api-auth";
 import { runFetchFixtures } from "@/lib/pipeline";
 
@@ -15,7 +16,7 @@ export async function POST(request: Request) {
     const result = await runFetchFixtures(date);
     return NextResponse.json({ ok: true, ...result });
   } catch (err) {
-    console.error("[cron/fetch-fixtures]", err);
+    reportError(err, { scope: "cron/fetch-fixtures" });
     return NextResponse.json(
       { error: err instanceof Error ? err.message : "Unknown error" },
       { status: 500 },

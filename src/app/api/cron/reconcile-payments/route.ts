@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { reportError } from "@/lib/report-error";
 import { assertCronRequest } from "@/lib/api-auth";
 import { runReconcilePayments } from "@/lib/payments";
 
@@ -21,7 +22,7 @@ export async function POST(request: Request) {
     const result = await runReconcilePayments();
     return NextResponse.json({ ok: true, ...result });
   } catch (err) {
-    console.error("[cron/reconcile-payments]", err);
+    reportError(err, { scope: "cron/reconcile-payments" });
     return NextResponse.json(
       { error: err instanceof Error ? err.message : "Unknown error" },
       { status: 500 },

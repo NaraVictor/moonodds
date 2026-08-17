@@ -52,6 +52,43 @@ function one<T>(v: T | T[] | null | undefined): T | null {
   return v ?? null;
 }
 
+/**
+ * Columns this file may never read.
+ *
+ * The service client bypasses RLS, so the safety of this path rests entirely on
+ * the select list. A field added carelessly here goes straight into a meta tag
+ * and an OG image, both of which are readable without loading the page, and the
+ * market, selection and confidence are exactly what a pass buys.
+ *
+ * Declared as a constant and asserted below so that widening the query is a
+ * deliberate act rather than an edit that passes review.
+ */
+const FORBIDDEN_FIELDS = [
+  "prediction_type",
+  "predicted_value",
+  "confidence_score",
+  "confidence_raw",
+  "frontier_explanation",
+  "reasoning_tags",
+  "alt_market",
+  "alt_predicted_value",
+  "staking_unit",
+  "local_model_output",
+] as const;
+
+/** Fails loudly in development if the select ever grows a paywalled column. */
+function assertPublicOnly(select: string) {
+  const leaked = FORBIDDEN_FIELDS.filter((f) =>
+    new RegExp(`\\b${f}\\b`).test(select),
+  );
+  if (leaked.length) {
+    throw new Error(
+      `fetchPredictionMeta would leak paywalled columns into page metadata: ${leaked.join(", ")}. ` +
+        `Metadata is readable without loading the page; these belong behind the pass.`,
+    );
+  }
+}
+
 export async function fetchPredictionMeta(
   id: string,
 ): Promise<PredictionMeta | null> {
@@ -60,18 +97,20 @@ export async function fetchPredictionMeta(
   if (!/^[0-9a-f-]{36}$/i.test(id)) return null;
 
   try {
-    const db = createServiceClient();
-    const { data } = await db
-      .from("predictions")
-      .select(
-        `id, status,
+    const select = `id, status,
          fixtures!inner(
            fixture_date, venue, status, home_goals, away_goals,
            home:teams!fixtures_home_team_id_fkey(name, short_name, logo),
            away:teams!fixtures_away_team_id_fkey(name, short_name, logo),
            leagues(name, country, logo)
-         )`,
-      )
+         )`;
+
+    assertPublicOnly(select);
+
+    const db = createServiceClient();
+    const { data } = await db
+      .from("predictions")
+      .select(select)
       .eq("id", id)
       .maybeSingle();
 

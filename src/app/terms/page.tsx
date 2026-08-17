@@ -152,7 +152,48 @@ export default async function TermsPage() {
           </p>
         </Section>
 
-        <Section title="10. Contact">
+        <Section title="10. Who you are contracting with">
+          <p>
+            <strong>
+              This section is incomplete and a lawyer must finish it before
+              launch.
+            </strong>{" "}
+            The blanks below are the ones counsel needs to fill, and they are
+            left visible rather than guessed at, because a plausible-looking
+            entity name or governing law that nobody has verified is worse than
+            an obvious gap.
+          </p>
+          <ul>
+            <li>
+              <strong>Legal entity:</strong> ________ (registered name)
+            </li>
+            <li>
+              <strong>Company registration number:</strong> ________
+            </li>
+            <li>
+              <strong>Registered address:</strong> ________
+            </li>
+            <li>
+              <strong>Governing law:</strong> ________ (which country&rsquo;s law
+              applies to these terms)
+            </li>
+            <li>
+              <strong>Courts:</strong> ________ (where a dispute is heard)
+            </li>
+            <li>
+              <strong>Licensing position:</strong> ________ (whether publishing
+              paid football analysis requires registration in each market we
+              sell into, and on what basis we conclude it does not)
+            </li>
+          </ul>
+          <p>
+            Until those are answered, MoonOdds should not take money from the
+            public. Everything else in this document describes the product
+            accurately; this section is the part that makes it enforceable.
+          </p>
+        </Section>
+
+        <Section title="11. Contact">
           <p>
             Questions about these terms go to hello@moonodds.app.
           </p>

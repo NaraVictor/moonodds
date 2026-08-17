@@ -6,6 +6,8 @@ import {
   usePredictionHistory,
   useHistoryStats,
   useHistoryFacets,
+  useClvSummary,
+  useTipsterPerformance,
   type HistoryFilters,
 } from "@/lib/queries";
 import { TeamCrest } from "@/components/predictions/team-crest";
@@ -194,6 +196,8 @@ function StatsPanel() {
           </ul>
         </div>
       )}
+
+      <ClvPanel />
 
       {stats.byMarket.length > 0 && (
         <div className="mt-3 rounded-[1.25rem] border border-border bg-surface p-5">
@@ -451,5 +455,97 @@ export function HistoryClient() {
         </>
       )}
     </main>
+  );
+}
+
+
+/**
+ * Closing line value.
+ *
+ * The most credible evidence a tipster can show, and it was already being
+ * measured. Beating the close means the market moved toward our position after
+ * we called it, which is the one signal that separates a real edge from a run
+ * of good luck.
+ *
+ * The two win rates underneath are the honest test: if picks that beat the
+ * close win no more often than picks the market moved against, our CLV is noise
+ * and the headline number is decoration.
+ */
+function ClvPanel() {
+  const { data: clv } = useClvSummary();
+  const { data: tipsters } = useTipsterPerformance();
+
+  if (!clv || clv.measured === 0) return null;
+
+  const beat = clv.beatCloseRate;
+  const wBeat = clv.winRateWhenBeatingClose;
+  const wOpp = clv.winRateWhenOpposed;
+  const separates = wBeat != null && wOpp != null && wBeat - wOpp >= 0.05;
+
+  return (
+    <div className="mt-3 rounded-[1.25rem] border border-border bg-surface p-5">
+      <div className="mb-1 flex items-baseline justify-between gap-3">
+        <h2 className="text-[13px] font-semibold">Against the closing line</h2>
+        <span className="numeral text-[11px] text-muted">
+          {clv.measured} priced calls
+        </span>
+      </div>
+      <p className="mb-4 text-[12px] leading-relaxed text-muted">
+        Whether the market moved toward our pick after we made it. Taking a
+        better price than the close is the clearest evidence an edge is real
+        rather than lucky.
+      </p>
+
+      <dl className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+        {[
+          {
+            label: "Beat the close",
+            value: beat == null ? "-" : formatPercent(beat, 0),
+            ink: beat != null && beat > 0.5 ? "var(--success)" : undefined,
+          },
+          {
+            label: "Won when we beat it",
+            value: wBeat == null ? "-" : formatPercent(wBeat, 0),
+          },
+          {
+            label: "Won when opposed",
+            value: wOpp == null ? "-" : formatPercent(wOpp, 0),
+          },
+        ].map((t) => (
+          <div key={t.label} className="rounded-2xl bg-surface-secondary p-4">
+            <dd
+              className="numeral text-xl"
+              style={t.ink ? { color: t.ink } : undefined}
+            >
+              {t.value}
+            </dd>
+            <dt className="label mt-1">{t.label}</dt>
+          </div>
+        ))}
+      </dl>
+
+      <p className="mt-3 text-[11px] leading-relaxed text-muted">
+        {separates
+          ? "Calls that beat the close win noticeably more often than calls the market moved against, which is what an edge looks like."
+          : "On this sample the two win rates are close together, so the closing-line figure is not yet evidence of an edge on its own. It needs more settled calls to separate."}
+      </p>
+
+      {tipsters && tipsters.length > 1 && (
+        <div className="mt-5 border-t border-separator pt-4">
+          <h3 className="mb-3 text-[12px] font-semibold">By tipster</h3>
+          <ul className="space-y-2">
+            {tipsters.map((t) => (
+              <li key={t.id} className="flex items-center gap-3 text-[12px]">
+                <span className="min-w-0 flex-1 truncate font-medium">{t.name}</span>
+                <span className="numeral text-muted">{t.settled}</span>
+                <span className="numeral w-12 text-right font-semibold">
+                  {t.winRate == null ? "-" : formatPercent(t.winRate, 0)}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
   );
 }

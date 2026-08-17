@@ -180,6 +180,19 @@ Prompt lives in `src/lib/engine/prompt.ts` and is injected into `seed.sql` by
 
 Corrections to the prompt itself are recorded in `GAPS.md`.
 
+### Row-level security
+
+RLS is enabled on **all 23 public tables**, confirmed by querying `pg_class`
+rather than by reading the migrations. Two carry zero policies deliberately:
+`predictions` and `otp_tokens`. RLS on with no policy denies every client role
+outright, so those are reachable only through SECURITY DEFINER RPCs that
+reproduce the access rules. That is the strongest posture available, and it is
+why `predictions` is granted to no client role at all.
+
+Keys: use the new `sb_publishable_` / `sb_secret_` pair. Both formats work and
+both are correctly refused by RLS, verified live; the legacy JWTs are on
+Supabase's deprecation path. See `docs/DEPLOY.md`.
+
 ### Deploying
 
 Supabase project `sktaghkuppcqzsltuffu`. The runbook is `docs/DEPLOY.md`, and
