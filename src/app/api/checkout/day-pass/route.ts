@@ -7,6 +7,7 @@ import { PASS_PRICE_USD, usdToPesewas } from "@/lib/pricing";
 import { getUsdToGhsRateForServer } from "@/lib/pricing-server";
 import { settlePayment } from "@/lib/payments";
 import { requireVerifiedEmail } from "@/lib/require-verified";
+import { SITE_URL } from "@/lib/site-url";
 
 /**
  * Day pass checkout.
@@ -111,7 +112,7 @@ export async function POST(request: Request) {
     // Where Paystack returns someone who completed on the hosted page instead
     // of in the popup. Without it they stop on Paystack's confirmation screen
     // and never reach the verify call.
-    callbackUrl: `${process.env.NEXT_PUBLIC_SITE_URL ?? ""}/checkout/day-pass`,
+    callbackUrl: `${SITE_URL}/checkout/day-pass`,
     metadata: { purpose: "daily_pass", dateKey: today, priceUsd: PASS_PRICE_USD },
   });
 

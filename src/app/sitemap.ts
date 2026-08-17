@@ -1,7 +1,6 @@
 import type { MetadataRoute } from "next";
 import { createServiceClient } from "@/lib/supabase/server";
-
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://moonodds.app";
+import { SITE_URL } from "@/lib/site-url";
 
 /**
  * Sitemap.

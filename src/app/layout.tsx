@@ -4,6 +4,7 @@ import { Providers } from "./providers";
 import { BypassBanner } from "@/components/dev/bypass-banner";
 import { AgeGate } from "@/components/legal/age-gate";
 import { THEME_INIT_SCRIPT } from "@/lib/theme";
+import { SITE_URL } from "@/lib/site-url";
 import { BetSlipFab, BetSlipSheet } from "@/components/slip/bet-slip";
 import "./globals.css";
 
@@ -34,20 +35,30 @@ const body = Plus_Jakarta_Sans({
  * OG image path into the absolute URL that Facebook, X, WhatsApp and Slack all
  * require, so every share card falls back to no image at all. It reads from
  * NEXT_PUBLIC_SITE_URL so previews and production resolve to themselves rather
- * than to a hardcoded host.
+ * than to a hardcoded host, normalised through `SITE_URL` because a bare host
+ * typed into the Vercel dashboard would otherwise fail the build here.
  *
  * The title template appends the brand to every child page, so a page only ever
  * declares its own subject and still arrives as "Subject · MoonOdds".
  */
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://moonodds.app";
+
+/**
+ * The tagline.
+ *
+ * "AI-powered football prediction market" was too long to survive a search
+ * result or a tab, and "prediction market" also described the wrong product:
+ * a prediction market is a venue where people trade on outcomes, which is
+ * precisely what Terms section 1 says MoonOdds is not.
+ */
+const TAGLINE = "AI Sports Predictions";
 
 const DESCRIPTION =
-  "An AI-powered football prediction market with confidence scores and the reasoning behind every call. Every settled prediction stays public, wins and misses alike.";
+  "AI sports predictions with confidence scores and the reasoning behind every call. Every settled prediction stays public, wins and misses alike.";
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   title: {
-    default: "MoonOdds: AI-powered football prediction market",
+    default: `MoonOdds: ${TAGLINE}`,
     template: "%s · MoonOdds",
   },
   description: DESCRIPTION,
@@ -55,7 +66,7 @@ export const metadata: Metadata = {
   keywords: [
     "football predictions",
     "AI football predictions",
-    "prediction market",
+    "AI sports predictions",
     "football betting tips",
     "match predictions",
     "football analytics",
@@ -70,13 +81,13 @@ export const metadata: Metadata = {
     type: "website",
     siteName: "MoonOdds",
     url: "/",
-    title: "MoonOdds: AI-powered football prediction market",
+    title: `MoonOdds: ${TAGLINE}`,
     description: DESCRIPTION,
     locale: "en_GB",
   },
   twitter: {
     card: "summary_large_image",
-    title: "MoonOdds: AI-powered football prediction market",
+    title: `MoonOdds: ${TAGLINE}`,
     description: DESCRIPTION,
   },
   robots: {

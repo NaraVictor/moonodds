@@ -11,6 +11,7 @@ import {
 import { getUsdToGhsRateForServer } from "@/lib/pricing-server";
 import { settlePayment } from "@/lib/payments";
 import { requireVerifiedEmail } from "@/lib/require-verified";
+import { SITE_URL } from "@/lib/site-url";
 
 /**
  * Extra league picks, a pass-holder perk.
@@ -163,7 +164,7 @@ export async function POST(request: Request) {
     // Where Paystack returns someone who completed on the hosted page instead
     // of in the popup. Without it they stop on Paystack's confirmation screen
     // and never reach the verify call.
-    callbackUrl: `${process.env.NEXT_PUBLIC_SITE_URL ?? ""}/checkout/extra-picks`,
+    callbackUrl: `${SITE_URL}/checkout/extra-picks`,
     metadata: { purpose: "extra_picks", dateKey: today, priceUsd },
   });
 

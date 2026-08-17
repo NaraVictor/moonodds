@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 import { createClient } from "./supabase/server";
+import { normaliseSiteUrl } from "./site-url";
 import { rateLimit } from "./rate-limit";
 
 /**
@@ -86,7 +87,7 @@ export async function signUp(
   }
 
   const supabase = await createClient();
-  const site = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3100";
+  const site = normaliseSiteUrl(process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3100");
 
   const { error } = await supabase.auth.signUp({
     email,
@@ -162,7 +163,7 @@ export async function requestPasswordReset(
   if (!verdict.ok) return undefined;
 
   const supabase = await createClient();
-  const site = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3100";
+  const site = normaliseSiteUrl(process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3100");
 
   const { error } = await supabase.auth.resetPasswordForEmail(email, {
     redirectTo: `${site}/auth/reset`,

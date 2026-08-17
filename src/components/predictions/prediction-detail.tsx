@@ -360,15 +360,56 @@ function LockedNotice({ children }: { children: React.ReactNode }) {
   );
 }
 
+/**
+ * How a settled prediction colours the page.
+ *
+ * Only won and lost take a colour. Void and review_needed are deliberately
+ * left on the neutral surface: they are not results, and painting them green
+ * or red would state an outcome the grader explicitly declined to call.
+ */
+const OUTCOME_TONE = {
+  won: {
+    label: "Won",
+    // Header ground: theme-stable, because the header is dark in both themes.
+    surface: "var(--feature-won)",
+    // Badge on the normal surface: ink on wash, which does flip with the theme.
+    ink: "var(--won-ink)",
+    wash: "var(--won-wash)",
+  },
+  lost: {
+    label: "Lost",
+    surface: "var(--feature-lost)",
+    ink: "var(--lost-ink)",
+    wash: "var(--lost-wash)",
+  },
+} as const;
+
+function outcomeTone(pick: Pick) {
+  return pick.status === "won" || pick.status === "lost" ? OUTCOME_TONE[pick.status] : null;
+}
+
 function MatchHeader({ pick }: { pick: Pick }) {
   const live = pick.fixture.status === "live";
   const settled = pick.fixture.status === "finished";
   const kickoff = new Date(pick.fixture.date);
+  const tone = outcomeTone(pick);
 
   return (
     <header
-      className="overflow-hidden rounded-[1.5rem] bg-feature px-6 py-8 text-feature-foreground"
-      style={{ boxShadow: "var(--shadow-lift)" }}
+      className="overflow-hidden rounded-[1.5rem] px-6 py-8 text-feature-foreground"
+      style={
+        {
+          boxShadow: "var(--shadow-lift)",
+          // The result carries the header once there is one. Overriding
+          // --feature-muted here rather than at each call site means every
+          // secondary line inside inherits a tint that stays legible on a
+          // saturated ground instead of the grey tuned for near-black.
+          background: tone ? tone.surface : "var(--feature)",
+          ...(tone
+            ? { "--feature-muted": "color-mix(in oklab, white 72%, transparent)" }
+            : null),
+        } as React.CSSProperties
+      }
     >
       <div className="mb-6 flex flex-wrap items-center justify-center gap-2 text-center">
         {pick.league.logo && (
@@ -451,6 +492,45 @@ function SeasonComparison({ stats }: { stats: FixtureStats | null }) {
   );
 }
 
+const FIXTURE_STATUS_LABEL: Record<string, string> = {
+  scheduled: "Not started",
+  live: "In play",
+  finished: "Finished",
+};
+
+/**
+ * Every prediction status, named in words a reader owes nothing to the schema
+ * to understand. `review_needed` in particular has to say what it means: the
+ * grader could not evaluate this market and a human has to look, which is very
+ * different from a loss, and the Convex original used to record it as one.
+ */
+const STATUS_LABEL: Record<string, string> = {
+  pending: "Not settled yet",
+  won: "Won",
+  lost: "Lost",
+  void: "Void, stake returned",
+  review_needed: "Awaiting review",
+  disputed: "Disputed",
+};
+
+function OutcomeBadge({ pick }: { pick: Pick }) {
+  const tone = outcomeTone(pick);
+  const label = STATUS_LABEL[pick.status] ?? pick.status;
+
+  if (!tone) {
+    return <span className="text-[13px] font-semibold text-muted">{label}</span>;
+  }
+
+  return (
+    <span
+      className="inline-flex items-center rounded-full px-2.5 py-1 text-[12px] font-bold"
+      style={{ background: tone.wash, color: tone.ink }}
+    >
+      {label}
+    </span>
+  );
+}
+
 /** The sticky decision rail: the call, and the one action worth taking. */
 function SummaryRail({ pick, settled }: { pick: Pick; settled: boolean }) {
   const slip = useBetSlip();
@@ -503,6 +583,25 @@ function SummaryRail({ pick, settled }: { pick: Pick; settled: boolean }) {
                 </dd>
               </div>
             )}
+
+            {/*
+              How the call actually finished, and where the match is. Two
+              separate facts: a fixture can be finished while the prediction is
+              still review_needed, and reading only one of them would tell you
+              the game is over without telling you the call never resolved.
+            */}
+            <div className="flex items-center justify-between gap-3 px-6 py-3">
+              <dt className="text-[13px] text-muted">Outcome</dt>
+              <dd>
+                <OutcomeBadge pick={pick} />
+              </dd>
+            </div>
+            <div className="flex items-center justify-between gap-3 px-6 py-3">
+              <dt className="text-[13px] text-muted">Status</dt>
+              <dd className="text-right text-[13px] font-semibold">
+                {FIXTURE_STATUS_LABEL[pick.fixture.status] ?? pick.fixture.status}
+              </dd>
+            </div>
           </dl>
         </>
       ) : (

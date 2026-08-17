@@ -97,6 +97,18 @@
     --feature-muted: oklch(0.68 0.015 250);
     --feature-border: oklch(1 0 0 / 0.1);
 
+    /*
+      The feature surface when a prediction has settled.
+
+      Deliberately NOT --won-ink / --lost-ink. Those flip light in dark mode,
+      which is right where they are ink on a pale wash and wrong here, where
+      they would be the ground under --feature-foreground: a 0.8-lightness green
+      behind 0.99 white is about 1.4:1, unreadable. --feature is dark in both
+      themes, so its outcome variants are defined once and never overridden.
+    */
+    --feature-won: oklch(0.43 0.13 155);
+    --feature-lost: oklch(0.47 0.17 27);
+
     /* Outcome washes: tint, never saturate. Text must stay legible on them. */
     --won-wash: oklch(0.965 0.03 155);
     --won-edge: oklch(0.88 0.08 155);
