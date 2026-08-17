@@ -21,7 +21,32 @@ export const adminKeys = {
   catalog: ["office", "catalog"] as const,
   predictions: (page: number) => ["office", "predictions", page] as const,
   ungraded: ["office", "ungraded"] as const,
+  fx: ["office", "fx"] as const,
 };
+
+export type FxFallback = {
+  rate: number;
+  source: "office" | "env" | "constant";
+  officeValue: number | null;
+};
+
+/**
+ * The FX fallback in force.
+ *
+ * Goes through the Office route rather than Supabase directly: the underlying
+ * RPC is service-role only, because the write sets what customers are charged.
+ */
+export function useFxFallback() {
+  return useQuery({
+    queryKey: adminKeys.fx,
+    queryFn: async (): Promise<FxFallback> => {
+      const res = await fetch("/api/office");
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? "Could not read pricing settings.");
+      return json.fx as FxFallback;
+    },
+  });
+}
 
 export function useEngineConfig() {
   return useQuery({

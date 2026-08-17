@@ -3,7 +3,8 @@ import { enforceRateLimit } from "@/lib/rate-limit";
 import { z } from "zod";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { getProviders } from "@/lib/providers";
-import { PASS_PRICE_USD, getUsdToGhsRate, usdToPesewas } from "@/lib/pricing";
+import { PASS_PRICE_USD, usdToPesewas } from "@/lib/pricing";
+import { getUsdToGhsRateForServer } from "@/lib/pricing-server";
 import { settlePayment } from "@/lib/payments";
 import { requireVerifiedEmail } from "@/lib/require-verified";
 
@@ -77,7 +78,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const rate = await getUsdToGhsRate();
+  const rate = await getUsdToGhsRateForServer();
   const amountMinor = usdToPesewas(PASS_PRICE_USD, rate);
   const reference = `pass-${today}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 

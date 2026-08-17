@@ -205,3 +205,14 @@ Not gaps against the original, things this port has stubbed deliberately.
 - Terms section 10 carries blank company details (legal entity, registration
   number, address, governing law, courts). The review banner has been removed;
   the blanks are what remain.
+
+## Settled: licensing
+
+**Selling paid match analysis needs no gambling registration here.** The owner's
+position, recorded 17 August 2026: this is consulting and education, not
+bookmaking. The product takes no stakes, holds no customer funds, pays no
+winnings and settles no wagers, which the Terms already state in section 1.
+
+Written down because it kept resurfacing as an open audit finding. It is a
+decision, not an oversight; reopen it only if the product starts doing one of
+the four things above.

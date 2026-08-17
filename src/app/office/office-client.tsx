@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   Zap,
   ListChecks,
@@ -28,6 +29,8 @@ import {
   usePredictionReport,
   useUserPicksReport,
   useAllConfigs,
+  useFxFallback,
+  adminKeys,
   type CatalogLeague,
   type CatalogTeam,
 } from "@/lib/admin-queries";
@@ -41,9 +44,12 @@ import {
 import type { Pick } from "@/lib/types";
 import { Alert } from "@/components/ui/alert";
 import {
+  ENGINE_VARIABLES,
   resolveEngineVariables,
   validateEngineVariables,
   VARIABLES_BY_KEY,
+  type EngineVariable,
+  type VariableGroup,
 } from "@/lib/engine/variables";
 import { placeholdersIn } from "@/lib/engine/template";
 import { useBacktest } from "@/lib/queries";
@@ -1593,6 +1599,358 @@ function PromptVariables({
   );
 }
 
+/**
+ * The USD/GHS fallback rate.
+ *
+ * This is what every customer is charged at whenever the FX provider is down or
+ * answers with something implausible. It used to be a constant in source, which
+ * meant correcting it needed a deploy, and GHS does not wait for one.
+ *
+ * The panel names the layer in force, because "15" means something different
+ * depending on whether someone chose it or it is the compiled-in default nobody
+ * has touched since the file was written.
+ */
+function FxFallbackPanel() {
+  const { data: fx, isPending } = useFxFallback();
+  const action = useOfficeAction();
+  const qc = useQueryClient();
+  const [draft, setDraft] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  if (isPending || !fx) {
+    return (
+      <Panel title="Fallback exchange rate">
+        <Loading rows={2} />
+      </Panel>
+    );
+  }
+
+  const value = draft ?? (fx.officeValue == null ? "" : String(fx.officeValue));
+  const parsed = value.trim() === "" ? null : Number(value);
+  const valid = parsed === null || (Number.isFinite(parsed) && parsed >= 1 && parsed <= 200);
+  const dirty = value !== (fx.officeValue == null ? "" : String(fx.officeValue));
+
+  const SOURCE_NOTE = {
+    office: "Set here. This overrides the environment.",
+    env: "From FALLBACK_USD_TO_GHS in the environment. Set a value here to override it.",
+    constant:
+      "No override and no environment variable, so this is the compiled-in default. Worth setting deliberately.",
+  }[fx.source];
+
+  async function save() {
+    setError(null);
+    try {
+      await action.mutateAsync({ action: "setFxFallback", rate: parsed });
+      setDraft(null);
+      qc.invalidateQueries({ queryKey: adminKeys.fx });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not save the rate.");
+    }
+  }
+
+  return (
+    <Panel
+      title="Fallback exchange rate"
+      description="USD to GHS, used only when the live rate lookup fails. Passes are priced in USD and charged in cedis, so this is a live pricing control."
+      action={
+        <span className="numeral text-sm">
+          1 USD = {fx.rate} GHS
+        </span>
+      }
+    >
+      {error && (
+        <Alert status="danger" className="mb-4">
+          {error}
+        </Alert>
+      )}
+
+      <p className="mb-4 text-[13px] text-muted">{SOURCE_NOTE}</p>
+
+      <div className="flex flex-wrap items-end gap-3">
+        <label className="space-y-1.5">
+          <span className="label">Override</span>
+          <input
+            type="number"
+            step="0.01"
+            min="1"
+            max="200"
+            placeholder="not set"
+            value={value}
+            onChange={(e) => {
+              setDraft(e.target.value);
+              setError(null);
+            }}
+            className={`h-11 w-40 rounded-xl border bg-field px-3 font-mono text-sm ${
+              valid ? "border-field-border" : "border-danger"
+            }`}
+          />
+        </label>
+
+        <button
+          type="button"
+          disabled={!dirty || !valid || action.isPending}
+          onClick={save}
+          className="press h-11 rounded-full bg-accent px-5 text-[13px] font-semibold text-accent-foreground disabled:opacity-40"
+        >
+          {action.isPending ? "Saving…" : "Save rate"}
+        </button>
+
+        {fx.officeValue != null && (
+          <button
+            type="button"
+            disabled={action.isPending}
+            onClick={() => {
+              setDraft("");
+              setError(null);
+            }}
+            className="h-11 text-[13px] font-medium text-muted"
+          >
+            Clear override
+          </button>
+        )}
+      </div>
+
+      {!valid && (
+        <p className="mt-3 text-[12px] text-danger">
+          Enter a rate between 1 and 200, or clear the field to fall back to the environment.
+        </p>
+      )}
+    </Panel>
+  );
+}
+
+const GROUP_LABELS: Record<VariableGroup, string> = {
+  weights: "Ranking weights",
+  systemic: "Systemic filters",
+  personnel: "Personnel",
+  market: "Market and odds",
+  contextual: "Travel, rest and surface",
+  environmental: "Weather and altitude",
+  referee: "Referee",
+  form: "Form",
+  h2h: "Head to head",
+  anchoring: "Anchoring",
+  staking: "Staking",
+  caps: "Penalty caps",
+};
+
+/** Order the editor renders groups in: gated-only groups last. */
+const GROUP_ORDER: VariableGroup[] = [
+  "systemic",
+  "form",
+  "h2h",
+  "anchoring",
+  "caps",
+  "staking",
+  "market",
+  "contextual",
+  "personnel",
+  "environmental",
+  "referee",
+];
+
+/**
+ * Editor for every tunable that is not a ranking weight.
+ *
+ * Before this, 96 of the 105 variables could only be changed by writing SQL
+ * against `ai_engine_config`, which meant the gated overlays, the thresholds
+ * the whole prompt architecture is built around, were the least reachable
+ * numbers in the product.
+ *
+ * Weights are deliberately absent: they must sum to 1.0 and the panel above
+ * enforces that. Two editors writing the same column is how that invariant
+ * gets broken.
+ *
+ * A gated variable is shown, not hidden. It is inert today because no feed
+ * supplies its input, and hiding it would make the day the feed arrives a
+ * search through source rather than a visit to this page. The badge says which
+ * is which.
+ */
+function OverlayVariables({
+  config,
+  prompt,
+}: {
+  config: Record<string, unknown> & { id: string; status?: string };
+  prompt: string;
+}) {
+  const action = useOfficeAction();
+  const [edits, setEdits] = useState<Record<string, number | string>>({});
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  const { live, referenced } = useMemo(() => {
+    const { values } = resolveEngineVariables(config);
+    return { live: values, referenced: new Set(placeholdersIn(prompt)) };
+  }, [config, prompt]);
+
+  const groups = useMemo(() => {
+    const byGroup = new Map<VariableGroup, EngineVariable[]>();
+    for (const v of ENGINE_VARIABLES) {
+      if (v.unit === "weight") continue;
+      const list = byGroup.get(v.group) ?? [];
+      list.push(v);
+      byGroup.set(v.group, list);
+    }
+    return GROUP_ORDER.filter((g) => byGroup.has(g)).map((g) => ({
+      group: g,
+      variables: byGroup.get(g)!,
+    }));
+  }, []);
+
+  const dirty = Object.keys(edits);
+  const merged = { ...live, ...edits };
+  const warnings = validateEngineVariables(merged).filter((w) => w.key in edits);
+
+  function setValue(v: EngineVariable, raw: string) {
+    setSaveError(null);
+    const next = { ...edits };
+
+    if (v.unit === "market") {
+      if (raw === String(live[v.key])) delete next[v.key];
+      else next[v.key] = raw;
+    } else {
+      const n = Number(raw);
+      // An unparseable number is dropped rather than written as NaN: NaN in a
+      // threshold renders as "NaN" in the prompt and the run throws.
+      if (raw.trim() === "" || !Number.isFinite(n)) delete next[v.key];
+      else if (n === live[v.key]) delete next[v.key];
+      else next[v.key] = n;
+    }
+
+    setEdits(next);
+  }
+
+  async function save() {
+    setSaveError(null);
+    try {
+      await action.mutateAsync({
+        action: "updateVariables",
+        configId: config.id,
+        values: edits,
+      });
+      setEdits({});
+    } catch (e) {
+      setSaveError(e instanceof Error ? e.message : "Could not save.");
+    }
+  }
+
+  return (
+    <Panel
+      title="Overlay thresholds"
+      description="Every tunable except the ranking weights. Gated ones are inert until a feed supplies their input; they are editable now so they are ready when it does."
+      action={
+        dirty.length > 0 ? (
+          <span className="numeral text-sm" style={{ color: "var(--warning, var(--accent))" }}>
+            {dirty.length} changed
+          </span>
+        ) : undefined
+      }
+    >
+      {saveError && (
+        <Alert status="danger" className="mb-4">
+          {saveError}
+        </Alert>
+      )}
+
+      {warnings.map((w) => (
+        <Alert status="warning" className="mb-3" key={w.key}>
+          <code className="font-mono font-semibold">
+            {w.key} = {String(w.value)}
+          </code>{" "}
+          , {w.message}
+        </Alert>
+      ))}
+
+      <div className="space-y-3">
+        {groups.map(({ group, variables }) => {
+          const gatedCount = variables.filter((v) => v.optionalOverlay).length;
+          const allGated = gatedCount === variables.length;
+
+          return (
+            <details
+              key={group}
+              className="rounded-2xl border border-field-border bg-field p-4"
+            >
+              <summary className="flex cursor-pointer items-center justify-between gap-3 text-[13px] font-semibold">
+                <span>{GROUP_LABELS[group]}</span>
+                <span className="flex items-center gap-2">
+                  {allGated && (
+                    <span className="rounded-full bg-surface-secondary px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted">
+                      no feed yet
+                    </span>
+                  )}
+                  <span className="numeral text-[12px] text-muted">{variables.length}</span>
+                </span>
+              </summary>
+
+              <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                {variables.map((v) => {
+                  const value = v.key in edits ? edits[v.key] : live[v.key];
+                  const changed = v.key in edits;
+                  return (
+                    <label key={v.key} className="space-y-1.5">
+                      <span className="flex items-baseline justify-between gap-2">
+                        <code className="font-mono text-[12px]">{v.key}</code>
+                        <span className="flex items-center gap-1.5">
+                          {v.optionalOverlay && !allGated && (
+                            <span className="text-[10px] uppercase tracking-wide text-muted">
+                              gated
+                            </span>
+                          )}
+                          {!referenced.has(v.key) && (
+                            <span className="text-[10px] uppercase tracking-wide text-muted">
+                              not in prompt
+                            </span>
+                          )}
+                          <span className="text-[10px] uppercase tracking-wide text-muted">
+                            {v.unit}
+                          </span>
+                        </span>
+                      </span>
+                      <input
+                        type={v.unit === "market" ? "text" : "number"}
+                        step="any"
+                        value={String(value ?? "")}
+                        onChange={(e) => setValue(v, e.target.value)}
+                        className={`h-11 w-full rounded-xl border bg-field px-3 font-mono text-sm ${
+                          changed ? "border-accent" : "border-field-border"
+                        }`}
+                      />
+                      <span className="block text-[11px] leading-snug text-muted">{v.note}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            </details>
+          );
+        })}
+      </div>
+
+      <div className="mt-5 flex items-center gap-3">
+        <button
+          type="button"
+          disabled={!dirty.length || action.isPending}
+          onClick={save}
+          className="press rounded-full bg-accent px-5 py-2.5 text-[13px] font-semibold text-accent-foreground disabled:opacity-40"
+        >
+          {action.isPending ? "Saving…" : `Save ${dirty.length || ""} change${dirty.length === 1 ? "" : "s"}`}
+        </button>
+        {dirty.length > 0 && (
+          <button
+            type="button"
+            onClick={() => {
+              setEdits({});
+              setSaveError(null);
+            }}
+            className="text-[13px] font-medium text-muted"
+          >
+            Discard
+          </button>
+        )}
+      </div>
+    </Panel>
+  );
+}
+
 function EnginePanel() {
   const { data: config, isPending } = useEngineConfig();
   const action = useOfficeAction();
@@ -1696,6 +2054,10 @@ function EnginePanel() {
       <Backtest live={Number(config.confidence_thresholds?.primarySlipFloor ?? 7)} />
 
       <PromptVariables config={config} prompt={prompt ?? config.system_prompt} />
+
+      <OverlayVariables config={config} prompt={prompt ?? config.system_prompt} />
+
+      <FxFallbackPanel />
 
       <Panel
         title="System prompt"

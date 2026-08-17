@@ -15,8 +15,36 @@ import { reportError } from "./report-error";
 
 export const PASS_PRICE_USD = 3;
 
-/** Used when the FX lookup fails or returns something implausible. */
+/**
+ * Last-resort rate, used when the FX lookup fails or returns something
+ * implausible AND neither the Office override nor the environment supplies one.
+ *
+ * Kept as a compiled-in constant on purpose: a cold boot with an unreachable
+ * database and no env var still has to be able to price a pass. It is the floor
+ * of the chain, not the intended source. See `resolveFallbackRate`.
+ */
 export const FALLBACK_USD_TO_GHS = 15;
+
+/**
+ * Environment default, one layer above the constant.
+ *
+ * Parsed on every read rather than at module load: a bad value should be
+ * ignored and reported, not baked in for the life of the process.
+ */
+function envFallbackRate(): number | null {
+  const raw = process.env.FALLBACK_USD_TO_GHS;
+  if (!raw) return null;
+
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n < 1 || n > 200) {
+    reportError(
+      new Error(`FALLBACK_USD_TO_GHS is set to "${raw}", which is not a usable rate. Ignoring it.`),
+      { scope: "pricing/env" },
+    );
+    return null;
+  }
+  return n;
+}
 
 /**
  * Plausible band for USD to GHS.
@@ -118,7 +146,17 @@ export function clearRateCache() {
   cached = null;
 }
 
-export async function getUsdToGhsRate(): Promise<number> {
+/**
+ * Resolve the rate to charge at.
+ *
+ * `officeOverride` is the value set in the Office, read from the database by
+ * the caller. It is passed in rather than fetched here because this module is
+ * imported by the checkout client component, and pulling the service-role
+ * Supabase client into it would ship server credentials into the browser
+ * bundle. `src/lib/pricing-server.ts` is the server-side wrapper that supplies
+ * it.
+ */
+export async function getUsdToGhsRate(officeOverride?: number | null): Promise<number> {
   if (cached && Date.now() - cached.at < RATE_TTL_MS) return cached.rate;
 
   try {
@@ -126,18 +164,21 @@ export async function getUsdToGhsRate(): Promise<number> {
       cache: "no-store",
       signal: AbortSignal.timeout(5000),
     });
-    if (!res.ok) return fallbackRate(`rate provider returned HTTP ${res.status}`);
+    if (!res.ok) {
+      return fallbackRate(`rate provider returned HTTP ${res.status}`, officeOverride);
+    }
 
     const data = (await res.json()) as { rates?: Record<string, number> };
     const rate = data.rates?.GHS;
 
     if (typeof rate !== "number" || !Number.isFinite(rate)) {
-      return fallbackRate("rate provider returned no usable GHS rate");
+      return fallbackRate("rate provider returned no usable GHS rate", officeOverride);
     }
     if (rate < MIN_USD_TO_GHS || rate > MAX_USD_TO_GHS) {
       // Not cached: a bad reading should not be held for an hour.
       return fallbackRate(
         `USD/GHS came back as ${rate}, outside ${MIN_USD_TO_GHS} to ${MAX_USD_TO_GHS}`,
+        officeOverride,
       );
     }
 
@@ -146,8 +187,28 @@ export async function getUsdToGhsRate(): Promise<number> {
   } catch (err) {
     return fallbackRate(
       err instanceof Error ? `rate lookup failed: ${err.message}` : "rate lookup failed",
+      officeOverride,
     );
   }
+}
+
+/**
+ * The fallback chain: Office override, then environment, then the constant.
+ *
+ * Exported so the Office can show which layer is actually in force. An operator
+ * looking at a rate needs to know whether they are looking at their own setting
+ * or at a default nobody chose.
+ */
+export function resolveFallbackRate(officeOverride?: number | null): {
+  rate: number;
+  source: "office" | "env" | "constant";
+} {
+  if (typeof officeOverride === "number" && Number.isFinite(officeOverride)) {
+    return { rate: officeOverride, source: "office" };
+  }
+  const fromEnv = envFallbackRate();
+  if (fromEnv != null) return { rate: fromEnv, source: "env" };
+  return { rate: FALLBACK_USD_TO_GHS, source: "constant" };
 }
 
 /**
@@ -160,11 +221,13 @@ export async function getUsdToGhsRate(): Promise<number> {
  * fallback is still the right behaviour, refusing the sale over a rate lookup
  * would be worse, but it is an incident, not a default.
  */
-function fallbackRate(reason: string): number {
-  reportError(new Error(`[pricing] ${reason}. Charging at the ${FALLBACK_USD_TO_GHS} fallback.`), {
-    scope: "pricing/usd-ghs",
-  });
-  return FALLBACK_USD_TO_GHS;
+function fallbackRate(reason: string, officeOverride?: number | null): number {
+  const { rate, source } = resolveFallbackRate(officeOverride);
+  reportError(
+    new Error(`[pricing] ${reason}. Charging at the ${source} fallback of ${rate}.`),
+    { scope: "pricing/usd-ghs" },
+  );
+  return rate;
 }
 
 /** UTC day key. Every access rule is keyed to the UTC day. */

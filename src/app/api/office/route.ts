@@ -14,6 +14,13 @@ import {
 import { getProviders } from "@/lib/providers";
 import type { Market } from "@/lib/types";
 import { runClvCheck, runRecalibration } from "@/lib/tuning";
+import {
+  VARIABLES_BY_KEY,
+  applyVariableEdits,
+  resolveEngineVariables,
+  validateEngineVariables,
+} from "@/lib/engine/variables";
+import { clearFxFallbackCache, currentFallback } from "@/lib/pricing-server";
 
 /**
  * Next config version.
@@ -87,6 +94,16 @@ const Body = z.discriminatedUnion("action", [
     configId: z.uuid(),
     rankingWeights: z.record(z.string(), z.number()),
     confidenceThresholds: z.record(z.string(), z.number()).optional(),
+  }),
+  z.object({
+    action: z.literal("updateVariables"),
+    configId: z.uuid(),
+    values: z.record(z.string(), z.union([z.number(), z.string().min(1).max(60)])),
+  }),
+  z.object({
+    action: z.literal("setFxFallback"),
+    // null clears the override and hands control back to the environment.
+    rate: z.number().min(1).max(200).nullable(),
   }),
 
   /* ------------------------------ catalog ------------------------------ */
@@ -176,6 +193,19 @@ const Body = z.discriminatedUnion("action", [
 ]);
 
 export const maxDuration = 300;
+
+/**
+ * Read-only Office settings that a browser client cannot fetch for itself.
+ *
+ * The FX fallback lives behind a service-role RPC, so the admin's own Supabase
+ * session cannot read it the way it reads ai_engine_config. This is the seam.
+ */
+export async function GET() {
+  const guard = await requireSuperAdmin();
+  if ("error" in guard) return guard.error;
+
+  return NextResponse.json({ fx: await currentFallback() });
+}
 
 export async function POST(request: Request) {
   const guard = await requireSuperAdmin();
@@ -374,6 +404,103 @@ export async function POST(request: Request) {
           .eq("id", body.configId);
         if (error) throw new Error(error.message);
         return NextResponse.json({ updated: true });
+      }
+
+      /**
+       * Edit the gated overlay thresholds.
+       *
+       * Ranking weights are refused here on purpose: they must sum to 1.0 and
+       * updateWeights is the action that enforces it. Letting a second path
+       * write them would make that invariant depend on which screen you used.
+       */
+      case "updateVariables": {
+        const unknown = Object.keys(body.values).filter((k) => !VARIABLES_BY_KEY.has(k));
+        if (unknown.length) {
+          return NextResponse.json(
+            { error: `Not engine variables: ${unknown.join(", ")}` },
+            { status: 400 },
+          );
+        }
+
+        const weightKeys = Object.keys(body.values).filter(
+          (k) => VARIABLES_BY_KEY.get(k)!.unit === "weight",
+        );
+        if (weightKeys.length) {
+          return NextResponse.json(
+            { error: "Ranking weights are edited on the weights panel, which checks they sum to 1." },
+            { status: 400 },
+          );
+        }
+
+        // Unit mismatches are rejected rather than coerced. A market id that
+        // arrives as a number, or a percent as a string, is a bug upstream and
+        // writing it would surface later as an unrenderable prompt.
+        for (const [key, value] of Object.entries(body.values)) {
+          const variable = VARIABLES_BY_KEY.get(key)!;
+          const wantsString = variable.unit === "market";
+          if (wantsString !== (typeof value === "string")) {
+            return NextResponse.json(
+              {
+                error: `${key} expects ${wantsString ? "a market id" : "a number"}, got ${typeof value}.`,
+              },
+              { status: 400 },
+            );
+          }
+        }
+
+        const { data: config, error: readErr } = await db
+          .from("ai_engine_config")
+          .select("*")
+          .eq("id", body.configId)
+          .maybeSingle();
+        if (readErr) throw new Error(readErr.message);
+        if (!config) {
+          return NextResponse.json({ error: "No such config." }, { status: 404 });
+        }
+        if (config.status === "archived") {
+          return NextResponse.json(
+            { error: "That config is archived. Roll it back before editing it." },
+            { status: 409 },
+          );
+        }
+
+        // Validate against the whole resolved table, not just the edits: a
+        // scale error is only visible next to the variables it sits among.
+        const merged = applyVariableEdits(config, body.values);
+        const { values: resolved } = resolveEngineVariables({ ...config, ...merged });
+        const blocking = validateEngineVariables(resolved).filter((w) => w.key in body.values);
+        if (blocking.length) {
+          return NextResponse.json(
+            { error: blocking.map((w) => `${w.key}: ${w.message}`).join(" ") },
+            { status: 400 },
+          );
+        }
+
+        const { error } = await db
+          .from("ai_engine_config")
+          .update({
+            ...merged,
+            last_updated_at: new Date().toISOString(),
+            approved_by: actor,
+          })
+          .eq("id", body.configId);
+        if (error) throw new Error(error.message);
+
+        return NextResponse.json({
+          updated: true,
+          changed: Object.keys(body.values).length,
+          buckets: Object.keys(merged),
+        });
+      }
+
+      case "setFxFallback": {
+        const { error } = await db.rpc("set_fx_fallback", { p_rate: body.rate });
+        if (error) throw new Error(error.message);
+
+        // The reader caches for a minute; without this the operator changes the
+        // rate, reloads, and sees the old one staring back.
+        clearFxFallbackCache();
+        return NextResponse.json({ updated: true, fx: await currentFallback() });
       }
 
       /* ---------------------------- catalog ---------------------------- */

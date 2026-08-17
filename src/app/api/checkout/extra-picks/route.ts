@@ -6,9 +6,9 @@ import { getProviders } from "@/lib/providers";
 import {
   EXTRA_PICK_GAMES_PER_LEAGUE,
   extraPicksPriceUsd,
-  getUsdToGhsRate,
   usdToPesewas,
 } from "@/lib/pricing";
+import { getUsdToGhsRateForServer } from "@/lib/pricing-server";
 import { settlePayment } from "@/lib/payments";
 import { requireVerifiedEmail } from "@/lib/require-verified";
 
@@ -133,7 +133,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const rate = await getUsdToGhsRate();
+  const rate = await getUsdToGhsRateForServer();
   const amountMinor = usdToPesewas(priceUsd, rate);
   const today = new Date().toISOString().slice(0, 10);
   const reference = `extra-${today}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;

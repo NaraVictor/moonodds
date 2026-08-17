@@ -55,10 +55,16 @@ export type EngineVariable = {
   fallback: number | string;
   note: string;
   /**
-   * True when the variable gates an [OPTIONAL] overlay, one that fires only if
-   * the fixture payload actually carries the input. These stay in the table so
-   * they are tunable the day the data arrives, but on the current feed the
-   * overlays they govern never run.
+   * True when the variable governs a step the prompt tags [GATED], one that
+   * fires only if the fixture payload actually carries its named input. These
+   * stay in the table so they are tunable the day the data arrives, but on the
+   * current feed the overlays they govern never run.
+   *
+   * This flag used to cover only the environmental and referee steps, which
+   * under-reported it: travel, rest, surface, motivation, personnel and market
+   * movement are all [GATED] in the prompt too, and are now tagged. The Office
+   * reads this to say which thresholds are inert until a feed exists, so a
+   * missing tag reads as "this control is live" when it is not.
    */
   optionalOverlay?: boolean;
 };
@@ -82,20 +88,20 @@ export const ENGINE_VARIABLES: readonly EngineVariable[] = [
   { key: "redCardCarryoverPenalty", group: "systemic", unit: "percent", fallback: 15, note: "Applied to any 1x2 involving a side that saw red last match." },
 
   // --- Personnel ---------------------------------------------------------
-  { key: "tier1Penalty", group: "personnel", unit: "percent", fallback: 20, note: "Primary scorer absent." },
-  { key: "tier1MitigatedPenalty", group: "personnel", unit: "percent", fallback: 5, note: "Primary scorer absent but a deputy is scoring." },
-  { key: "tier1MitigationRate", group: "personnel", unit: "ratio", fallback: 0.8, note: "Deputy's scoring uplift over 2–3 games that counts as mitigation." },
-  { key: "tier2Penalty", group: "personnel", unit: "percent", fallback: 10, note: "Defensive anchor absent." },
-  { key: "tier3GKPenalty", group: "personnel", unit: "percent", fallback: 8, note: "Elite keeper absent." },
-  { key: "suspendedStarterPenaltyPct", group: "personnel", unit: "percent", fallback: 3, note: "Untiered regular starter suspended." },
-  { key: "returnFromInjuryPenaltyPct", group: "personnel", unit: "percent", fallback: 4, note: "Fitness doubt on a player back in the XI." },
-  { key: "returnFromInjuryTier1PenaltyPct", group: "personnel", unit: "percent", fallback: 6, note: "Same, for a Tier 1 player." },
-  { key: "positionalCascadePenaltyPct", group: "personnel", unit: "percent", fallback: 5, note: "Starter and natural deputy both out." },
-  { key: "positionalCascadeAltBoostPct", group: "personnel", unit: "percent", fallback: 6, note: "Boost to the opposite goals market when a cascade hits." },
-  { key: "squadDepthThreshold", group: "personnel", unit: "count", fallback: 4, note: "Absences that trigger a depth warning." },
-  { key: "squadDepthPenaltyPct", group: "personnel", unit: "percent", fallback: 5, note: "Depth-warning penalty on a 1x2 win." },
-  { key: "squadCrisisThreshold", group: "personnel", unit: "count", fallback: 6, note: "Absences that escalate to a crisis." },
-  { key: "squadCrisisPenaltyPct", group: "personnel", unit: "percent", fallback: 10, note: "Replaces the depth penalty; not additive." },
+  { key: "tier1Penalty", group: "personnel", unit: "percent", fallback: 20, note: "Primary scorer absent.", optionalOverlay: true },
+  { key: "tier1MitigatedPenalty", group: "personnel", unit: "percent", fallback: 5, note: "Primary scorer absent but a deputy is scoring.", optionalOverlay: true },
+  { key: "tier1MitigationRate", group: "personnel", unit: "ratio", fallback: 0.8, note: "Deputy's scoring uplift over 2–3 games that counts as mitigation.", optionalOverlay: true },
+  { key: "tier2Penalty", group: "personnel", unit: "percent", fallback: 10, note: "Defensive anchor absent.", optionalOverlay: true },
+  { key: "tier3GKPenalty", group: "personnel", unit: "percent", fallback: 8, note: "Elite keeper absent.", optionalOverlay: true },
+  { key: "suspendedStarterPenaltyPct", group: "personnel", unit: "percent", fallback: 3, note: "Untiered regular starter suspended.", optionalOverlay: true },
+  { key: "returnFromInjuryPenaltyPct", group: "personnel", unit: "percent", fallback: 4, note: "Fitness doubt on a player back in the XI.", optionalOverlay: true },
+  { key: "returnFromInjuryTier1PenaltyPct", group: "personnel", unit: "percent", fallback: 6, note: "Same, for a Tier 1 player.", optionalOverlay: true },
+  { key: "positionalCascadePenaltyPct", group: "personnel", unit: "percent", fallback: 5, note: "Starter and natural deputy both out.", optionalOverlay: true },
+  { key: "positionalCascadeAltBoostPct", group: "personnel", unit: "percent", fallback: 6, note: "Boost to the opposite goals market when a cascade hits.", optionalOverlay: true },
+  { key: "squadDepthThreshold", group: "personnel", unit: "count", fallback: 4, note: "Absences that trigger a depth warning.", optionalOverlay: true },
+  { key: "squadDepthPenaltyPct", group: "personnel", unit: "percent", fallback: 5, note: "Depth-warning penalty on a 1x2 win.", optionalOverlay: true },
+  { key: "squadCrisisThreshold", group: "personnel", unit: "count", fallback: 6, note: "Absences that escalate to a crisis.", optionalOverlay: true },
+  { key: "squadCrisisPenaltyPct", group: "personnel", unit: "percent", fallback: 10, note: "Replaces the depth penalty; not additive.", optionalOverlay: true },
   { key: "cumulativePenaltyCapPct", group: "caps", unit: "percent", fallback: 15, note: "Ceiling on personnel reductions combined." },
   { key: "globalPenaltyCapPct", group: "caps", unit: "percent", fallback: 35, note: "Ceiling on every reduction from every source combined." },
 
@@ -103,21 +109,21 @@ export const ENGINE_VARIABLES: readonly EngineVariable[] = [
   { key: "lowOddsThreshold", group: "market", unit: "odds", fallback: 1.25, note: "Below this price a 1x2 win must pivot." },
   { key: "lowOddsPivotMarket", group: "market", unit: "market", fallback: "over_under_1_5", note: "Where a short-priced favourite pivots to." },
   { key: "lowOddsPivotValue", group: "market", unit: "market", fallback: "over", note: "Selection on the low-odds pivot market." },
-  { key: "clvMovementThresholdPct", group: "market", unit: "percent", fallback: 5, note: "Adverse odds drift inside 2h that flags market-opposed." },
-  { key: "clvPenalty", group: "market", unit: "percent", fallback: 10, note: "Applied when market-opposed fires." },
+  { key: "clvMovementThresholdPct", group: "market", unit: "percent", fallback: 5, note: "Adverse odds drift inside 2h that flags market-opposed.", optionalOverlay: true },
+  { key: "clvPenalty", group: "market", unit: "percent", fallback: 10, note: "Applied when market-opposed fires.", optionalOverlay: true },
   { key: "mraOverperformThresholdPct", group: "market", unit: "percent", fallback: 30, note: "Scoring above chance quality by this much implies regression." },
   { key: "varianceTieBandScore", group: "market", unit: "score", fallback: 0.3, note: "Within this gap, the lower-variance market wins." },
 
   // --- Buffers and context ----------------------------------------------
   { key: "standardBufferPct", group: "contextual", unit: "percent", fallback: 7, note: "Safety buffer on stable sides." },
   { key: "capitulationBufferPct", group: "contextual", unit: "percent", fallback: 12.5, note: "Safety buffer on sides that collapse late." },
-  { key: "travelDistanceThreshold", group: "contextual", unit: "km", fallback: 360, note: "Away trip beyond this draws a travel penalty." },
-  { key: "travelPenaltyPct", group: "contextual", unit: "percent", fallback: 10, note: "Travel penalty on an away favourite." },
-  { key: "restGameCount", group: "contextual", unit: "count", fallback: 3, note: "Matches inside the rest window that trigger fatigue." },
-  { key: "restDayWindow", group: "contextual", unit: "days", fallback: 8, note: "Window the rest rule counts over." },
-  { key: "restPenaltyPct", group: "contextual", unit: "percent", fallback: 5, note: "Fatigue penalty." },
-  { key: "artificialTurfBoost", group: "contextual", unit: "percent", fallback: 5, note: "Goals-over boost on a known artificial pitch." },
-  { key: "motivationGapBoostPct", group: "contextual", unit: "percent", fallback: 5, note: "Boost to the motivated side in a single-sided dead rubber." },
+  { key: "travelDistanceThreshold", group: "contextual", unit: "km", fallback: 360, note: "Away trip beyond this draws a travel penalty.", optionalOverlay: true },
+  { key: "travelPenaltyPct", group: "contextual", unit: "percent", fallback: 10, note: "Travel penalty on an away favourite.", optionalOverlay: true },
+  { key: "restGameCount", group: "contextual", unit: "count", fallback: 3, note: "Matches inside the rest window that trigger fatigue.", optionalOverlay: true },
+  { key: "restDayWindow", group: "contextual", unit: "days", fallback: 8, note: "Window the rest rule counts over.", optionalOverlay: true },
+  { key: "restPenaltyPct", group: "contextual", unit: "percent", fallback: 5, note: "Fatigue penalty.", optionalOverlay: true },
+  { key: "artificialTurfBoost", group: "contextual", unit: "percent", fallback: 5, note: "Goals-over boost on a known artificial pitch.", optionalOverlay: true },
+  { key: "motivationGapBoostPct", group: "contextual", unit: "percent", fallback: 5, note: "Boost to the motivated side in a single-sided dead rubber.", optionalOverlay: true },
 
   // --- Environmental. [OPTIONAL], only fire if the value was injected. ---
   { key: "windThresholdKmh", group: "environmental", unit: "kmh", fallback: 40, note: "Wind that suppresses goals.", optionalOverlay: true },
@@ -263,6 +269,65 @@ export function resolveEngineVariables(config: ConfigLike | null | undefined): R
   const unknownKeys = [...supplied.keys()].filter((k) => !VARIABLES_BY_KEY.has(k));
 
   return { values, overrides, fallbacks, unknownKeys };
+}
+
+/**
+ * Where an edited variable should be written.
+ *
+ * Reading is deliberately tolerant across all four buckets, but writing cannot
+ * be: putting the same key in two buckets makes the value that wins depend on
+ * LOOKUP_ORDER rather than on what anyone intended. So a write goes to the
+ * bucket the key already occupies, and only falls back to a canonical home when
+ * the config has never carried it.
+ */
+export function bucketForVariable(
+  variable: EngineVariable,
+  config: ConfigLike | null | undefined,
+): (typeof LOOKUP_ORDER)[number] {
+  for (const bucket of LOOKUP_ORDER) {
+    const raw = config?.[bucket];
+    if (raw && typeof raw === "object" && variable.key in (raw as Record<string, unknown>)) {
+      return bucket;
+    }
+  }
+
+  if (variable.unit === "weight") return "ranking_weights";
+  if (variable.unit === "market") return "market_pivots";
+  if (variable.group === "anchoring" || variable.group === "caps" || variable.group === "staking") {
+    return "confidence_thresholds";
+  }
+  return "filter_thresholds";
+}
+
+/**
+ * Merge edited values into a config's buckets.
+ *
+ * Returns only the buckets that actually changed, so an edit to one threshold
+ * does not rewrite four JSON columns and make the diff unreadable in the audit
+ * trail.
+ */
+export function applyVariableEdits(
+  config: ConfigLike,
+  edits: Record<string, number | string>,
+): Record<string, Record<string, unknown>> {
+  const touched: Record<string, Record<string, unknown>> = {};
+
+  for (const [key, value] of Object.entries(edits)) {
+    const variable = VARIABLES_BY_KEY.get(key);
+    if (!variable) continue;
+
+    const bucket = bucketForVariable(variable, config);
+    if (!touched[bucket]) {
+      const existing = config[bucket];
+      touched[bucket] =
+        existing && typeof existing === "object"
+          ? { ...(existing as Record<string, unknown>) }
+          : {};
+    }
+    touched[bucket][key] = value;
+  }
+
+  return touched;
 }
 
 function isUsable(given: unknown, variable: EngineVariable): boolean {
