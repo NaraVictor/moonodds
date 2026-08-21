@@ -82,7 +82,7 @@ export default async function Image({
             color: INK,
           }}
         >
-          Moon<span style={{ color: ACCENT }}>Odds</span>
+          Kick<span style={{ color: ACCENT }}>a</span>
         </div>
       ),
       size,
@@ -247,7 +247,7 @@ export default async function Image({
           <div style={{ display: "flex", flex: 1 }} />
 
           <div style={{ display: "flex", fontSize: 38, fontWeight: 800, color: INK }}>
-            Moon<span style={{ color: ACCENT }}>Odds</span>
+            Kick<span style={{ color: ACCENT }}>a</span>
           </div>
         </div>
       </div>
