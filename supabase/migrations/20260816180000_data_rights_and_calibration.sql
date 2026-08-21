@@ -220,7 +220,7 @@ grant execute on function public.get_history_stats() to anon, authenticated;
 -- catches is someone sitting without access they have already been charged for.
 -- ---------------------------------------------------------------------------
 select cron.schedule(
-  'moonodds_reconcile_payments',
+  'kicka_reconcile_payments',
   '*/15 * * * *',
   $$select app.call_endpoint('/api/cron/reconcile-payments')$$
 );

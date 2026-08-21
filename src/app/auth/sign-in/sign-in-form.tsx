@@ -67,15 +67,15 @@ export function SignInForm() {
 
       <p className="rounded-lg border border-border bg-surface-secondary p-3 text-xs leading-relaxed text-muted">
         <span className="font-semibold text-foreground">Demo accounts</span>,
-        password <code className="font-mono text-[0.9em]">moonodds</code>
+        password <code className="font-mono text-[0.9em]">kicka</code>
         <br />
-        <code className="font-mono text-[0.9em]">pass@moonodds.test</code> · full access
+        <code className="font-mono text-[0.9em]">pass@kicka.test</code> · full access
         <br />
-        <code className="font-mono text-[0.9em]">new@moonodds.test</code> · 2 free picks
+        <code className="font-mono text-[0.9em]">new@kicka.test</code> · 2 free picks
         <br />
-        <code className="font-mono text-[0.9em]">locked@moonodds.test</code> · paywalled
+        <code className="font-mono text-[0.9em]">locked@kicka.test</code> · paywalled
         <br />
-        <code className="font-mono text-[0.9em]">admin@moonodds.test</code> · Office panel
+        <code className="font-mono text-[0.9em]">admin@kicka.test</code> · Office panel
       </p>
     </form>
   );

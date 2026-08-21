@@ -262,7 +262,7 @@ function SlipSheetBody() {
                     <p className="numeral mt-1 text-3xl">{combinedOdds.toFixed(2)}</p>
                   </div>
                   <p className="max-w-[11rem] text-right text-[11px] leading-snug text-muted">
-                    Indicative prices. MoonOdds doesn&rsquo;t take bets.
+                    Indicative prices. Kicka doesn&rsquo;t take bets.
                   </p>
                 </div>
 
@@ -295,7 +295,7 @@ function SlipSheetBody() {
 
                 <p className="mt-3 flex items-start gap-1.5 text-[11px] leading-snug text-muted">
                   <Info className="mt-0.5 h-3 w-3 flex-none" />
-                  Saving records your selections so we can track them. MoonOdds
+                  Saving records your selections so we can track them. Kicka
                   doesn&rsquo;t take bets or hold funds.
                 </p>
               </div>

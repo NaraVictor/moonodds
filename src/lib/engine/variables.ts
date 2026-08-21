@@ -61,10 +61,16 @@ export type EngineVariable = {
    * current feed the overlays they govern never run.
    *
    * This flag used to cover only the environmental and referee steps, which
-   * under-reported it: travel, rest, surface, motivation, personnel and market
+   * under-reported it: travel, surface, motivation, personnel and market
    * movement are all [GATED] in the prompt too, and are now tagged. The Office
    * reads this to say which thresholds are inert until a feed exists, so a
    * missing tag reads as "this control is live" when it is not.
+   *
+   * It has to come off again when a feed arrives, and the rest overlay is the
+   * first to make that trip: congestion is now derived from our own fixture
+   * history, so its three thresholds are live controls. A tag left on after
+   * the data lands is the same lie in the other direction, telling an operator
+   * a working control is inert.
    */
   optionalOverlay?: boolean;
 };
@@ -119,9 +125,9 @@ export const ENGINE_VARIABLES: readonly EngineVariable[] = [
   { key: "capitulationBufferPct", group: "contextual", unit: "percent", fallback: 12.5, note: "Safety buffer on sides that collapse late." },
   { key: "travelDistanceThreshold", group: "contextual", unit: "km", fallback: 360, note: "Away trip beyond this draws a travel penalty.", optionalOverlay: true },
   { key: "travelPenaltyPct", group: "contextual", unit: "percent", fallback: 10, note: "Travel penalty on an away favourite.", optionalOverlay: true },
-  { key: "restGameCount", group: "contextual", unit: "count", fallback: 3, note: "Matches inside the rest window that trigger fatigue.", optionalOverlay: true },
-  { key: "restDayWindow", group: "contextual", unit: "days", fallback: 8, note: "Window the rest rule counts over.", optionalOverlay: true },
-  { key: "restPenaltyPct", group: "contextual", unit: "percent", fallback: 5, note: "Fatigue penalty.", optionalOverlay: true },
+  { key: "restGameCount", group: "contextual", unit: "count", fallback: 3, note: "Matches inside the rest window that trigger fatigue. Fed from our own fixture history, league matches only." },
+  { key: "restDayWindow", group: "contextual", unit: "days", fallback: 8, note: "Window the rest rule counts over." },
+  { key: "restPenaltyPct", group: "contextual", unit: "percent", fallback: 5, note: "Fatigue penalty." },
   { key: "artificialTurfBoost", group: "contextual", unit: "percent", fallback: 5, note: "Goals-over boost on a known artificial pitch.", optionalOverlay: true },
   { key: "motivationGapBoostPct", group: "contextual", unit: "percent", fallback: 5, note: "Boost to the motivated side in a single-sided dead rubber.", optionalOverlay: true },
 

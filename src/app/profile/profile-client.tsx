@@ -393,7 +393,7 @@ export function ProfileClient() {
         <section className="flex gap-3 rounded-[1.75rem] border border-border bg-surface p-6">
           <ShieldCheck className="h-4 w-4 flex-none text-muted" />
           <p className="text-xs leading-relaxed text-muted">
-            18+ only. MoonOdds provides analysis, not guarantees. Never stake
+            18+ only. Kicka provides analysis, not guarantees. Never stake
             more than you can afford to lose, if it stops being fun, take a
             break.
           </p>

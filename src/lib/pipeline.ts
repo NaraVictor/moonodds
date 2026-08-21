@@ -1,6 +1,7 @@
 import { createServiceClient } from "./supabase/server";
 import { getProviders } from "./providers";
 import type { Market } from "./types";
+import type { H2HMeeting, RecentMatch, VenueSplit } from "./providers/types";
 import { renderPrompt } from "./engine/template";
 import { resolveEngineVariables } from "./engine/variables";
 import { normalisePredictedValue } from "./engine/output";
@@ -252,10 +253,17 @@ export async function runFetchStats() {
   const byExternal = new Map(fixtures.map((f) => [f.external_id as number, f.id]));
   const stats = await football.fetchStats([...byExternal.keys()]);
 
+  // Congestion comes from fixtures we already hold, not from the API. The Free
+  // plan refuses `last` outright, and this is a question about dates the daily
+  // fetch has been recording anyway, so it costs a query rather than a call.
+  const congestion = await recentMatchesFor([...byExternal.values()], db);
+
   let upserted = 0;
   for (const s of stats) {
     const fixtureId = byExternal.get(s.fixtureExternalId);
     if (!fixtureId) continue;
+
+    const recent = congestion.get(fixtureId);
 
     const { error } = await db.from("fixture_stats").upsert(
       {
@@ -271,6 +279,11 @@ export async function runFetchStats() {
         h2h_btts_rate: s.h2hBttsRate,
         home_season: s.homeSeason,
         away_season: s.awaySeason,
+        h2h_matches: s.h2hMatches,
+        home_split: s.homeSplit ?? {},
+        away_split: s.awaySplit ?? {},
+        home_recent_matches: recent?.home ?? [],
+        away_recent_matches: recent?.away ?? [],
       },
       { onConflict: "fixture_id" },
     );
@@ -281,19 +294,99 @@ export async function runFetchStats() {
 }
 
 /**
+ * Each side's recent finished fixtures, for the Step 5 rest overlay.
+ *
+ * Read out of our own `fixtures` table. That has one consequence worth stating:
+ * we only see matches in the leagues we track, so a midweek cup tie is
+ * invisible and a congested side can read as rested. The overlay is gated on
+ * the count, and understating congestion skips the penalty rather than
+ * inventing one, which is the safe direction. It is also why the brief labels
+ * this "league matches only" rather than letting the engine read it as a
+ * complete schedule.
+ */
+async function recentMatchesFor(
+  fixtureIds: string[],
+  db: ReturnType<typeof createServiceClient>,
+): Promise<Map<string, { home: RecentMatch[]; away: RecentMatch[] }>> {
+  const out = new Map<string, { home: RecentMatch[]; away: RecentMatch[] }>();
+  if (!fixtureIds.length) return out;
+
+  const { data: targets } = await db
+    .from("fixtures")
+    .select("id, fixture_date, home_team_id, away_team_id")
+    .in("id", fixtureIds);
+  if (!targets?.length) return out;
+
+  const teamIds = [
+    ...new Set(targets.flatMap((f) => [f.home_team_id, f.away_team_id])),
+  ].filter(Boolean) as string[];
+
+  // The window is the one the rest overlay asks about, widened enough that a
+  // side playing every three days still shows all of it.
+  const earliest = new Date(
+    Math.min(...targets.map((f) => new Date(f.fixture_date as string).getTime())) -
+      21 * 86400_000,
+  ).toISOString();
+
+  const { data: history } = await db
+    .from("fixtures")
+    .select("id, fixture_date, home_team_id, away_team_id, home:teams!fixtures_home_team_id_fkey(name), away:teams!fixtures_away_team_id_fkey(name)")
+    .eq("status", "finished")
+    .gte("fixture_date", earliest)
+    .or(`home_team_id.in.(${teamIds.join(",")}),away_team_id.in.(${teamIds.join(",")})`)
+    .order("fixture_date", { ascending: false });
+
+  const byTeam = new Map<string, RecentMatch[]>();
+  for (const h of history ?? []) {
+    for (const side of ["home", "away"] as const) {
+      const teamId = (side === "home" ? h.home_team_id : h.away_team_id) as string;
+      if (!teamId) continue;
+      const opponent =
+        side === "home" ? asOne(h.away)?.name : asOne(h.home)?.name;
+      const list = byTeam.get(teamId) ?? [];
+      if (list.length < 6) {
+        list.push({
+          date: h.fixture_date as string,
+          opponent: opponent ?? "Unknown",
+          venue: side,
+        });
+      }
+      byTeam.set(teamId, list);
+    }
+  }
+
+  for (const f of targets) {
+    const kickoff = new Date(f.fixture_date as string).getTime();
+    // Only matches BEFORE this fixture count as congestion for it.
+    const before = (list: RecentMatch[]) =>
+      list.filter((m) => new Date(m.date).getTime() < kickoff);
+    out.set(f.id as string, {
+      home: before(byTeam.get(f.home_team_id as string) ?? []),
+      away: before(byTeam.get(f.away_team_id as string) ?? []),
+    });
+  }
+
+  return out;
+}
+
+/**
  * Format one fixture's stats for the prompt.
  *
  * Form order is stated explicitly. The prompt reads trajectory off the last
  * three characters, so an unlabelled string that happens to run newest-first
  * would invert every trajectory silently, right shape, wrong answer, no error.
  */
-function statsBlock(s: Record<string, unknown> | null | undefined): string {
+export function statsBlock(
+  s: Record<string, unknown> | null | undefined,
+  homeExternalId: number | null,
+): string {
   if (!s) {
     return "    (no stats for this fixture, reason from league and venue only, and lower confidence accordingly)";
   }
   const home = (s.home_season ?? {}) as Record<string, number>;
   const away = (s.away_season ?? {}) as Record<string, number>;
-  return [
+
+  const lines = [
     `    Form (oldest result first, rightmost is most recent): home ${s.home_form ?? "?"} | away ${s.away_form ?? "?"}`,
     // Absent H2H is stated as absent. Rendering nulls as 0 would tell the
     // engine these sides have met and never scored, which is a claim, not a gap.
@@ -302,7 +395,118 @@ function statsBlock(s: Record<string, unknown> | null | undefined): string {
       : `    H2H totals: ${s.h2h_home_wins} home wins, ${s.h2h_draws ?? 0} draws, ${s.h2h_away_wins ?? 0} away wins; avg ${s.h2h_avg_goals ?? "?"} goals, both scored ${s.h2h_btts_rate ?? "?"}`,
     `    Home season: ${home.avgGoalsScored ?? "?"} scored / ${home.avgGoalsConceded ?? "?"} conceded per game, clean sheets ${home.cleanSheetRate ?? "?"}, both scored ${home.bttsRate ?? "?"}`,
     `    Away season: ${away.avgGoalsScored ?? "?"} scored / ${away.avgGoalsConceded ?? "?"} conceded per game, clean sheets ${away.cleanSheetRate ?? "?"}, both scored ${away.bttsRate ?? "?"}`,
-  ].join("\n");
+  ];
+
+  const meetings = (s.h2h_matches ?? []) as H2HMeeting[];
+  if (meetings.length && homeExternalId) {
+    lines.push(`    ${formatMeetings(meetings, homeExternalId)}`);
+  }
+
+  for (const [label, raw] of [
+    ["Home side", s.home_split],
+    ["Away side", s.away_split],
+  ] as const) {
+    const line = formatSplit(raw);
+    if (line) lines.push(`    ${label} by venue: ${line}`);
+  }
+
+  for (const [label, raw] of [
+    ["Home side", s.home_recent_matches],
+    ["Away side", s.away_recent_matches],
+  ] as const) {
+    const line = formatCongestion(raw);
+    if (line) lines.push(`    ${label} recent schedule: ${line}`);
+  }
+
+  return lines.join("\n");
+}
+
+/**
+ * The feeds no fixture in this batch carries, as a sentence for the prompt.
+ *
+ * Everything the payload can never supply is listed unconditionally, because
+ * no plan or code path here produces it. The rest is checked against the batch,
+ * so a feed that starts arriving stops being declared absent on the same run
+ * it starts arriving, with nothing to remember to edit.
+ */
+export function batchAbsentFeeds(rows: Array<Record<string, unknown>>): string {
+  const has = (test: (r: Record<string, unknown>) => boolean) => rows.some(test);
+
+  const conditional: Array<[string, boolean]> = [
+    ["individual head-to-head meetings", has((r) => ((r.h2h_matches ?? []) as unknown[]).length > 0)],
+    ["venue-separated form", has((r) => Object.keys((r.home_split ?? {}) as object).length > 0)],
+    [
+      "fixture congestion",
+      has((r) => ((r.home_recent_matches ?? []) as unknown[]).length > 0),
+    ],
+  ];
+
+  // Nothing in this build fetches these. They are named so the engine knows
+  // they are absent by design rather than missing by accident.
+  const never = [
+    "lineups",
+    "injuries and suspensions",
+    "odds and market movement",
+    "league standings",
+    "weather",
+    "travel distance",
+    "pitch surface",
+    "referee history",
+  ];
+
+  const missing = [...never, ...conditional.filter(([, present]) => !present).map(([name]) => name)];
+
+  if (!missing.length) {
+    return "Every gated input this build supplies is printed beneath the fixtures; anything not printed there is absent, so the steps that depend on it must be skipped rather than estimated.";
+  }
+
+  return `The following are absent for every fixture in this batch: ${missing.join(", ")}. The steps that depend on them must be skipped rather than estimated.`;
+}
+
+/**
+ * Meetings normalised to the coming fixture's home side.
+ *
+ * Every score is written home-side-first regardless of who hosted that
+ * meeting, and the venue flag says who did. The alternative, printing each
+ * meeting as the API reports it, hands the engine the exact attribution
+ * problem `tallyH2H` exists to solve, on half the rows, with no error if it
+ * gets it wrong.
+ */
+function formatMeetings(meetings: H2HMeeting[], homeExternalId: number): string {
+  const rendered = meetings.slice(0, 10).map((m) => {
+    const hosted = m.homeExternalId === homeExternalId;
+    const [hg, ag] = hosted
+      ? [m.homeGoals, m.awayGoals]
+      : [m.awayGoals, m.homeGoals];
+    return `${m.date.slice(0, 10)} ${hosted ? "H" : "A"} ${hg}-${ag}`;
+  });
+  return `H2H meetings (newest first; scores are home-side-first, H = played at the home side's ground): ${rendered.join(" | ")}`;
+}
+
+/** One side's home and away records, or nothing if the split is empty. */
+function formatSplit(raw: unknown): string | null {
+  const split = raw as { home?: VenueSplit; away?: VenueSplit } | null;
+  if (!split?.home || !split?.away) return null;
+  if (!split.home.gamesPlayed && !split.away.gamesPlayed) return null;
+  const side = (v: VenueSplit) =>
+    `${v.wins}W-${v.draws}D-${v.losses}L in ${v.gamesPlayed}, ${v.avgGoalsScored} scored / ${v.avgGoalsConceded} conceded`;
+  return `at home ${side(split.home)}; away ${side(split.away)}`;
+}
+
+/**
+ * Recent match dates, labelled for what they are.
+ *
+ * "League matches only" is not a hedge, it is the accurate description: this
+ * comes from fixtures we track, so cup and international games are missing.
+ * Saying so is what stops the engine reading a gap as a rested side.
+ */
+function formatCongestion(raw: unknown): string | null {
+  const matches = (raw ?? []) as RecentMatch[];
+  if (!matches.length) return null;
+  const rendered = matches
+    .slice(0, 5)
+    .map((m) => `${m.date.slice(0, 10)} ${m.venue === "home" ? "vs" : "at"} ${m.opponent}`);
+  return `${rendered.join(" | ")} (league matches only, cup and international games not included)`;
 }
 
 /** Generate today's picks with the active engine config. */
@@ -325,7 +529,7 @@ export async function runDailyPicks() {
 
   const { data: fixtures } = await db
     .from("fixtures")
-    .select("id, fixture_date, venue, leagues(name, country), home:teams!fixtures_home_team_id_fkey(name), away:teams!fixtures_away_team_id_fkey(name)")
+    .select("id, fixture_date, venue, leagues(name, country), home:teams!fixtures_home_team_id_fkey(name, external_id), away:teams!fixtures_away_team_id_fkey(name)")
     .eq("status", "scheduled")
     .gte("fixture_date", now.toISOString())
     .lt("fixture_date", endOfDay.toISOString())
@@ -353,8 +557,16 @@ export async function runDailyPicks() {
   const briefs = fixtures.map((f, i) => {
     const league = asOne(f.leagues);
     const head = `[${i}] ${asOne(f.home)?.name} vs ${asOne(f.away)?.name} | ${league?.name} (${league?.country}) | ${f.fixture_date} | ${f.venue ?? "Unknown"}`;
-    return `${head}\n${statsBlock(statsByFixture.get(f.id))}`;
+    const homeExternalId = (asOne(f.home)?.external_id as number | null) ?? null;
+    return `${head}\n${statsBlock(statsByFixture.get(f.id), homeExternalId)}`;
   });
+
+  // Which feeds are absent across the WHOLE batch. This sentence used to be a
+  // hard-coded list, written when none of these had a feed. It is the last
+  // thing the model reads before the fixtures, so once a feed starts arriving
+  // a stale list here tells the engine to skip data that is sitting in front
+  // of it, and the step goes dark with no error anywhere.
+  const absent = batchAbsentFeeds([...statsByFixture.values()]);
 
   // The thresholds used to be pasted into the user prompt as raw JSON next to a
   // system prompt carrying its own conflicting prose defaults. Now they are
@@ -375,10 +587,9 @@ export async function runDailyPicks() {
   const userPrompt = `Analyse these ${fixtures.length} fixtures for ${now.toISOString().slice(0, 10)}.
 
 Return one object per fixture, using the fixture index shown in brackets.
-Only the stats printed under a fixture are available to you. Anything not
-printed there, lineups, injuries, odds, standings, weather, travel, referee
-history, is absent for every fixture in this batch, so the steps that depend
-on it must be skipped rather than estimated.
+Only the stats printed under a fixture are available to you. ${absent}
+A feed present for one fixture may be missing for another; judge each fixture
+on what is printed beneath it, not on what other fixtures carry.
 
 Fixtures:
 ${briefs.join("\n")}`;
@@ -431,7 +642,7 @@ ${briefs.join("\n")}`;
     .limit(1)
     .maybeSingle();
 
-  const modelVersion = `moonodds-quant-v${config.version}-p${ENGINE_PROMPT_VERSION}`;
+  const modelVersion = `kicka-quant-v${config.version}-p${ENGINE_PROMPT_VERSION}`;
   const { data: run } = await db
     .from("prediction_runs")
     .insert({ num_picks: qualifying.length, model_version: modelVersion })
@@ -669,13 +880,13 @@ async function handleJob(
           await messaging.sendEmail({
             to: profile.email,
             subject: `Today's picks are ready`,
-            html: `<p>${job.payload.count} new picks are live on MoonOdds.</p>`,
+            html: `<p>${job.payload.count} new picks are live on Kicka.</p>`,
           });
         }
         if (r.sms_enabled && profile?.phone) {
           await messaging.sendSms({
             to: profile.phone,
-            message: `MoonOdds: ${job.payload.count} new picks are live.`,
+            message: `Kicka: ${job.payload.count} new picks are live.`,
           });
         }
       }
@@ -703,7 +914,7 @@ async function handleJob(
           });
         }
         if (r.sms_enabled && profile?.phone) {
-          await messaging.sendSms({ to: profile.phone, message: `MoonOdds: ${line}` });
+          await messaging.sendSms({ to: profile.phone, message: `Kicka: ${line}` });
         }
       }
       return;
@@ -731,7 +942,7 @@ async function handleJob(
         });
       }
       if (pref.sms_enabled && profile?.phone) {
-        await messaging.sendSms({ to: profile.phone, message: `MoonOdds: ${line}` });
+        await messaging.sendSms({ to: profile.phone, message: `Kicka: ${line}` });
       }
       return;
     }
@@ -756,7 +967,7 @@ async function handleJob(
 
       await messaging.sendEmail({
         to: profile.email,
-        subject: `Your MoonOdds receipt (${p.reference})`,
+        subject: `Your Kicka receipt (${p.reference})`,
         html:
           `<p>Thanks, your payment went through.</p>` +
           `<table style="border-collapse:collapse">` +

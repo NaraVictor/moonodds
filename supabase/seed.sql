@@ -1,5 +1,5 @@
 -- ============================================================================
--- MoonOdds, dummy data seed
+-- Kicka, dummy data seed
 --
 -- Invented content, real structure. Everything the UI needs to show every
 -- state: won and lost picks for the track record, live fixtures, upcoming
@@ -18,7 +18,7 @@ select setseed(0.4242);
 -- ---------------------------------------------------------------------------
 -- Demo accounts, one per access tier
 --
--- Password for all of them: moonodds
+-- Password for all of them: kicka
 -- ---------------------------------------------------------------------------
 
 -- NOTE: the *_token columns must be '' and not NULL. GoTrue scans them into Go
@@ -35,32 +35,32 @@ insert into auth.users (
 values
   -- Pass holder: bought today's pass, sees everything.
   ('00000000-0000-0000-0000-000000000000', '11111111-1111-4111-8111-111111111111',
-   'authenticated', 'authenticated', 'pass@moonodds.test',
-   crypt('moonodds', gen_salt('bf')), now(), now() - interval '40 days', now(),
+   'authenticated', 'authenticated', 'pass@kicka.test',
+   crypt('kicka', gen_salt('bf')), now(), now() - interval '40 days', now(),
    '{"provider":"email","providers":["email"]}', '{"display_name":"Priya (pass holder)"}', false, false, '', '', '', '', '', '', '', ''),
 
   -- Brand new: created today, so the two free picks apply.
   ('00000000-0000-0000-0000-000000000000', '22222222-2222-4222-8222-222222222222',
-   'authenticated', 'authenticated', 'new@moonodds.test',
-   crypt('moonodds', gen_salt('bf')), now(), now(), now(),
+   'authenticated', 'authenticated', 'new@kicka.test',
+   crypt('kicka', gen_salt('bf')), now(), now(), now(),
    '{"provider":"email","providers":["email"]}', '{"display_name":"Kofi (first day)"}', false, false, '', '', '', '', '', '', '', ''),
 
   -- Returning, no pass: past the free day, sees nothing until they pay.
   ('00000000-0000-0000-0000-000000000000', '33333333-3333-4333-8333-333333333333',
-   'authenticated', 'authenticated', 'locked@moonodds.test',
-   crypt('moonodds', gen_salt('bf')), now(), now() - interval '12 days', now(),
+   'authenticated', 'authenticated', 'locked@kicka.test',
+   crypt('kicka', gen_salt('bf')), now(), now() - interval '12 days', now(),
    '{"provider":"email","providers":["email"]}', '{"display_name":"Sam (locked out)"}', false, false, '', '', '', '', '', '', '', ''),
 
   -- Suspended: blocked even though a valid pass exists.
   ('00000000-0000-0000-0000-000000000000', '44444444-4444-4444-8444-444444444444',
-   'authenticated', 'authenticated', 'suspended@moonodds.test',
-   crypt('moonodds', gen_salt('bf')), now(), now() - interval '60 days', now(),
+   'authenticated', 'authenticated', 'suspended@kicka.test',
+   crypt('kicka', gen_salt('bf')), now(), now() - interval '60 days', now(),
    '{"provider":"email","providers":["email"]}', '{"display_name":"Dee (suspended)"}', false, false, '', '', '', '', '', '', '', ''),
 
   -- Super-admin: the Office panel.
   ('00000000-0000-0000-0000-000000000000', '55555555-5555-4555-8555-555555555555',
-   'authenticated', 'authenticated', 'admin@moonodds.test',
-   crypt('moonodds', gen_salt('bf')), now(), now() - interval '90 days', now(),
+   'authenticated', 'authenticated', 'admin@kicka.test',
+   crypt('kicka', gen_salt('bf')), now(), now() - interval '90 days', now(),
    '{"provider":"email","providers":["email"]}', '{"display_name":"Nara (admin)"}', false, false, '', '', '', '', '', '', '', '')
 on conflict (id) do nothing;
 
@@ -73,7 +73,7 @@ select
   jsonb_build_object('sub', u.id::text, 'email', u.email, 'email_verified', true),
   'email', u.id::text, now(), now(), now()
 from auth.users u
-where u.email like '%@moonodds.test'
+where u.email like '%@kicka.test'
 on conflict do nothing;
 
 -- The on_auth_user_created trigger has already made the profiles; set the flags.
@@ -165,7 +165,7 @@ update teams
  where external_id is not null and logo is null;
 
 insert into tipsters (id, display_name, slug, is_active) values
-  ('b0000001-0000-4000-8000-000000000001', 'MoonOdds Quant', 'moonodds-quant', true)
+  ('b0000001-0000-4000-8000-000000000001', 'Kicka Quant', 'kicka-quant', true)
 on conflict (id) do nothing;
 
 -- ---------------------------------------------------------------------------
@@ -191,7 +191,7 @@ insert into ai_engine_config (
   market_pivots, slip_building, self_tuning, api_budget, selected_league_ids, notes
 ) values (
   'c0000001-0000-4000-8000-000000000001',
-  'MoonOdds Quant Engine',
+  'Kicka Quant Engine',
   '2.2.0',
   'active',
   'Placeholder, replaced by engine_prompt.sql immediately below.',
@@ -291,7 +291,7 @@ insert into ai_engine_config (
 -- Everything between these markers is overwritten; edit the TypeScript source.
 
 update ai_engine_config
-set system_prompt = $moonodds_prompt$You are the MoonOdds Quant Engine, a quantitative football analyst. You produce calibrated match predictions by combining statistical modelling, market reasoning, and disciplined filtering.
+set system_prompt = $kicka_prompt$You are the Kicka Quant Engine, a quantitative football analyst. You produce calibrated match predictions by combining statistical modelling, market reasoning, and disciplined filtering.
 
 IDENTITY AND OBJECTIVES
 
@@ -575,7 +575,7 @@ BEHAVIOURAL RULES
 6. Anchoring ceilings are binding. Conditions resting on absent data are unmet.
 7. Reasoning determines the pick, never the reverse.
 8. predictedValue uses the exact strings listed above.
-9. Return valid JSON only. No markdown fences, no commentary outside the structure.$moonodds_prompt$,
+9. Return valid JSON only. No markdown fences, no commentary outside the structure.$kicka_prompt$,
     last_updated_at = now()
 where id = 'c0000001-0000-4000-8000-000000000001';
 
@@ -625,7 +625,7 @@ declare
 begin
   -- ---------- settled history ----------
   insert into prediction_runs (id, run_at, num_picks, model_version)
-  values (gen_random_uuid(), now() - interval '30 days', 60, 'moonodds-quant-v1.4.0')
+  values (gen_random_uuid(), now() - interval '30 days', 60, 'kicka-quant-v1.4.0')
   returning id into run_id;
 
   for i in 1..60 loop
@@ -690,7 +690,7 @@ begin
            when conf >= 8.5 then 3 when conf >= 8.0 then 2 else 1 end,
       format(reason_bank[1 + floor(random() * 7)], (55 + floor(random() * 30))::text),
       (case when won then 'won' else 'lost' end)::prediction_status,
-      'moonodds-quant-v1.4.0',
+      'kicka-quant-v1.4.0',
       array[tag_bank[1 + floor(random() * 9)], tag_bank[1 + floor(random() * 9)]],
       jsonb_build_object('homeGoals', hg, 'awayGoals', ag),
       kickoff + interval '105 minutes',
@@ -742,7 +742,7 @@ begin
       case when conf >= 9.3 then 5 else 4 end,
       format(reason_bank[1 + floor(random() * 4)], (55 + floor(random() * 30))::text),
       (case when won then 'won' else 'lost' end)::prediction_status,
-      'moonodds-quant-v1.4.0',
+      'kicka-quant-v1.4.0',
       array['xg-edge','form-swing'],
       kickoff + interval '110 minutes',
       jsonb_build_object('homeGoals', hg, 'awayGoals', ag),
@@ -779,14 +779,14 @@ begin
     ) values (
       f_id, 'b0000001-0000-4000-8000-000000000001', 'over_under_2_5', 'over', conf,
       case when conf >= 9.0 then 4 else 3 end,
-      format(reason_bank[2], '68'), 'pending', 'moonodds-quant-v1.4.0',
+      format(reason_bank[2], '68'), 'pending', 'kicka-quant-v1.4.0',
       array['xg-edge','press-mismatch'], kickoff - interval '6 hours'
     );
   end loop;
 
   -- ---------- today, still to kick off ----------
   insert into prediction_runs (id, run_at, num_picks, model_version)
-  values (gen_random_uuid(), date_trunc('day', now()) + interval '6 hours', 14, 'moonodds-quant-v1.4.0')
+  values (gen_random_uuid(), date_trunc('day', now()) + interval '6 hours', 14, 'kicka-quant-v1.4.0')
   returning id into run_id;
 
   for i in 1..14 loop
@@ -831,7 +831,7 @@ begin
       case when conf >= 9.5 then 5 when conf >= 9.0 then 4
            when conf >= 8.5 then 3 when conf >= 8.0 then 2 else 1 end,
       format(reason_bank[1 + floor(random() * 7)], (55 + floor(random() * 30))::text),
-      'pending', 'moonodds-quant-v1.4.0',
+      'pending', 'kicka-quant-v1.4.0',
       array[tag_bank[1 + floor(random() * 9)], tag_bank[1 + floor(random() * 9)], tag_bank[1 + floor(random() * 9)]],
       'over_under_1_5'::prediction_type, 'over', round((conf - 0.6)::numeric, 2),
       (array['overperforming','stable','regressing'])[1 + floor(random() * 3)],

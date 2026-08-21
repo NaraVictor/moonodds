@@ -79,7 +79,7 @@ export async function signUp(
   }
   if (age < 18) {
     return {
-      error: "You must be 18 or over to use MoonOdds.",
+      error: "You must be 18 or over to use Kicka.",
     };
   }
   if (age > 120) {
@@ -125,14 +125,14 @@ export async function signInAsDemo(email: string): Promise<AuthResult> {
   if (process.env.NODE_ENV === "production") {
     return { error: "Demo sign-in is disabled in production." };
   }
-  if (!email.endsWith("@moonodds.test")) {
+  if (!email.endsWith("@kicka.test")) {
     return { error: "Not a demo account." };
   }
 
   const supabase = await createClient();
   const { error } = await supabase.auth.signInWithPassword({
     email,
-    password: "moonodds",
+    password: "kicka",
   });
 
   if (error) return { error: error.message };

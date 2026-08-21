@@ -1,5 +1,5 @@
 -- ============================================================================
--- MoonOdds, service_role grants
+-- Kicka, service_role grants
 --
 -- The RLS migration does `revoke all ... from anon, authenticated` and then
 -- hands back exactly what each client surface needs. That default-deny stance

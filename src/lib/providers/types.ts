@@ -52,6 +52,52 @@ export function leagueBadgeUrl(externalId: number | null | undefined): string | 
   return externalId ? `${CREST_BASE}/leagues/${externalId}.png` : null;
 }
 
+/**
+ * One past meeting between two sides, as the engine needs it for Step 1E.
+ *
+ * The prompt weights meetings by recency and isolates the ones played at this
+ * venue, and it says so explicitly: "Aggregate totals are not a meeting list."
+ * We were already paying for these, `/fixtures/headtohead` returns every
+ * meeting, and then reducing them to five totals before anything saw them.
+ */
+export type H2HMeeting = {
+  date: string;
+  /** External id of the side that hosted THIS meeting, not the coming fixture. */
+  homeExternalId: number;
+  awayExternalId: number;
+  homeGoals: number;
+  awayGoals: number;
+};
+
+/**
+ * A team's record split by where it played, for Step 1D.
+ *
+ * `/teams/statistics` reports every one of these home and away as well as
+ * combined; we were reading `.total` and discarding the split. A combined form
+ * string is explicitly not a split as far as the prompt is concerned.
+ */
+export type VenueSplit = {
+  gamesPlayed: number;
+  wins: number;
+  draws: number;
+  losses: number;
+  avgGoalsScored: number;
+  avgGoalsConceded: number;
+};
+
+/**
+ * A recent fixture for one side, for the Step 5 rest overlay.
+ *
+ * Sourced from our own `fixtures` table rather than the API. The Free plan
+ * refuses the `last` parameter outright, and congestion is a question about
+ * dates we already hold once the daily fetch has been running.
+ */
+export type RecentMatch = {
+  date: string;
+  opponent: string;
+  venue: "home" | "away";
+};
+
 /** Pre-match stats the engine reasons over. */
 export type RawFixtureStats = {
   fixtureExternalId: number;
@@ -71,6 +117,15 @@ export type RawFixtureStats = {
   h2hBttsRate: number | null;
   homeSeason: Record<string, number>;
   awaySeason: Record<string, number>;
+  /**
+   * Individual meetings, newest first. Empty means we have no meeting list,
+   * which gates Step 1E off; the aggregate fields above may still be present,
+   * and the prompt falls back to using them unweighted.
+   */
+  h2hMatches: H2HMeeting[];
+  /** Venue-separated records. Null gates Step 1D off. */
+  homeSplit: { home: VenueSplit; away: VenueSplit } | null;
+  awaySplit: { home: VenueSplit; away: VenueSplit } | null;
 };
 
 /** A league as the upstream catalogue describes it, before we import it. */

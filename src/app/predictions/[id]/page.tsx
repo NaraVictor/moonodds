@@ -44,11 +44,11 @@ export async function generateMetadata({
   const settled = meta.status === "won" || meta.status === "lost";
 
   const description = settled
-    ? `${headline} finished ${meta.homeGoals}-${meta.awayGoals}. See the MoonOdds call, the reasoning behind it, and how it settled.`
-    : `${headline} in the ${meta.leagueName}. Form, head to head and season numbers, with the MoonOdds prediction and the reasoning behind it.`;
+    ? `${headline} finished ${meta.homeGoals}-${meta.awayGoals}. See the Kicka call, the reasoning behind it, and how it settled.`
+    : `${headline} in the ${meta.leagueName}. Form, head to head and season numbers, with the Kicka prediction and the reasoning behind it.`;
 
   return {
-    // The root template appends "· MoonOdds", so the brand lands at the end of
+    // The root template appends "· Kicka", so the brand lands at the end of
     // every one of these without being repeated here.
     title: headline,
     description,
@@ -56,13 +56,13 @@ export async function generateMetadata({
     openGraph: {
       type: "article",
       url: `/predictions/${id}`,
-      title: `${headline} · MoonOdds`,
+      title: `${headline} · Kicka`,
       description,
-      siteName: "MoonOdds",
+      siteName: "Kicka",
     },
     twitter: {
       card: "summary_large_image",
-      title: `${headline} · MoonOdds`,
+      title: `${headline} · Kicka`,
       description,
     },
     // A pending fixture's page is thin until it settles, and its useful content
@@ -121,7 +121,7 @@ export default async function PredictionPage({
     ...(meta.leagueName && {
       superEvent: { "@type": "SportsEvent", name: meta.leagueName },
     }),
-    organizer: { "@type": "Organization", name: "MoonOdds" },
+    organizer: { "@type": "Organization", name: "Kicka" },
   };
 
   return (

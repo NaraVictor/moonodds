@@ -6,7 +6,7 @@ import { RoleSwitcher } from "@/components/dev/role-switcher";
 import { HistoryClient } from "./history-client";
 
 const DESCRIPTION =
-  "Every settled MoonOdds football prediction and how it finished, with the win rate, return and per-market breakdown behind them. Wins and misses, all of it public.";
+  "Every settled Kicka football prediction and how it finished, with the win rate, return and per-market breakdown behind them. Wins and misses, all of it public.";
 
 export const metadata: Metadata = {
   title: "Prediction history",
@@ -15,13 +15,13 @@ export const metadata: Metadata = {
   openGraph: {
     type: "website",
     url: "/history",
-    title: "Prediction history · MoonOdds",
+    title: "Prediction history · Kicka",
     description: DESCRIPTION,
-    siteName: "MoonOdds",
+    siteName: "Kicka",
   },
   twitter: {
     card: "summary_large_image",
-    title: "Prediction history · MoonOdds",
+    title: "Prediction history · Kicka",
     description: DESCRIPTION,
   },
   robots: { index: true, follow: true },

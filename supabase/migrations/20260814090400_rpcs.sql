@@ -1,5 +1,5 @@
 -- ============================================================================
--- MoonOdds, transactional RPCs
+-- Kicka, transactional RPCs
 --
 -- Convex mutations were single ACID transactions. Anywhere the port turned one
 -- mutation into several writes, the writes go back into one function so a

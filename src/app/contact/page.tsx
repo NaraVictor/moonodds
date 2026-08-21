@@ -8,7 +8,7 @@ import { Mail, MessageSquare, ShieldAlert } from "@/components/ui/icons";
 
 export const metadata: Metadata = {
   title: "Contact",
-  description: "How to reach MoonOdds about billing, a disputed result, or anything else.",
+  description: "How to reach Kicka about billing, a disputed result, or anything else.",
 };
 
 /**
@@ -22,21 +22,21 @@ const ROUTES = [
   {
     Icon: Mail,
     title: "General and billing",
-    address: "hello@moonodds.app",
+    address: "hello@kicka.app",
     detail:
       "Passes, refunds, receipts, or anything about your account. Include the email you signed up with and we can find the payment.",
   },
   {
     Icon: MessageSquare,
     title: "A result looks wrong",
-    address: "results@moonodds.app",
+    address: "results@kicka.app",
     detail:
       "Send the fixture and what you believe the correct outcome was. Graded results are corrected by hand where the feed got it wrong, and the correction is recorded.",
   },
   {
     Icon: ShieldAlert,
     title: "Security",
-    address: "security@moonodds.app",
+    address: "security@kicka.app",
     detail:
       "If you have found a vulnerability, please tell us before telling anyone else. We will confirm receipt and keep you updated until it is closed.",
   },

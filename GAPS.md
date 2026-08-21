@@ -1,6 +1,6 @@
 # Feature parity vs. the original Convex app
 
-MoonOdds is the product; the Convex + Hercules build it replaces is referred to
+Kicka is the product; the Convex + Hercules build it replaces is referred to
 here as "the original". Cross-referenced against that codebase, 120 Convex
 functions and 30 page components, compared by **capability** rather than by function name (the
 port renamed nearly everything, so a name diff produced ~100 false positives and
@@ -126,7 +126,7 @@ distinction is visible immediately: the Premier League runs a 90% strike rate at
 ### 12. Theme switching
 
 Light / dark / system, per device. The dark palette had been in `globals.css`
-since the MoonOdds reskin and unreachable the whole time, because `layout.tsx`
+since the Kicka reskin and unreachable the whole time, because `layout.tsx`
 hard-coded `data-theme="light"`. A blocking inline script applies the choice
 before first paint, so there is no white flash on navigation.
 
@@ -198,13 +198,71 @@ fixtures collapse.
 
 Not gaps against the original, things this port has stubbed deliberately.
 
-- `liveFootball.fetchStats` throws by design. Needs implementing against
-  `/fixtures/headtohead` and `/teams/statistics` before a live run.
-- The app runs on `MOCK_PROVIDERS`. Fixtures, stats, AI and payments are all
-  canned; only the crest URLs are real.
-- Terms section 10 carries blank company details (legal entity, registration
-  number, address, governing law, courts). The review banner has been removed;
-  the blanks are what remain.
+**Closed since this list was written:**
+
+- `liveFootball.fetchStats` is implemented against `/fixtures/headtohead` and
+  `/teams/statistics`, and every field it reads is asserted by
+  `pnpm verify:live`.
+- `MOCK_PROVIDERS` is `false`. Fixtures, stats, AI and payments all go to the
+  real providers. See the plan blocker in `STATUS.md` before expecting output.
+- Terms section 10 names the operator: **Keypad Systems**.
+
+**Still open:**
+
+- Terms section 10 still has four blanks: registration number, registered
+  address, governing law, and courts. These are facts, not decisions anyone
+  can infer, and a governing-law clause guessed at is worse than one absent.
+- The privacy policy never names a data controller. It did not before the
+  rename either, but now that the operating entity is known, it is a blank that
+  can be filled rather than one that could not.
+- **Feeds with no provider at any plan tier.** Weather (wind, altitude, heat,
+  cold, humidity, precipitation), referee card and foul history, travel
+  distance and pitch surface. API-Football does not serve these, so the
+  overlays in Steps 5 and 5B stay gated regardless of what the plan costs.
+  They are not bugs and they need no prompt change; they need a second
+  provider, or they stay off.
+- **Feeds a paid plan would unlock.** Standings (Step 1C quality-adjusted form,
+  and motivation in Step 8), injuries and lineups (Step 6 personnel), and odds
+  with a prior quote (Step 1A market movement). All three exist as endpoints
+  and are refused on the current plan for the current season. The affordable
+  shape for each is a per-league call rather than a per-fixture one, one call
+  per league per day against a per-fixture cost of thirty.
+
+## Turned on: the gated steps that were already paid for
+
+Three gated steps were dark for want of data the pipeline was **already
+fetching and throwing away**. None of them cost an extra API call, which is
+what made them worth doing first on a hundred-call day.
+
+- **Step 1E, weighted and venue head-to-head.** `/fixtures/headtohead` returns
+  every meeting individually. We reduced the list to five aggregates before
+  anything saw it, and the prompt says plainly that "aggregate totals are not a
+  meeting list". The meetings are now kept, and the brief prints each one
+  normalised to the coming fixture's home side: score home-side-first whoever
+  actually hosted, with a flag for which ground it was played on. Printing them
+  as the API reports them would hand the engine the same attribution problem
+  `tallyH2H` exists to solve, on half the rows, with no error if it gets it
+  wrong.
+- **Step 1D, split and venue form.** `/teams/statistics` reports every counter
+  home, away and total. We read `.total` and dropped the halves.
+- **Step 5, rest.** Congestion comes from our own `fixtures` table, not the
+  API: the Free plan refuses the `last` parameter, and this is a question about
+  dates the daily fetch already records. It sees only leagues we track, so a
+  midweek cup tie is invisible and a congested side can read as rested. The
+  brief says "league matches only" for that reason. Understating congestion
+  skips the penalty rather than inventing one, which is the safe direction to
+  be wrong in.
+
+Two consequences worth recording, because both are silent:
+
+- The three rest thresholds lost their `optionalOverlay` tag. That flag drives
+  the Office's "inert for want of a feed" note, and a tag left on after the
+  data arrives tells an operator a working control is dead, which is the same
+  lie as the tag being missing, pointed the other way.
+- The mock provider carries the new inputs too, with meeting lists whose
+  results add up to the aggregates printed beside them. Without that, every
+  local run would exercise the skip path, which is the branch least likely to
+  be right and the one nobody would notice was wrong.
 
 ## Settled: licensing
 

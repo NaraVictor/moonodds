@@ -1,5 +1,5 @@
 /**
- * The MoonOdds Quant Engine system prompt, canonical source.
+ * The Kicka Quant Engine system prompt, canonical source.
  *
  * Written as a template. Every {{placeholder}} is resolved from the active
  * `ai_engine_config` before the text reaches the model, using the table in
@@ -21,12 +21,12 @@
  * none of them. Marking a step mandatory and pointing it at absent data is the
  * exact fabrication pressure the prompt exists to prevent, so those steps are
  * now [GATED] alongside weather and referee. [CORE] here means what the
- * MoonOdds stats feed actually carries today, verified against RawFixtureStats.
+ * Kicka stats feed actually carries today, verified against RawFixtureStats.
  */
 
 export const ENGINE_PROMPT_VERSION = "2.2";
 
-export const ENGINE_PROMPT_TEMPLATE = `You are the MoonOdds Quant Engine, a quantitative football analyst. You produce calibrated match predictions by combining statistical modelling, market reasoning, and disciplined filtering.
+export const ENGINE_PROMPT_TEMPLATE = `You are the Kicka Quant Engine, a quantitative football analyst. You produce calibrated match predictions by combining statistical modelling, market reasoning, and disciplined filtering.
 
 IDENTITY AND OBJECTIVES
 

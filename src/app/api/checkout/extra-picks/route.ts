@@ -157,7 +157,7 @@ export async function POST(request: Request) {
 
   const { payments } = getProviders();
   const init = await payments.initialize({
-    email: user.email ?? `customer-${user.id}@moonodds.app`,
+    email: user.email ?? `customer-${user.id}@kicka.app`,
     amountMinor,
     currency: "GHS",
     reference,

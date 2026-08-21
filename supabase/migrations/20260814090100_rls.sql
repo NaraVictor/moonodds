@@ -1,5 +1,5 @@
 -- ============================================================================
--- MoonOdds, row level security and the gated-picks RPC
+-- Kicka, row level security and the gated-picks RPC
 --
 -- THE CENTRAL CONSTRAINT OF THIS FILE:
 --

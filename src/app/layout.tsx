@@ -39,7 +39,7 @@ const body = Plus_Jakarta_Sans({
  * typed into the Vercel dashboard would otherwise fail the build here.
  *
  * The title template appends the brand to every child page, so a page only ever
- * declares its own subject and still arrives as "Subject · MoonOdds".
+ * declares its own subject and still arrives as "Subject · Kicka".
  */
 
 /**
@@ -48,7 +48,7 @@ const body = Plus_Jakarta_Sans({
  * "AI-powered football prediction market" was too long to survive a search
  * result or a tab, and "prediction market" also described the wrong product:
  * a prediction market is a venue where people trade on outcomes, which is
- * precisely what Terms section 1 says MoonOdds is not.
+ * precisely what Terms section 1 says Kicka is not.
  */
 const TAGLINE = "AI Sports Predictions";
 
@@ -58,11 +58,11 @@ const DESCRIPTION =
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   title: {
-    default: `MoonOdds: ${TAGLINE}`,
-    template: "%s · MoonOdds",
+    default: `Kicka: ${TAGLINE}`,
+    template: "%s · Kicka",
   },
   description: DESCRIPTION,
-  applicationName: "MoonOdds",
+  applicationName: "Kicka",
   keywords: [
     "football predictions",
     "AI football predictions",
@@ -73,21 +73,21 @@ export const metadata: Metadata = {
     "Premier League predictions",
     "confidence scores",
   ],
-  authors: [{ name: "MoonOdds" }],
-  creator: "MoonOdds",
-  publisher: "MoonOdds",
+  authors: [{ name: "Kicka" }],
+  creator: "Kicka",
+  publisher: "Kicka",
   alternates: { canonical: "/" },
   openGraph: {
     type: "website",
-    siteName: "MoonOdds",
+    siteName: "Kicka",
     url: "/",
-    title: `MoonOdds: ${TAGLINE}`,
+    title: `Kicka: ${TAGLINE}`,
     description: DESCRIPTION,
     locale: "en_GB",
   },
   twitter: {
     card: "summary_large_image",
-    title: `MoonOdds: ${TAGLINE}`,
+    title: `Kicka: ${TAGLINE}`,
     description: DESCRIPTION,
   },
   robots: {
@@ -139,7 +139,7 @@ export default function RootLayout({
                 {
                   "@type": "Organization",
                   "@id": `${SITE_URL}/#organization`,
-                  name: "MoonOdds",
+                  name: "Kicka",
                   url: SITE_URL,
                   description: DESCRIPTION,
                 },
@@ -147,7 +147,7 @@ export default function RootLayout({
                   "@type": "WebSite",
                   "@id": `${SITE_URL}/#website`,
                   url: SITE_URL,
-                  name: "MoonOdds",
+                  name: "Kicka",
                   description: DESCRIPTION,
                   publisher: { "@id": `${SITE_URL}/#organization` },
                   inLanguage: "en-GB",

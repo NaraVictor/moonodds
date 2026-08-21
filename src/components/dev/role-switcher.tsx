@@ -18,31 +18,31 @@ import { signInAsDemo, signOut } from "@/lib/auth-actions";
 
 const TIERS = [
   {
-    email: "pass@moonodds.test",
+    email: "pass@kicka.test",
     label: "Pass holder",
     detail: "Bought today's pass, sees every pick",
     color: "success" as const,
   },
   {
-    email: "new@moonodds.test",
+    email: "new@kicka.test",
     label: "First day",
     detail: "Signed up today, 2 free picks",
     color: "accent" as const,
   },
   {
-    email: "locked@moonodds.test",
+    email: "locked@kicka.test",
     label: "Locked out",
     detail: "Returning, no pass, sees nothing",
     color: "warning" as const,
   },
   {
-    email: "suspended@moonodds.test",
+    email: "suspended@kicka.test",
     label: "Suspended",
     detail: "Holds a valid pass, still blocked",
     color: "danger" as const,
   },
   {
-    email: "admin@moonodds.test",
+    email: "admin@kicka.test",
     label: "Super-admin",
     detail: "Full access plus the Office panel",
     color: "default" as const,

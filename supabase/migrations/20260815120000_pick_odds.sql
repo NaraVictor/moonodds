@@ -1,5 +1,5 @@
 -- ============================================================================
--- MoonOdds, carry odds on the pick payload
+-- Kicka, carry odds on the pick payload
 --
 -- The bet slip needs a price per leg. Deriving one from the confidence score
 -- (1/p) was wrong and looked it: a 97%-confidence call became 1.03, and an

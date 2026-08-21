@@ -40,7 +40,7 @@ type BetSlipContext = {
 
 const Ctx = createContext<BetSlipContext | null>(null);
 
-const STORAGE_KEY = "moonodds.slip";
+const STORAGE_KEY = "kicka.slip";
 const MAX_LEGS = 12;
 
 /**

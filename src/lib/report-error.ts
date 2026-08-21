@@ -47,8 +47,8 @@ export function reportError(err: unknown, ctx: ErrorContext): void {
     ...safeDetail(ctx.detail),
   });
 
-  if (level === "warning") console.warn(`[moonodds] ${line}`);
-  else console.error(`[moonodds] ${line}`, stack ?? "");
+  if (level === "warning") console.warn(`[kicka] ${line}`);
+  else console.error(`[kicka] ${line}`, stack ?? "");
 
   forward(err, ctx, level);
 }

@@ -67,7 +67,7 @@ export async function POST(request: Request) {
   const { messaging, mocked } = getProviders();
   await messaging.sendEmail({
     to: email,
-    subject: "MoonOdds, confirm the system prompt change",
+    subject: "Kicka, confirm the system prompt change",
     html: `<p>Your confirmation code is <strong style="font-size:24px;letter-spacing:4px">${code}</strong></p>
            <p>It expires in ${TTL_MINUTES} minutes. If you didn't request this, ignore this email, nothing has changed.</p>`,
   });

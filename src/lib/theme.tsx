@@ -4,7 +4,7 @@ import { useCallback, useSyncExternalStore } from "react";
 
 export type ThemePref = "light" | "dark" | "system";
 
-const STORAGE_KEY = "moonodds.theme";
+const STORAGE_KEY = "kicka.theme";
 
 /**
  * Light, dark or follow the system.

@@ -11,7 +11,7 @@ import { Home, Receipt, User, BarChart3 } from "@/components/ui/icons";
  * destinations that matter sit under the thumb. Desktop keeps the horizontal
  * nav in the header, this is hidden from `sm` up.
  *
- * Deliberately shallow: MoonOdds is about finding and judging predictions, so
+ * Deliberately shallow: Kicka is about finding and judging predictions, so
  * there is nothing else competing for space down here.
  *
  * /office is deliberately absent. It's an internal tool, not a destination,

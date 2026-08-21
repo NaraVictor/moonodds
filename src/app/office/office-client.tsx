@@ -57,7 +57,7 @@ import { useBacktest } from "@/lib/queries";
 /**
  * The Office.
  *
- * An admin panel, but part of the same product, so it uses the MoonOdds
+ * An admin panel, but part of the same product, so it uses the Kicka
  * language rather than dashboard conventions: light ground, generous spacing,
  * rounded surfaces, and the SAME outcome vocabulary as the prediction card, so
  * green/red/amber mean exactly what they mean everywhere else.
@@ -184,7 +184,7 @@ export function OfficeClient({
           The bypass gets you to this page but doesn&rsquo;t fake an identity,
           admin tables are protected by row-level security, not the route guard.
           With no session every panel reads back empty. Actions still run. Sign
-          in as <code className="font-mono text-[0.9em]">admin@moonodds.test</code>{" "}
+          in as <code className="font-mono text-[0.9em]">admin@kicka.test</code>{" "}
           via the flask button and the data appears.
         </Alert>
       )}

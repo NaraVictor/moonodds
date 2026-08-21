@@ -1,5 +1,5 @@
 -- ============================================================================
--- MoonOdds, landing page preview
+-- Kicka, landing page preview
 --
 -- PRODUCT CHANGE, stated plainly: anonymous visitors previously received zero
 -- of today's picks. This grants them exactly ONE, in full, as the landing-page

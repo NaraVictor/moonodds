@@ -17,7 +17,7 @@ import { fetchPredictionMeta, kickoffLine } from "./meta";
  * Those are what a pass buys, and a share card is public by definition.
  */
 
-export const alt = "MoonOdds prediction";
+export const alt = "Kicka prediction";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 

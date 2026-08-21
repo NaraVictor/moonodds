@@ -30,10 +30,10 @@ as $$
       from app.settings where key = 'cron_secret'
     ),
     'cronJobsScheduled', (
-      select count(*) from cron.job where jobname like 'moonodds_%'
+      select count(*) from cron.job where jobname like 'kicka_%'
     ),
     'cronJobsActive', (
-      select count(*) from cron.job where jobname like 'moonodds_%' and active
+      select count(*) from cron.job where jobname like 'kicka_%' and active
     )
   );
 $$;

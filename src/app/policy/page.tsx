@@ -7,7 +7,7 @@ import { PageShell, Section } from "@/components/legal/page-shell";
 
 export const metadata: Metadata = {
   title: "Privacy policy",
-  description: "What MoonOdds collects, why, and what you can ask us to do with it.",
+  description: "What Kicka collects, why, and what you can ask us to do with it.",
 };
 
 /**
@@ -118,7 +118,7 @@ export default async function PolicyPage() {
           <p>
             The copy and the erasure are both self-service on your profile page,
             so exercising those two takes a click rather than a request. For
-            anything else, write to hello@moonodds.app and we will answer within
+            anything else, write to hello@kicka.app and we will answer within
             30 days, which is the outside limit the law allows rather than how
             long we intend to take.
           </p>
@@ -144,13 +144,13 @@ export default async function PolicyPage() {
             row-level security, not only in application code, so a bug in the
             interface cannot expose another user&rsquo;s slips, passes or
             payments. If you believe you have found a way around that, please
-            write to security@moonodds.app before telling anyone else.
+            write to security@kicka.app before telling anyone else.
           </p>
         </Section>
 
         <Section title="Children">
           <p>
-            MoonOdds is for adults aged 18 and over. We do not knowingly collect
+            Kicka is for adults aged 18 and over. We do not knowingly collect
             data from children. If you believe a child has created an account,
             tell us and we will remove it.
           </p>
@@ -159,7 +159,7 @@ export default async function PolicyPage() {
         <Section title="Changes and contact">
           <p>
             If this policy changes materially we will say so in the product
-            before the change takes effect. Questions go to hello@moonodds.app.
+            before the change takes effect. Questions go to hello@kicka.app.
           </p>
         </Section>
       </PageShell>

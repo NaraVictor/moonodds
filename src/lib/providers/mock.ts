@@ -2,11 +2,13 @@ import type {
   AiProvider,
   EnginePick,
   FootballProvider,
+  H2HMeeting,
   MessagingProvider,
   PaymentProvider,
   RawFixture,
   RawLeague,
   RawTeam,
+  VenueSplit,
 } from "./types";
 import { leagueBadgeUrl, teamCrestUrl } from "./types";
 import type { Market } from "@/lib/types";
@@ -26,6 +28,70 @@ function rng(seed: number) {
     s = (s * 1664525 + 1013904223) >>> 0;
     return s / 0xffffffff;
   };
+}
+
+/** One half of a venue split, built around a plausible per-game average. */
+function split(
+  rand: () => number,
+  gamesPlayed: number,
+  scored: number,
+  conceded: number,
+): VenueSplit {
+  const wins = Math.round(gamesPlayed * (0.25 + rand() * 0.3));
+  const draws = Math.round((gamesPlayed - wins) * (0.3 + rand() * 0.3));
+  return {
+    gamesPlayed,
+    wins,
+    draws,
+    losses: gamesPlayed - wins - draws,
+    avgGoalsScored: Number((scored + rand() * 0.3).toFixed(2)),
+    avgGoalsConceded: Number((conceded + rand() * 0.3).toFixed(2)),
+  };
+}
+
+/**
+ * A meeting list whose results add up to the aggregate totals beside it.
+ *
+ * Generating these independently would let the mock hand the engine a list of
+ * five meetings under a header claiming eight, and Step 1E would weight one
+ * history while the fallback totals described another.
+ */
+function mockMeetings(
+  rand: () => number,
+  fixtureId: number,
+  homeWins: number,
+  awayWins: number,
+  draws: number,
+): H2HMeeting[] {
+  const results: Array<"H" | "A" | "D"> = [
+    ...Array<"H">(homeWins).fill("H"),
+    ...Array<"A">(awayWins).fill("A"),
+    ...Array<"D">(draws).fill("D"),
+  ];
+
+  // Meetings run newest first, roughly one a season back from this one.
+  return results.map((r, i) => {
+    const date = new Date(Date.now() - (i + 1) * 190 * 86400_000).toISOString();
+    const winnerGoals = 1 + Math.floor(rand() * 3);
+    const loserGoals = Math.floor(rand() * winnerGoals);
+    const level = Math.floor(rand() * 3);
+    // Alternating hosts, so the reverse fixtures the tally has to attribute by
+    // team id rather than by position are present in mock data too.
+    const hosted = i % 2 === 0;
+    const [hg, ag] =
+      r === "D"
+        ? [level, level]
+        : (r === "H") === hosted
+          ? [winnerGoals, loserGoals]
+          : [loserGoals, winnerGoals];
+    return {
+      date,
+      homeExternalId: hosted ? fixtureId : fixtureId + 1,
+      awayExternalId: hosted ? fixtureId + 1 : fixtureId,
+      homeGoals: hg,
+      awayGoals: ag,
+    };
+  });
 }
 
 const TEAM_POOL: Record<number, Array<[number, string, string]>> = {
@@ -146,30 +212,54 @@ export const mockFootball: FootballProvider = {
   async fetchStats(externalIds) {
     const rand = rng(externalIds.length * 13 + 5);
     const forms = ["WWDLW", "WDWWL", "LWWDW", "DWLWW", "LDWLL", "WLDLW"];
-    return externalIds.map((id) => ({
-      fixtureExternalId: id,
-      homeForm: forms[Math.floor(rand() * forms.length)],
-      awayForm: forms[Math.floor(rand() * forms.length)],
-      h2hHomeWins: Math.floor(rand() * 4),
-      h2hAwayWins: Math.floor(rand() * 3),
-      h2hDraws: Math.floor(rand() * 3),
-      h2hAvgGoals: Number((2.1 + rand() * 1.4).toFixed(2)),
-      h2hBttsRate: Number((0.4 + rand() * 0.4).toFixed(3)),
-      homeSeason: {
-        gamesPlayed: 24, wins: 13, draws: 6, losses: 5,
-        avgGoalsScored: Number((1.4 + rand()).toFixed(2)),
-        avgGoalsConceded: Number((0.8 + rand() * 0.7).toFixed(2)),
-        cleanSheetRate: Number((0.25 + rand() * 0.25).toFixed(3)),
-        bttsRate: Number((0.45 + rand() * 0.25).toFixed(3)),
-      },
-      awaySeason: {
-        gamesPlayed: 24, wins: 9, draws: 7, losses: 8,
-        avgGoalsScored: Number((1.0 + rand()).toFixed(2)),
-        avgGoalsConceded: Number((1.1 + rand() * 0.7).toFixed(2)),
-        cleanSheetRate: Number((0.15 + rand() * 0.2).toFixed(3)),
-        bttsRate: Number((0.5 + rand() * 0.25).toFixed(3)),
-      },
-    }));
+    return externalIds.map((id) => {
+      const homeWins = Math.floor(rand() * 4);
+      const awayWins = Math.floor(rand() * 3);
+      const draws = Math.floor(rand() * 3);
+
+      // The mock has to carry the gated inputs too. If it did not, Step 1D and
+      // Step 1E would light up only against the live API, and every local run
+      // would exercise the skip path, which is the branch least likely to be
+      // wrong. The counts agree with the totals above by construction.
+      const meetings = mockMeetings(rand, id, homeWins, awayWins, draws);
+
+      return {
+        fixtureExternalId: id,
+        homeForm: forms[Math.floor(rand() * forms.length)],
+        awayForm: forms[Math.floor(rand() * forms.length)],
+        h2hHomeWins: homeWins,
+        h2hAwayWins: awayWins,
+        h2hDraws: draws,
+        h2hAvgGoals: Number((2.1 + rand() * 1.4).toFixed(2)),
+        h2hBttsRate: Number((0.4 + rand() * 0.4).toFixed(3)),
+        homeSeason: {
+          gamesPlayed: 24, wins: 13, draws: 6, losses: 5,
+          avgGoalsScored: Number((1.4 + rand()).toFixed(2)),
+          avgGoalsConceded: Number((0.8 + rand() * 0.7).toFixed(2)),
+          cleanSheetRate: Number((0.25 + rand() * 0.25).toFixed(3)),
+          bttsRate: Number((0.45 + rand() * 0.25).toFixed(3)),
+        },
+        awaySeason: {
+          gamesPlayed: 24, wins: 9, draws: 7, losses: 8,
+          avgGoalsScored: Number((1.0 + rand()).toFixed(2)),
+          avgGoalsConceded: Number((1.1 + rand() * 0.7).toFixed(2)),
+          cleanSheetRate: Number((0.15 + rand() * 0.2).toFixed(3)),
+          bttsRate: Number((0.5 + rand() * 0.25).toFixed(3)),
+        },
+        h2hMatches: meetings,
+        // A home side that is stronger at home and an away side that is
+        // weaker away, so the divergence Step 1D looks for is actually
+        // present in mock data rather than being noise around a mean.
+        homeSplit: {
+          home: split(rand, 14, 1.9, 0.7),
+          away: split(rand, 10, 1.1, 1.3),
+        },
+        awaySplit: {
+          home: split(rand, 12, 1.6, 0.9),
+          away: split(rand, 12, 0.9, 1.6),
+        },
+      };
+    });
   },
 
   async fetchResults(externalIds) {

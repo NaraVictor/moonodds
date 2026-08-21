@@ -126,6 +126,49 @@ async function football() {
       ? `form="${s.form ?? "none"}", played=${s.fixtures.played.total}`
       : "missing fields fetchStats reads",
   );
+
+  // The venue split Step 1D is gated on. Same call, same quota, fields we used
+  // to drop on the floor: if `.home` ever stops arriving beside `.total`, the
+  // split silently becomes zeros and every fixture reads as no divergence.
+  const splitOk =
+    Boolean(s) &&
+    hasFields(s, "fixtures.played.home") &&
+    hasFields(s, "fixtures.wins.away") &&
+    hasFields(s, "goals.for.average.home") &&
+    hasFields(s, "goals.against.average.away");
+  record(
+    "football: /teams/statistics venue split",
+    splitOk,
+    splitOk
+      ? `home ${s.fixtures.played.home} / away ${s.fixtures.played.away} games`
+      : "no home/away split, Step 1D would silently read as zeros",
+  );
+
+  /*
+   * THE CHECK THAT MATTERS MOST, and the one this preflight was missing.
+   *
+   * Every shape check above deliberately queries season 2024, so it proves the
+   * fields are where the code expects them. It does NOT prove the plan will
+   * serve the season we actually query, and on the Free plan it will not:
+   * access stops at 2024 while the pipeline asks for the current season.
+   *
+   * The failure mode is the quiet one. API-Football answers HTTP 200 with an
+   * empty response and a `plan` error, `fetchFixtures` catches per league and
+   * logs, and the day ends with "no upcoming fixtures today" — a sentence that
+   * reads like a quiet Tuesday rather than a plan that cannot see this year.
+   */
+  const now = new Date();
+  const season = now.getUTCMonth() <= 5 ? now.getUTCFullYear() - 1 : now.getUTCFullYear();
+  const today = now.toISOString().slice(0, 10);
+  const current = await call(`/fixtures?date=${today}&league=39&season=${season}`);
+  const planErr = current.json?.errors?.plan;
+  record(
+    "football: current season served",
+    !planErr,
+    planErr
+      ? `season ${season} BLOCKED: ${planErr} — live fixtures cannot be fetched, the pipeline will find nothing`
+      : `season ${season} reachable (${current.json?.results ?? 0} fixtures today in league 39)`,
+  );
 }
 
 async function anthropic() {

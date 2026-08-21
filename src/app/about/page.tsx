@@ -8,7 +8,7 @@ import { PageShell, Section } from "@/components/legal/page-shell";
 export const metadata: Metadata = {
   title: "About",
   description:
-    "MoonOdds reads the numbers behind every fixture and tells you what it thinks, and exactly why. Analysis, not tips.",
+    "Kicka reads the numbers behind every fixture and tells you what it thinks, and exactly why. Analysis, not tips.",
 };
 
 export default async function AboutPage() {
@@ -23,11 +23,11 @@ export default async function AboutPage() {
       <PageShell
         eyebrow="About"
         title="We show our working."
-        intro="MoonOdds reads the numbers behind every fixture, form, expected goals, head-to-head, rest and travel, and tells you what it thinks and exactly why. You stay in charge of the call."
+        intro="Kicka reads the numbers behind every fixture, form, expected goals, head-to-head, rest and travel, and tells you what it thinks and exactly why. You stay in charge of the call."
       >
         <Section title="What this is">
           <p>
-            MoonOdds is an analysis product. Each morning a model works through
+            Kicka is an analysis product. Each morning a model works through
             the day&rsquo;s fixtures across the leagues we cover, and publishes
             the calls where it believes the market has mispriced something. Every
             prediction arrives with its reasoning, the factors that were weighed,
@@ -59,7 +59,7 @@ export default async function AboutPage() {
           <p>
             African football fans follow the European leagues closely and are
             badly served by products priced and designed for Europe and North
-            America. MoonOdds is built the other way round: a day pass rather
+            America. Kicka is built the other way round: a day pass rather
             than a subscription, priced so a single day costs less than a coffee,
             with mobile as the primary surface rather than an afterthought.
           </p>

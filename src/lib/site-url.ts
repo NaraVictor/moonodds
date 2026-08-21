@@ -2,8 +2,8 @@
  * The site's own absolute base URL.
  *
  * `NEXT_PUBLIC_SITE_URL` is typed into a Vercel dashboard by hand, and the
- * natural thing to type is the bare host: `moonodds.vercel.com`. That is not a
- * URL. `new URL("moonodds.vercel.com")` throws ERR_INVALID_URL, and because
+ * natural thing to type is the bare host: `kicka.vercel.com`. That is not a
+ * URL. `new URL("kicka.vercel.com")` throws ERR_INVALID_URL, and because
  * `metadataBase` is evaluated while Next collects page data, the whole
  * production build fails on a page nobody edited, with a stack that points at
  * /_not-found rather than at the setting.
@@ -18,7 +18,7 @@
  * throw here takes the entire deploy down, which is a bad day.
  */
 
-const DEFAULT_SITE_URL = "https://moonodds.app";
+const DEFAULT_SITE_URL = "https://kicka.app";
 
 export function normaliseSiteUrl(raw: string | undefined | null): string {
   const trimmed = raw?.trim();

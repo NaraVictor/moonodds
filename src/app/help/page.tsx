@@ -81,7 +81,7 @@ const FAQS: { q: string; a: React.ReactNode }[] = [
     a: (
       <>
         A way to record which predictions you followed, so you can track how they
-        did as a group. MoonOdds does not take bets and holds no money, saving a
+        did as a group. Kicka does not take bets and holds no money, saving a
         slip places nothing anywhere. It is a notebook, not a bet.
       </>
     ),
@@ -123,7 +123,7 @@ export default async function HelpPage() {
       <SiteHeader signedIn={!!user} />
       <PageShell
         eyebrow="Help centre"
-        title="How MoonOdds works."
+        title="How Kicka works."
         intro="The questions we get asked most. If yours isn't here, write to us, the address is on the contact page."
       >
         <div className="divide-y divide-separator overflow-hidden rounded-[1.25rem] border border-border bg-surface">

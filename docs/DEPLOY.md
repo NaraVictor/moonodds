@@ -1,4 +1,4 @@
-# Deploying MoonOdds
+# Deploying Kicka
 
 Supabase project ref: `sktaghkuppcqzsltuffu`
 Project URL: `https://sktaghkuppcqzsltuffu.supabase.co`
@@ -114,7 +114,7 @@ never graded.
 Run this in the SQL editor against the linked project, with the real values:
 
 ```sql
-update app.settings set value = 'https://YOUR-DOMAIN' where key = 'app_base_url';
+update app.settings set value = 'https://kicka.app' where key = 'app_base_url';
 update app.settings set value = 'YOUR-CRON-SECRET'    where key = 'cron_secret';
 
 -- Confirm. Neither of these may still say host.docker.internal or local-dev.
@@ -123,6 +123,57 @@ select key, value from app.settings;
 
 `cron_secret` must equal the `CRON_SECRET` set in Vercel. The routes check it
 with `assertCronRequest`.
+
+---
+
+## 2a. The rename, and what it touches in a live database
+
+The product was MoonOdds; it is Kicka, at `kicka.app`. Most of that is display
+text, but three things are not:
+
+- **The scheduled jobs were renamed** `moonodds_*` to `kicka_*`, including the
+  unschedule loop that makes the cron migration re-runnable. On a database that
+  had already applied the old migration, that loop no longer matches the old
+  jobs, so they survive and the new ones schedule beside them: every endpoint
+  fires twice a day. `20260821091000_rename_cron_jobs.sql` removes the old
+  prefix. Confirm after migrating, seven jobs and no duplicates:
+
+  ```sql
+  select jobname, active from cron.job order by jobname;
+  ```
+
+- **`get_deploy_settings()` counts jobs by prefix**, so the health check reports
+  zero scheduled jobs until that migration has run.
+
+- **Storage keys and demo logins moved.** Saved theme, board view and bet slips
+  live under `kicka.*` in localStorage, so a returning browser starts fresh.
+  Seed accounts are now `@kicka.test` with password `kicka`.
+
+The Supabase project itself is still **named** "moonodds" in the dashboard.
+That is cosmetic: the project ref `sktaghkuppcqzsltuffu` is what every
+connection string uses, and renaming the project does not change it.
+
+---
+
+## 2b. Before you expect any picks: check the API-Football plan
+
+**A correct deploy on the current plan still produces nothing.** The key in use
+is on the **Free** plan, which serves seasons **2022–2024 only**. The pipeline
+asks for the current season, and API-Football answers HTTP 200 with an empty
+response and a `plan` error, so `fetch-fixtures` finds no fixtures, the engine
+has nothing to analyse, and the day ends with "no upcoming fixtures today".
+
+Nothing about that reads as a misconfiguration. Check it before blaming the
+deploy:
+
+```bash
+pnpm verify:live football
+```
+
+`football: current season served` is the decisive line. If it FAILs, the plan is
+the problem and no amount of deploy fixing will produce a pick. A paid tier is
+what lifts it; the daily call budget in `ai_engine_config.api_budget` should be
+raised at the same time, since it is currently sized for 100 calls a day.
 
 ---
 
@@ -140,7 +191,7 @@ Set the webhook URL in the Paystack dashboard
 (`Settings → API Keys & Webhooks`):
 
 ```
-https://YOUR-DOMAIN/api/webhooks/paystack
+https://kicka.app/api/webhooks/paystack
 ```
 
 The handler verifies `x-paystack-signature` as HMAC SHA-512 of the raw body
@@ -163,7 +214,7 @@ select reference, status, settled_at from payments order by created_at desc limi
 including the two things that fail silently:
 
 ```bash
-curl -s https://YOUR-DOMAIN/api/health | jq
+curl -s https://kicka.app/api/health | jq
 ```
 
 `200` means ready. `503` lists exactly what is not, by name. It reports whether
@@ -175,13 +226,13 @@ Then the individual checks:
 
 ```bash
 # Headers are set by next.config.ts, not by Vercel config.
-curl -sI https://YOUR-DOMAIN | grep -iE "content-security|strict-transport|x-frame"
+curl -sI https://kicka.app | grep -iE "content-security|strict-transport|x-frame"
 
 # Should be 401, not 200. If it is 200, CRON_SECRET is not set.
-curl -s -o /dev/null -w "%{http_code}\n" -X POST https://YOUR-DOMAIN/api/cron/daily-picks
+curl -s -o /dev/null -w "%{http_code}\n" -X POST https://kicka.app/api/cron/daily-picks
 
 # Should be 401. If it is 500, PAYSTACK_SECRET_KEY is missing.
-curl -s -o /dev/null -w "%{http_code}\n" -X POST https://YOUR-DOMAIN/api/webhooks/paystack -d '{}'
+curl -s -o /dev/null -w "%{http_code}\n" -X POST https://kicka.app/api/webhooks/paystack -d '{}'
 ```
 
 Then in the SQL editor:
@@ -265,8 +316,8 @@ Platform backups are the first line, not the only one. This costs nothing and
 takes seconds:
 
 ```bash
-supabase db dump --linked -f "moonodds-$(date +%F).sql"          # schema
-supabase db dump --linked --data-only -f "moonodds-$(date +%F)-data.sql"
+supabase db dump --linked -f "kicka-$(date +%F).sql"          # schema
+supabase db dump --linked --data-only -f "kicka-$(date +%F)-data.sql"
 ```
 
 Keep them somewhere that is not the same account as the database. A backup that
@@ -278,7 +329,7 @@ Rehearse this once, on a throwaway project, before needing it:
 
 ```bash
 supabase db reset --linked      # DESTRUCTIVE. re-applies migrations only
-psql "$DB_URL" -f moonodds-YYYY-MM-DD-data.sql
+psql "$DB_URL" -f kicka-YYYY-MM-DD-data.sql
 ```
 
 ### Rolling back a bad migration

@@ -3,11 +3,13 @@ import type {
   AiProvider,
   EnginePick,
   FootballProvider,
+  H2HMeeting,
   MessagingProvider,
   PaymentProvider,
   RawFixture,
   RawFixtureStats,
   RawTeam,
+  VenueSplit,
 } from "./types";
 import { leagueBadgeUrl, teamCrestUrl } from "./types";
 import { PICK_SCHEMA } from "@/lib/engine/output";
@@ -178,20 +180,27 @@ type ApiH2H = {
   fixture: { status: { short: string }; date?: string };
 };
 
+/**
+ * Home/away/total appears on every counter this endpoint returns. We read only
+ * `.total` for years; the split halves are what Step 1D is gated on.
+ */
+type ApiSplit = { home: number; away: number; total: number };
+type ApiAvgSplit = { home: string; away: string; total: string };
+
 type ApiTeamStats = {
   form: string | null;
   fixtures: {
-    played: { total: number };
-    wins: { total: number };
-    draws: { total: number };
-    loses: { total: number };
+    played: ApiSplit;
+    wins: ApiSplit;
+    draws: ApiSplit;
+    loses: ApiSplit;
   };
   goals: {
-    for: { total: { total: number }; average: { total: string } };
-    against: { total: { total: number }; average: { total: string } };
+    for: { total: ApiSplit; average: ApiAvgSplit };
+    against: { total: ApiSplit; average: ApiAvgSplit };
   };
-  clean_sheet: { total: number };
-  failed_to_score: { total: number };
+  clean_sheet: ApiSplit;
+  failed_to_score: ApiSplit;
 };
 
 /**
@@ -226,7 +235,35 @@ async function headToHead(homeId: number, awayId: number) {
 
   const tallied = tallyH2H(recent, homeId);
   // Nothing finished among them is the same as having no history to read.
-  return tallied.played === 0 ? null : tallied;
+  if (tallied.played === 0) return null;
+
+  // The same rows the tally was computed from, kept individually. This costs
+  // no extra call: they were fetched, reduced to five numbers, and dropped.
+  return { ...tallied, meetings: toMeetings(recent) };
+}
+
+/**
+ * Meetings the engine can weight, in the order it expects.
+ *
+ * Only finished meetings with both scores survive, the same filter the tally
+ * applies, so the list and the totals can never describe different histories.
+ */
+export function toMeetings(rows: ApiH2H[]): H2HMeeting[] {
+  return rows
+    .filter(
+      (r) =>
+        DONE_CODES.includes(r.fixture?.status?.short ?? "") &&
+        r.goals.home != null &&
+        r.goals.away != null &&
+        r.fixture?.date,
+    )
+    .map((r) => ({
+      date: r.fixture.date as string,
+      homeExternalId: r.teams.home.id,
+      awayExternalId: r.teams.away.id,
+      homeGoals: r.goals.home as number,
+      awayGoals: r.goals.away as number,
+    }));
 }
 
 /**
@@ -332,18 +369,53 @@ async function teamSeason(
 
   // Carried through so fetchStats can read it, stripped before it ships.
   (record as unknown as { form: string | null }).form = stats.form ?? null;
+  // Same arrangement for the venue split: it rides inside the cached record so
+  // the memoised call is still one call, and is lifted out in fetchStats.
+  (record as unknown as { split: { home: VenueSplit; away: VenueSplit } }).split =
+    venueSplit(stats);
 
   cache.set(key, record);
   return record;
 }
 
+/**
+ * The home and away halves of a season record.
+ *
+ * Averages arrive as strings on this endpoint and the counters as numbers,
+ * which is why they go through different readers. A side with no away games
+ * yet reports zeros rather than nulls upstream, so `gamesPlayed` is what tells
+ * the engine whether the split means anything, and Step 1D checks it.
+ */
+function venueSplit(stats: ApiTeamStats): { home: VenueSplit; away: VenueSplit } {
+  const side = (where: "home" | "away"): VenueSplit => ({
+    gamesPlayed: stats.fixtures.played?.[where] ?? 0,
+    wins: stats.fixtures.wins?.[where] ?? 0,
+    draws: stats.fixtures.draws?.[where] ?? 0,
+    losses: stats.fixtures.loses?.[where] ?? 0,
+    avgGoalsScored: num(stats.goals?.for?.average?.[where]),
+    avgGoalsConceded: num(stats.goals?.against?.average?.[where]),
+  });
+  return { home: side("home"), away: side("away") };
+}
+
 function stripForm(rec: Record<string, number> | null): Record<string, number> {
   if (!rec) return {};
   const out = { ...rec } as Record<string, unknown>;
-  // form rides along inside the cached record so fetchStats can read it once;
-  // RawFixtureStats keeps it as its own field, so it must not also appear here.
+  // form and split ride along inside the cached record so fetchStats can read
+  // them from one call; RawFixtureStats keeps both as their own fields, so
+  // neither may also appear here. A stray object in what is typed
+  // Record<string, number> reaches the prompt as "[object Object]".
   delete out.form;
+  delete out.split;
   return out as Record<string, number>;
+}
+
+/** Lift the venue split back out of the cached season record. */
+function splitOf(
+  rec: Record<string, number> | null,
+): { home: VenueSplit; away: VenueSplit } | null {
+  const carried = (rec as unknown as { split?: { home: VenueSplit; away: VenueSplit } })?.split;
+  return carried ?? null;
 }
 
 /** API-Football returns averages as strings like "1.85". */
@@ -436,6 +508,12 @@ export const liveFootball: FootballProvider = {
         h2hBttsRate: h2h?.bttsRate ?? null,
         homeSeason: stripForm(homeSeason),
         awaySeason: stripForm(awaySeason),
+        // Both of these come out of calls already made above. Step 1D and
+        // Step 1E were gated off for want of data we were fetching and
+        // throwing away, not for want of a call we could not afford.
+        h2hMatches: h2h?.meetings ?? [],
+        homeSplit: splitOf(homeSeason),
+        awaySplit: splitOf(awaySeason),
       });
     }
 
@@ -776,7 +854,7 @@ export const liveMessaging: MessagingProvider = {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        from: process.env.EMAIL_FROM ?? "picks@moonodds.app",
+        from: process.env.EMAIL_FROM ?? "picks@kicka.app",
         to,
         subject,
         html,
@@ -801,7 +879,7 @@ export const liveMessaging: MessagingProvider = {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        From: process.env.HUBTEL_SENDER_ID ?? "MoonOdds",
+        From: process.env.HUBTEL_SENDER_ID ?? "Kicka",
         To: to,
         Content: message,
       }),

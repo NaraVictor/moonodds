@@ -26,13 +26,13 @@ const env = Object.fromEntries(
 const URL_ = env.NEXT_PUBLIC_SUPABASE_URL;
 const ANON = env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-const PASSWORD = "moonodds";
+const PASSWORD = "kicka";
 const ACCOUNTS = {
-  passHolder: "pass@moonodds.test",
-  firstDay: "new@moonodds.test",
-  lockedOut: "locked@moonodds.test",
-  suspended: "suspended@moonodds.test",
-  admin: "admin@moonodds.test",
+  passHolder: "pass@kicka.test",
+  firstDay: "new@kicka.test",
+  lockedOut: "locked@kicka.test",
+  suspended: "suspended@kicka.test",
+  admin: "admin@kicka.test",
 };
 
 let failures = 0;

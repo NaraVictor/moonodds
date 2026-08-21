@@ -39,7 +39,7 @@ export function SiteHeader({ signedIn }: { signedIn: boolean }) {
       {/* Matches the board's own width and gutters so the logo sits directly
           above the first card rather than floating in a narrower column. */}
       <div className="mx-auto flex w-full max-w-[110rem] items-center gap-8 px-5 py-4 sm:px-8 sm:py-5">
-        <Link href="/" className="flex-none" aria-label="MoonOdds home">
+        <Link href="/" className="flex-none" aria-label="Kicka home">
           <Logo />
         </Link>
 

@@ -648,7 +648,7 @@ function SummaryRail({ pick, settled }: { pick: Pick; settled: boolean }) {
         )}
 
         <p className="mt-3 text-center text-[11px] leading-snug text-muted">
-          Analysis, not advice. MoonOdds doesn&rsquo;t take bets or hold funds.
+          Analysis, not advice. Kicka doesn&rsquo;t take bets or hold funds.
         </p>
       </div>
     </div>

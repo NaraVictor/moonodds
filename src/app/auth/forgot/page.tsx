@@ -10,7 +10,7 @@ export const metadata = {
 export default function ForgotPasswordPage() {
   return (
     <main className="mx-auto flex min-h-dvh w-full max-w-md flex-col justify-center px-5 py-12">
-      <Link href="/" className="mx-auto mb-8" aria-label="MoonOdds home">
+      <Link href="/" className="mx-auto mb-8" aria-label="Kicka home">
         <Logo />
       </Link>
 

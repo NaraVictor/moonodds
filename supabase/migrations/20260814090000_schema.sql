@@ -1,5 +1,5 @@
 -- ============================================================================
--- MoonOdds, core schema
+-- Kicka, core schema
 --
 -- Ported from the Convex document model. Notable translations:
 --   Id<"table">        -> uuid, with real foreign keys

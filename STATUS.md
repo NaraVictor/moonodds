@@ -1,6 +1,6 @@
-# MoonOdds: build status
+# Kicka: build status
 
-MoonOdds, migrated from the original Convex + Hercules build to Next.js 16 +
+Kicka, migrated from the original Convex + Hercules build to Next.js 16 +
 Supabase + HeroUI v3, with dummy data and mocked providers.
 
 Run `pnpm dev` (port 3100) with local Supabase up (`npx supabase start`).
@@ -74,7 +74,7 @@ privilege columns against self-promotion.
 60 settled picks over 30 days (~63% strike), 3 live fixtures, 14 for today
 across all twelve markets, 10 awaiting the pipeline, full engine config with
 real weights, a pending tuning report, passes/orders/slips, and five demo
-accounts, one per access tier, password `moonodds`.
+accounts, one per access tier, password `kicka`.
 
 ### App surfaces
 - Guest landing, hero, live stats, pricing, track record gated after 10 rows.
@@ -201,20 +201,58 @@ ships with `host.docker.internal:3100` and the dev cron secret, so until it is
 updated on the remote every scheduled job posts into the void and no picks are
 ever generated.
 
+## Blocked: the API-Football plan cannot see the current season
+
+**This is the one thing standing between a correct deploy and a working
+product.** The key in use is on the Free plan, which serves seasons **2022 to
+2024**. Today is in the 2026 season. Every current-season request is answered
+with HTTP 200, an empty `response`, and `{"plan": "Free plans do not have
+access to this season, try from 2022 to 2024."}`.
+
+Confirmed directly against the API for `/fixtures`, `/teams/statistics`,
+`/standings` and `/injuries`. Its consequence:
+
+- `fetch-fixtures` finds nothing, so no fixtures are stored.
+- `fetch-stats` therefore has nothing to enrich.
+- `daily-picks` reports "no upcoming fixtures today" and generates no picks.
+
+None of that looks like a fault. The one honest signal was a log line per
+league, and the day's outcome is a sentence that reads like a quiet Tuesday.
+`pnpm verify:live` now fails on `football: current season served` and says so
+in those words, so the plan gets blamed instead of the deploy.
+
+`MOCK_PROVIDERS` is currently `false`, which means the live pipeline is armed
+and producing nothing. Either upgrade the plan or set it back to `true`;
+leaving it as it is, is the only option that fails quietly.
+
+The Free plan also refuses the `last` parameter outright, which is why fixture
+congestion is derived from our own fixture history rather than fetched.
+
 ## Not done
 
 Nothing outstanding from the original scope.
 
 ## Known issues
 
-- **Most of the prompt's machinery still has no inputs.** Personnel, standings,
-  odds movement, travel, rest and per-meeting H2H are written and gated, and
-  `fetchStats` now supplies form, aggregate H2H and season splits but not those.
-  They correctly skip on every fixture. Wiring the remaining feeds is what turns
-  them on; nothing in the prompt needs to change.
-- **`fetchStats` is implemented but unexercised against the live API.** The
-  transport, the H2H attribution and the season mapping are written and the
-  attribution is unit-tested, but no call has been made with a real key.
+- **Some of the prompt's machinery still has no inputs.** Three gated steps now
+  have feeds and cost no extra API calls, because the data was already being
+  fetched and discarded: **Step 1E** (weighted, venue-isolated head-to-head)
+  from the meeting list `/fixtures/headtohead` already returns, **Step 1D**
+  (split and venue form) from the home/away halves `/teams/statistics` already
+  reports beside the totals we read, and the **Step 5 rest overlay** from our
+  own fixture history. The rest, personnel, standings, odds movement, travel,
+  surface, weather and referee history, still correctly skip on every fixture.
+  Weather, altitude and referee card history are not on this feed at any tier
+  and need a different provider, not a better plan.
+- **The batch absence line is computed, not written.** The user prompt used to
+  end with a hard-coded list of what was absent. That list is now derived from
+  the batch, because it is the last thing the model reads before the fixtures:
+  a stale sentence there tells the engine to skip data sitting in front of it,
+  and the step goes dark with nothing to show for it anywhere.
+- **`fetchStats` is verified in shape, not in anger.** `pnpm verify:live`
+  asserts every field it reads, including the venue split, against real
+  responses. No full pipeline run has happened, because the plan above cannot
+  serve a current fixture to run it on.
 - **ROI was corrected, not ported verbatim.** The Convex `getEngineStats`
   computed `(wins × 1.8 − losses) / staked`, which paid every winner at a flat
   1.8 and never returned the winners' own stake to the denominator. That put the

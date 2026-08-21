@@ -7,7 +7,7 @@ import { keys, useProfile } from "./queries";
 
 export type BoardView = "cards" | "table";
 
-const STORAGE_KEY = "moonodds.board-view";
+const STORAGE_KEY = "kicka.board-view";
 
 /* ------------------------- localStorage as a store ------------------------ */
 
