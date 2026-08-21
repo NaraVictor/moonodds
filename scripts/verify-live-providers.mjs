@@ -171,6 +171,44 @@ async function football() {
   );
 }
 
+/**
+ * The Sentry DSN, checked without sending anything.
+ *
+ * This script promises it sends nothing, so this parses and asserts the DSN
+ * rather than posting a test event. That is still worth doing: `forward()`
+ * wraps the whole thing in a try/catch and swallows the failure, so a DSN with
+ * a typo in it disables error reporting completely and reports that fact
+ * nowhere. "Configured" and "configured correctly" look identical at runtime.
+ */
+async function sentry() {
+  const dsn = env.SENTRY_DSN;
+  if (!dsn) {
+    return record("sentry: DSN", false, "SENTRY_DSN not set, errors log but do not forward");
+  }
+
+  let parsed;
+  try {
+    parsed = new URL(dsn);
+  } catch {
+    return record("sentry: DSN", false, "not a URL, forward() will swallow this and report nothing");
+  }
+
+  const projectId = parsed.pathname.replace("/", "");
+  const ok =
+    parsed.protocol === "https:" &&
+    Boolean(parsed.username) &&
+    /^\d+$/.test(projectId) &&
+    parsed.hostname.includes("sentry.io");
+
+  record(
+    "sentry: DSN",
+    ok,
+    ok
+      ? `project ${projectId} at ${parsed.hostname}, posting to /api/${projectId}/envelope/`
+      : "DSN parsed but is missing a public key, a numeric project id, or an https sentry.io host",
+  );
+}
+
 async function anthropic() {
   const key = env.ANTHROPIC_API_KEY;
   if (!key) return record("anthropic: key", false, "ANTHROPIC_API_KEY not set, skipped");
@@ -251,7 +289,7 @@ async function resend() {
   record("resend: key accepted", res.ok, res.ok ? "authenticated" : `HTTP ${res.status}`);
 }
 
-const suites = { football, anthropic, paystack, resend };
+const suites = { football, anthropic, paystack, resend, sentry };
 
 console.log("\nLive provider preflight. Read-only: nothing is charged and nothing is sent.\n");
 

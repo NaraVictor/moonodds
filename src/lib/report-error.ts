@@ -56,9 +56,17 @@ export function reportError(err: unknown, ctx: ErrorContext): void {
 /**
  * Hand off to a provider, if one is configured.
  *
- * Uses Sentry's HTTP envelope directly rather than the SDK: the SDK is a large
+ * Uses Sentry's HTTP API directly rather than the SDK: the SDK is a large
  * dependency and a lot of instrumentation for what is one POST, and taking it
  * on would couple every route to a vendor we have not chosen yet.
+ *
+ * It posts to the **envelope** endpoint. The comment here used to say envelope
+ * while the code posted to `/store/`, which is the legacy endpoint Sentry has
+ * been retiring: it still answers 200 today and both were verified against the
+ * live DSN. That is exactly why it was worth changing. Everything below is
+ * fire-and-forget with its failures swallowed, so the day Sentry turns `/store/`
+ * off, error reporting stops and nothing anywhere says so. A silent monitoring
+ * outage is the one failure this module exists to prevent.
  *
  * Fire and forget. A monitoring outage must never become an application
  * outage, which is the classic way error reporting makes an incident worse.
@@ -70,15 +78,17 @@ function forward(err: unknown, ctx: ErrorContext, level: string): void {
   try {
     const parsed = new URL(dsn);
     const projectId = parsed.pathname.replace("/", "");
-    const endpoint = `${parsed.protocol}//${parsed.host}/api/${projectId}/store/`;
+    const endpoint = `${parsed.protocol}//${parsed.host}/api/${projectId}/envelope/`;
+    const eventId = crypto.randomUUID().replace(/-/g, "");
 
-    void fetch(endpoint, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Sentry-Auth": `Sentry sentry_version=7, sentry_key=${parsed.username}`,
-      },
-      body: JSON.stringify({
+    // An envelope is newline-delimited JSON: headers, then one item header per
+    // payload, then the payload. Not pretty-printed, and no trailing newline
+    // beyond the separators, because the framing is positional.
+    const body = [
+      JSON.stringify({ event_id: eventId, dsn }),
+      JSON.stringify({ type: "event" }),
+      JSON.stringify({
+        event_id: eventId,
         level,
         platform: "node",
         environment: process.env.VERCEL_ENV ?? process.env.NODE_ENV ?? "development",
@@ -86,9 +96,18 @@ function forward(err: unknown, ctx: ErrorContext, level: string): void {
         message: err instanceof Error ? err.message : String(err),
         extra: safeDetail(ctx.detail),
         exception: err instanceof Error
-          ? { values: [{ type: err.name, value: err.message }] }
+          ? { values: [{ type: err.name, value: err.message, stacktrace: undefined }] }
           : undefined,
       }),
+    ].join("\n");
+
+    void fetch(endpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-sentry-envelope",
+        "X-Sentry-Auth": `Sentry sentry_version=7, sentry_key=${parsed.username}`,
+      },
+      body,
       signal: AbortSignal.timeout(3000),
     }).catch(() => {
       // Swallowed on purpose. See above.

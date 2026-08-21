@@ -22,6 +22,7 @@ in a chat window.
 | `API_FOOTBALL_KEY` | Vercel **only** | |
 | `RESEND_API_KEY` | Vercel **only** | |
 | `CRON_SECRET` | Vercel **and** `app.settings` | Must match in both places or every cron job 401s |
+| `SENTRY_DSN` | Vercel + `.env.local` | Server-side only. Never `NEXT_PUBLIC_`: nothing in the browser reports errors here, so exposing it only invites someone else's events into your project |
 
 Get the anon and service-role keys from
 `Project Settings → API` in the Supabase dashboard.
