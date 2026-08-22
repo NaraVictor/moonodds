@@ -1,24 +1,30 @@
 import { createClient } from "./supabase/server";
 
 /**
- * Is this caller's email address confirmed?
+ * Has this caller proved they control the address they signed in with?
  *
- * Accounts were usable the moment they were created, on any address at all,
- * which mattered more once the notification channel started carrying slip
- * results and daily picks: we were mailing outcomes to addresses nobody had
- * proven they control.
+ * Accounts were once usable the moment they were created, on any address at
+ * all, which mattered more once notifications started carrying slip results
+ * and daily picks: we were mailing outcomes to addresses nobody had proven
+ * they control.
  *
- * Applied at the points where it changes something real, taking money and
- * granting access, rather than as a blanket wall. Someone who has signed up and
- * not yet clicked the link can still read the public board, which is the part
- * that might persuade them to finish.
+ * EITHER channel counts now, and that is not a loosening. Under passwordless
+ * sign-in, receiving the one-time code IS the proof: a confirmed phone is
+ * exactly as strong as a confirmed email, and stronger than a confirmed email
+ * under the old flow, where the password was the credential and the click was
+ * an afterthought.
  *
- * Supabase can also enforce confirmation at the auth layer. This is the
- * application-side half, so the rule holds whichever way that project setting
- * is configured.
+ * Checking only the email would have quietly locked every SMS-only account out
+ * of checkout forever, with a message telling them to click a link that was
+ * never sent to an address they never gave us.
+ *
+ * Applied where it changes something real, taking money and granting access,
+ * rather than as a blanket wall. Someone mid-signup can still read the public
+ * board, which is the part that might persuade them to finish.
  */
-export async function requireVerifiedEmail(): Promise<
-  { ok: true; userId: string; email: string } | { ok: false; reason: string; status: number }
+export async function requireVerifiedContact(): Promise<
+  | { ok: true; userId: string; email: string | null; phone: string | null }
+  | { ok: false; reason: string; status: number }
 > {
   const supabase = await createClient();
   const {
@@ -27,14 +33,21 @@ export async function requireVerifiedEmail(): Promise<
 
   if (!user) return { ok: false, reason: "Sign in first.", status: 401 };
 
-  if (!user.email_confirmed_at) {
+  const emailOk = Boolean(user.email_confirmed_at);
+  const phoneOk = Boolean(user.phone_confirmed_at);
+
+  if (!emailOk && !phoneOk) {
     return {
       ok: false,
-      reason:
-        "Confirm your email address first. We sent you a link when you signed up, and we can send another from your profile.",
+      reason: "Confirm your email address or phone number first.",
       status: 403,
     };
   }
 
-  return { ok: true, userId: user.id, email: user.email ?? "" };
+  return {
+    ok: true,
+    userId: user.id,
+    email: emailOk ? (user.email ?? null) : null,
+    phone: phoneOk ? (user.phone ?? null) : null,
+  };
 }

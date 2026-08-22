@@ -224,6 +224,38 @@ refusal appears in the console; a missing dashboard number does not.
 
 ---
 
+## 2d. Authentication
+
+Passwordless. There is no password field in the product: a one-time code by
+email or SMS, or Google. Three things must be configured or sign-in does not
+work at all.
+
+**Email codes** go through whatever SMTP Supabase is configured with. The
+built-in service is rate limited to a handful an hour and is not for
+production — set custom SMTP in **Authentication → Emails**, pointed at the
+same Resend account as `RESEND_API_KEY`.
+
+**Google** needs an OAuth client, with the callback registered as
+`https://sktaghkuppcqzsltuffu.supabase.co/auth/v1/callback` — the SUPABASE
+one, not `https://kicka.app/auth/callback`. The browser reaches Supabase
+first, and registering ours is the usual cause of `redirect_uri_mismatch`.
+Then set `SUPABASE_AUTH_GOOGLE_CLIENT_ID` and `SUPABASE_AUTH_GOOGLE_SECRET`.
+
+**SMS codes** need the send-SMS hook, because Supabase speaks natively only to
+Twilio, MessageBird, Vonage and Textlocal, and this product uses mNotify. In
+**Authentication → Hooks**, enable *Send SMS*, point it at
+`https://kicka.app/api/auth/sms-hook`, and copy the generated secret into
+`SUPABASE_SMS_HOOK_SECRET`. Supabase generates and verifies the code; the hook
+only delivers it, so nothing on our side ever holds a code it could leak.
+
+> **The password grant is still enabled at the provider.** Removing the UI does
+> not disable it, and the security suite signs in with it to reach its five
+> fixture accounts. Real accounts never set a password, so they have none to
+> guess. Turning it off entirely means rewriting that suite to mint sessions
+> through the admin API first.
+
+---
+
 ## 3. Paystack
 
 Both keys go in Vercel and nowhere else. `pnpm verify:secrets` runs in CI and

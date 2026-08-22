@@ -129,14 +129,23 @@ function toRaw(f: ApiFixture): RawFixture {
  * an empty `response`. Trusting `res.ok` alone turns "your key is dead" into
  * "no leagues matched", which is the kind of failure you chase for an hour.
  */
+const API_FOOTBALL_TIMEOUT_MS = 15_000;
+
 async function apiFootball<T>(path: string): Promise<T[]> {
   const key = process.env.API_FOOTBALL_KEY;
   if (!key) throw new Error("API_FOOTBALL_KEY is not set.");
 
   const base = process.env.API_FOOTBALL_BASE_URL ?? "https://v3.football.api-sports.io";
+  // Bounded, because the callers are not. Cron routes run under
+  // maxDuration = 300 and fetch has no default timeout, so a hung upstream is
+  // killed by the platform mid-run rather than handled: the pipeline stops
+  // wherever it happened to be, having already spent part of a 100-call day.
+  // Fifteen seconds is generous for this API and still leaves a 15-fixture run
+  // room to finish inside the ceiling.
   const res = await fetch(`${base}${path}`, {
     headers: { "x-apisports-key": key },
     cache: "no-store",
+    signal: AbortSignal.timeout(API_FOOTBALL_TIMEOUT_MS),
   });
 
   if (!res.ok) {
@@ -598,12 +607,29 @@ export function normaliseConfidence(raw: number): number {
   return Math.min(Math.max(v, 0), 10);
 }
 
+/**
+ * Comfortably inside the 300s route ceiling, with room for one retry.
+ *
+ * A streamed run over fifteen fixtures is the longest thing this app does, and
+ * the whole point of bounding it here is that exceeding the budget should look
+ * like an error we raised, not like a function that vanished.
+ */
+const ANTHROPIC_TIMEOUT_MS = 120_000;
+
 export const liveAi: AiProvider = {
   async generatePicks({ systemPrompt, userPrompt, maxPicks }) {
     const apiKey = process.env.ANTHROPIC_API_KEY;
     if (!apiKey) throw new Error("ANTHROPIC_API_KEY is not set.");
 
-    const client = new Anthropic({ apiKey });
+    // The SDK's own default timeout is longer than the function that calls it,
+    // so left alone the platform kills the run instead of the client failing
+    // cleanly. maxRetries is pinned for the same reason: two silent retries of
+    // a slow call is three times the duration budget, spent invisibly.
+    const client = new Anthropic({
+      apiKey,
+      timeout: ANTHROPIC_TIMEOUT_MS,
+      maxRetries: 1,
+    });
 
     // Streaming because max_tokens is large; non-streaming risks an HTTP timeout.
     const stream = client.messages.stream({

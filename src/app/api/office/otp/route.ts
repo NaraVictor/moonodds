@@ -21,7 +21,7 @@ const TTL_MINUTES = 10;
 
 export async function POST(request: Request) {
   // Minting is cheap for us and noisy for the admin whose inbox it fills.
-  const limited = enforceRateLimit(request, {
+  const limited = await enforceRateLimit(request, {
     scope: "otp-mint",
     limit: 5,
     windowSeconds: 10 * 60,
@@ -92,7 +92,7 @@ const Apply = z.object({
 export async function PATCH(request: Request) {
   // Six digits is a million combinations, which an unthrottled loop exhausts in
   // minutes. This is the control that makes the code worth having.
-  const limited = enforceRateLimit(request, {
+  const limited = await enforceRateLimit(request, {
     scope: "otp-redeem",
     limit: 5,
     windowSeconds: 15 * 60,

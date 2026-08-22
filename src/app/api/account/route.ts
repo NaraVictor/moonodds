@@ -18,7 +18,7 @@ export const dynamic = "force-dynamic";
  */
 
 export async function GET(request: Request) {
-  const limited = enforceRateLimit(request, {
+  const limited = await enforceRateLimit(request, {
     scope: "data-export",
     limit: 5,
     windowSeconds: 60 * 60,
@@ -51,7 +51,7 @@ export async function GET(request: Request) {
 }
 
 export async function DELETE(request: Request) {
-  const limited = enforceRateLimit(request, {
+  const limited = await enforceRateLimit(request, {
     scope: "account-delete",
     limit: 3,
     windowSeconds: 60 * 60,

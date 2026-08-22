@@ -6,6 +6,7 @@ import { BottomNav } from "@/components/layout/bottom-nav";
 import { PageShell, Section } from "@/components/legal/page-shell";
 
 export const metadata: Metadata = {
+  alternates: { canonical: "/terms" },
   title: "Terms of use",
   description: "The terms on which Kicka is provided.",
 };

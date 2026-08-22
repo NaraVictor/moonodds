@@ -8,9 +8,33 @@ import { normaliseSiteUrl } from "./site-url";
 import { rateLimit } from "./rate-limit";
 
 /**
+ * Passwordless authentication.
+ *
+ * Passwords are gone from the product: no sign-in field, no sign-up field, no
+ * reset flow, no "forgot it?" link. What replaced them is a one-time code sent
+ * to an email address or a phone number, and Google.
+ *
+ * Why it is an improvement rather than a fashion: the three worst incidents a
+ * product this size actually suffers are credential stuffing against reused
+ * passwords, a password-reset flow used as an account-takeover primitive, and
+ * a leaked password database. Storing no passwords removes all three. What it
+ * costs is a dependency on email and SMS delivery actually working, which is
+ * why both are checked by /api/health.
+ *
+ * ONE HONEST CAVEAT. Removing the UI does not disable the password grant at
+ * the provider. Supabase still accepts signInWithPassword for any account that
+ * has a password set, and the security suite depends on exactly that to sign
+ * in as its five fixture accounts. Real accounts created through this file
+ * never set a password, so they have none to guess; the fixture accounts do,
+ * and they only exist on a local database. Turning the grant off entirely is a
+ * dashboard setting and is recorded as a follow-up.
+ */
+
+/**
  * Server actions do not receive a Request, so the caller's address comes from
- * the incoming headers. Same limiter as the route handlers, same caveat: it is
- * per-instance until the counter moves to shared storage.
+ * the incoming headers. The shared limiter needs a Request; these use the
+ * in-process one directly, which is a per-instance bound. Supabase applies its
+ * own server-side rate limits to OTP sends on top of this.
  */
 async function actionKey(scope: string): Promise<string> {
   const h = await headers();
@@ -19,93 +43,196 @@ async function actionKey(scope: string): Promise<string> {
   return `${scope}:${ip}`;
 }
 
-export type AuthResult = { error: string } | undefined;
+export type AuthResult = { error: string } | { sent: true; channel: "email" | "sms" } | undefined;
 
-export async function signIn(
-  _prev: AuthResult,
-  formData: FormData,
-): Promise<AuthResult> {
-  const email = String(formData.get("email") ?? "").trim();
-  const password = String(formData.get("password") ?? "");
-
-  if (!email || !password) {
-    return { error: "Enter your email and password." };
-  }
-
-  // Credential stuffing is the obvious attack on a form like this, and there
-  // was nothing in front of it. Ten tries per address per fifteen minutes is
-  // generous for a person and useless for a list.
-  const verdict = rateLimit(await actionKey(`sign-in:${email.toLowerCase()}`), 10, 15 * 60);
-  if (!verdict.ok) {
-    return {
-      error: `Too many attempts. Try again in ${Math.ceil(verdict.retryAfterSeconds / 60)} minutes.`,
-    };
-  }
-
-  const supabase = await createClient();
-  const { error } = await supabase.auth.signInWithPassword({ email, password });
-
-  if (error) {
-    // Don't leak whether the address exists.
-    return { error: "That email and password don't match an account." };
-  }
-
-  revalidatePath("/", "layout");
-  redirect("/");
+function siteUrl(): string {
+  return normaliseSiteUrl(process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3100");
 }
 
-export async function signUp(
+/* ------------------------------------------------------------------ *
+ * Step one: ask for a code
+ * ------------------------------------------------------------------ */
+
+/**
+ * Send a one-time code to an email address or a phone number.
+ *
+ * `shouldCreateUser` is true, so this is both sign-in and sign-up. That is the
+ * point of a passwordless flow: there is no meaningful difference between the
+ * two, and asking someone to remember which one they are is a step that exists
+ * only because passwords used to.
+ *
+ * Age is collected on first sign-in instead, at /auth/details, because we
+ * cannot ask for it before we know whether this is a new account.
+ */
+export async function requestCode(
   _prev: AuthResult,
   formData: FormData,
 ): Promise<AuthResult> {
-  const email = String(formData.get("email") ?? "").trim();
-  const password = String(formData.get("password") ?? "");
-  const displayName = String(formData.get("displayName") ?? "").trim();
-  const dob = String(formData.get("dateOfBirth") ?? "").trim();
+  const channel = String(formData.get("channel") ?? "email") === "sms" ? "sms" : "email";
+  const identifier = String(formData.get("identifier") ?? "").trim();
 
-  // 10, not 8. Paired with the rate limit on this route, length is the only
-  // lever here that meaningfully raises the cost of an online guess.
-  if (password.length < 10) {
-    return { error: "Use at least 10 characters for your password." };
+  if (!identifier) {
+    return { error: channel === "email" ? "Enter your email address." : "Enter your phone number." };
   }
 
-  // Age verification. The Terms assert 18+, so the product has to hold
-  // something that makes the claim true. Self-declared, which is proportionate
-  // for an information product and is not identity verification: it is checked,
-  // stored, and auditable, which the localStorage boolean was none of.
-  const age = ageOn(dob);
-  if (age === null) {
-    return { error: "Enter your date of birth." };
-  }
-  if (age < 18) {
+  // Three sends per ten minutes. Deliberately tight: every one of these costs
+  // money to deliver and lands in somebody's inbox or on their phone, so the
+  // abuse case is not just load, it is using us to harass a stranger.
+  const verdict = rateLimit(await actionKey(`otp-send:${channel}`), 3, 10 * 60);
+  if (!verdict.ok) {
     return {
-      error: "You must be 18 or over to use Kicka.",
+      error: `Too many codes requested. Try again in ${Math.ceil(verdict.retryAfterSeconds / 60)} minutes.`,
     };
-  }
-  if (age > 120) {
-    return { error: "Check that date of birth." };
   }
 
   const supabase = await createClient();
-  const site = normaliseSiteUrl(process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3100");
 
-  const { error } = await supabase.auth.signUp({
-    email,
-    password,
-    options: {
-      // Where Supabase sends them after they click the confirmation link.
-      emailRedirectTo: `${site}/auth/confirmed`,
-      data: {
-        display_name: displayName || email.split("@")[0],
-        date_of_birth: dob,
+  if (channel === "email") {
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(identifier)) {
+      return { error: "That doesn't look like an email address." };
+    }
+
+    const { error } = await supabase.auth.signInWithOtp({
+      email: identifier,
+      options: {
+        shouldCreateUser: true,
+        emailRedirectTo: `${siteUrl()}/auth/callback`,
       },
+    });
+    if (error) return { error: error.message };
+    return { sent: true, channel: "email" };
+  }
+
+  const phone = normalisePhone(identifier);
+  if (!phone) {
+    return { error: "Enter the number in full, including the country code." };
+  }
+
+  const { error } = await supabase.auth.signInWithOtp({
+    phone,
+    options: { shouldCreateUser: true },
+  });
+  if (error) return { error: error.message };
+  return { sent: true, channel: "sms" };
+}
+
+/* ------------------------------------------------------------------ *
+ * Step two: prove you received it
+ * ------------------------------------------------------------------ */
+
+export async function verifyCode(
+  _prev: AuthResult,
+  formData: FormData,
+): Promise<AuthResult> {
+  const channel = String(formData.get("channel") ?? "email") === "sms" ? "sms" : "email";
+  const identifier = String(formData.get("identifier") ?? "").trim();
+  const token = String(formData.get("code") ?? "").replace(/\s/g, "");
+
+  if (!/^\d{6}$/.test(token)) return { error: "Enter the 6-digit code." };
+
+  // Ten verifications per fifteen minutes. A six-digit code is a million
+  // possibilities, so the limit is what makes guessing it impractical rather
+  // than merely slow; Supabase expires the code as well.
+  const verdict = rateLimit(await actionKey("otp-verify"), 10, 15 * 60);
+  if (!verdict.ok) {
+    return { error: "Too many attempts. Request a fresh code." };
+  }
+
+  const supabase = await createClient();
+
+  const { error } =
+    channel === "email"
+      ? await supabase.auth.verifyOtp({ email: identifier, token, type: "email" })
+      : await supabase.auth.verifyOtp({
+          phone: normalisePhone(identifier) ?? identifier,
+          token,
+          type: "sms",
+        });
+
+  if (error) return { error: "That code is wrong or has expired." };
+
+  revalidatePath("/", "layout");
+  // Everyone lands here; the page sends on anyone who already has a date of
+  // birth on file, so a returning user sees it only as a redirect.
+  redirect("/auth/details");
+}
+
+/* ------------------------------------------------------------------ *
+ * Google
+ * ------------------------------------------------------------------ */
+
+/**
+ * Hand off to Google.
+ *
+ * Returns a URL rather than redirecting here, because Supabase needs the
+ * browser to make the trip: the PKCE verifier is set as a cookie on this
+ * response and read back at /auth/callback.
+ */
+export async function signInWithGoogle(): Promise<void> {
+  const supabase = await createClient();
+
+  const { data, error } = await supabase.auth.signInWithOAuth({
+    provider: "google",
+    options: {
+      redirectTo: `${siteUrl()}/auth/callback`,
+      queryParams: { access_type: "offline", prompt: "consent" },
     },
   });
 
-  if (error) return { error: error.message };
+  // Returning an error object is not available here: this is used as a bare
+  // form action, which must resolve to void. A provider that is not configured
+  // sends the visitor back to the sign-in page with a reason in the query
+  // string, where the page renders it, rather than failing silently.
+  if (error || !data?.url) {
+    redirect(`/auth/sign-in?error=${encodeURIComponent(error?.message ?? "google-unavailable")}`);
+  }
 
-  // The on_auth_user_created trigger has already created the profile and
-  // notification defaults, no client-side bootstrap call needed.
+  redirect(data.url);
+}
+
+/* ------------------------------------------------------------------ *
+ * Age, collected once
+ * ------------------------------------------------------------------ */
+
+/**
+ * Record a date of birth on first sign-in.
+ *
+ * The Terms assert 18+, so the product has to hold something that makes the
+ * claim true. Self-declared, which is proportionate for an information product
+ * and is not identity verification: it is checked, stored and auditable, which
+ * a localStorage boolean was none of.
+ *
+ * It moved here from sign-up because a passwordless flow has no sign-up step
+ * to put it in. The gate is the same; only its position changed.
+ */
+export async function submitDetails(
+  _prev: AuthResult,
+  formData: FormData,
+): Promise<AuthResult> {
+  const dob = String(formData.get("dateOfBirth") ?? "").trim();
+  const displayName = String(formData.get("displayName") ?? "").trim();
+
+  const age = ageOn(dob);
+  if (age === null) return { error: "Enter your date of birth." };
+  if (age < 18) return { error: "You must be 18 or over to use Kicka." };
+  if (age > 120) return { error: "Check that date of birth." };
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect("/auth/sign-in");
+
+  const { error } = await supabase
+    .from("profiles")
+    .update({
+      date_of_birth: dob,
+      display_name: displayName || user.email?.split("@")[0] || "Member",
+    })
+    .eq("id", user.id);
+
+  if (error) return { error: "Could not save that. Try again." };
+
   revalidatePath("/", "layout");
   redirect("/");
 }
@@ -117,109 +244,32 @@ export async function signOut() {
   redirect("/");
 }
 
-/**
- * Development only: sign in as one of the seeded demo accounts so every access
- * tier is reachable without buying anything. Refuses to run outside dev.
- */
-export async function signInAsDemo(email: string): Promise<AuthResult> {
-  if (process.env.NODE_ENV === "production") {
-    return { error: "Demo sign-in is disabled in production." };
-  }
-  if (!email.endsWith("@kicka.test")) {
-    return { error: "Not a demo account." };
-  }
-
-  const supabase = await createClient();
-  const { error } = await supabase.auth.signInWithPassword({
-    email,
-    password: "kicka",
-  });
-
-  if (error) return { error: error.message };
-
-  revalidatePath("/", "layout");
-  return undefined;
-}
+/* ------------------------------------------------------------------ *
+ * Helpers
+ * ------------------------------------------------------------------ */
 
 /**
- * Send a password reset link.
+ * E.164, or nothing.
  *
- * Always reports success, whatever happened. Saying "no account with that
- * address" turns this form into an oracle for which emails are registered,
- * which is worth more to someone enumerating accounts than the reset is worth
- * to the person who forgot their password.
+ * Supabase requires the country code and rejects anything else, so a Ghanaian
+ * number typed the way people actually write it (024…) is converted rather
+ * than refused. Guessing +233 for a leading 0 is a deliberate local default:
+ * this product settles in GHS and its SMS provider is Ghanaian.
  */
-export async function requestPasswordReset(
-  _prev: AuthResult,
-  formData: FormData,
-): Promise<AuthResult> {
-  const email = String(formData.get("email") ?? "").trim();
-
-  if (!email) return { error: "Enter your email address." };
-
-  // Throttled on the address so this cannot be used to mail-bomb someone, and
-  // the limit is applied before the send rather than after.
-  const verdict = rateLimit(await actionKey(`reset:${email.toLowerCase()}`), 3, 15 * 60);
-  if (!verdict.ok) return undefined;
-
-  const supabase = await createClient();
-  const site = normaliseSiteUrl(process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3100");
-
-  const { error } = await supabase.auth.resetPasswordForEmail(email, {
-    redirectTo: `${site}/auth/reset`,
-  });
-
-  if (error) {
-    // Logged, never surfaced: a mail-provider failure is ours, not the
-    // visitor's, and the response must not vary with whether the address
-    // exists.
-    console.error("[auth] password reset request:", error.message);
-  }
-
-  return undefined;
+export async function normalisePhoneForDisplay(input: string): Promise<string | null> {
+  return normalisePhone(input);
 }
 
-/**
- * Set a new password.
- *
- * Runs against the recovery session Supabase establishes when the emailed link
- * is followed, so there is no token to handle here: if there is no session, the
- * link was never followed or has expired.
- */
-export async function updatePassword(
-  _prev: AuthResult,
-  formData: FormData,
-): Promise<AuthResult> {
-  const password = String(formData.get("password") ?? "");
-  const confirm = String(formData.get("confirm") ?? "");
-
-  if (password.length < 10) {
-    return { error: "Use at least 10 characters." };
+function normalisePhone(input: string): string | null {
+  const digits = input.replace(/[^\d+]/g, "");
+  if (digits.startsWith("+")) {
+    return /^\+\d{8,15}$/.test(digits) ? digits : null;
   }
-  if (password !== confirm) {
-    return { error: "Those two passwords don't match." };
-  }
-
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    return {
-      error: "That reset link has expired. Request a new one and try again.",
-    };
-  }
-
-  const { error } = await supabase.auth.updateUser({ password });
-  if (error) return { error: error.message };
-
-  revalidatePath("/", "layout");
-  redirect("/");
+  if (digits.startsWith("0") && digits.length === 10) return `+233${digits.slice(1)}`;
+  if (digits.length >= 8 && digits.length <= 15) return `+${digits}`;
+  return null;
 }
 
-
-/** Whole years old on today's date, or null when the input is not a date. */
 function ageOn(dob: string): number | null {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(dob)) return null;
   const born = new Date(`${dob}T00:00:00Z`);

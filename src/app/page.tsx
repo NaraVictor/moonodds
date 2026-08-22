@@ -1,8 +1,23 @@
+import type { Metadata } from "next";
 import { createClient } from "@/lib/supabase/server";
 import { PicksHome } from "@/components/home/picks-home";
 import { SiteHeader } from "@/components/layout/site-header";
 import { SiteFooter } from "@/components/layout/site-footer";
 import { BottomNav } from "@/components/layout/bottom-nav";
+
+/**
+ * The board carries the brand query, so it gets metadata written for it rather
+ * than the layout defaults it used to inherit. The canonical matters more here
+ * than anywhere: this page is reachable with filter and view parameters on the
+ * URL, and without one each of those is a separate page competing with the
+ * real one.
+ */
+export const metadata: Metadata = {
+  alternates: { canonical: "/" },
+  description:
+    "Today's football predictions with the reasoning behind every call. Two free picks daily, every settled result public, and a track record you can check.",
+};
+
 
 /**
  * The board, for everyone.

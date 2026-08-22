@@ -7,6 +7,7 @@ import { PageShell, Section } from "@/components/legal/page-shell";
 import { Mail, MessageSquare, ShieldAlert } from "@/components/ui/icons";
 
 export const metadata: Metadata = {
+  alternates: { canonical: "/contact" },
   title: "Contact",
   description: "How to reach Kicka about billing, a disputed result, or anything else.",
 };

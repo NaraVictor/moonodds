@@ -19,7 +19,7 @@ const Body = z.object({
  * leaves an orphaned slip with no legs and a wrong combined odds figure.
  */
 export async function POST(request: Request) {
-  const limited = enforceRateLimit(request, {
+  const limited = await enforceRateLimit(request, {
     scope: "slip-create",
     limit: 30,
     windowSeconds: 60,

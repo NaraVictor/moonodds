@@ -6,6 +6,7 @@ import { BottomNav } from "@/components/layout/bottom-nav";
 import { PageShell, Section } from "@/components/legal/page-shell";
 
 export const metadata: Metadata = {
+  alternates: { canonical: "/about" },
   title: "About",
   description:
     "Kicka reads the numbers behind every fixture and tells you what it thinks, and exactly why. Analysis, not tips.",

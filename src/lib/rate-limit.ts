@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { createServiceClient } from "./supabase/server";
 
 /**
  * Rate limiting.
@@ -7,13 +8,20 @@ import { NextResponse } from "next/server";
  * left credential stuffing, unbounded payment-row creation and a brute-forcible
  * six-digit code that gates the engine's own system prompt.
  *
- * IN-PROCESS AND DELIBERATELY SO, FOR NOW. A serverless deployment runs many
- * instances, so this bounds abuse per instance rather than globally: a
- * determined attacker spread across instances gets a multiple of these limits.
- * That is a large improvement over no limit at all and is honest about what it
- * is. Moving the counter to Postgres or Upstash makes it global; the call sites
- * do not change when that happens, which is why the limiter is behind this
- * interface rather than inline.
+ * SHARED, via Postgres. This used to be an in-process Map, which on a
+ * serverless deployment meant every instance carried its own counters: the
+ * effective limit was the configured limit times however many instances were
+ * warm, weakest under exactly the load that spins up more of them.
+ *
+ * Postgres rather than Redis because the database is already a hard dependency
+ * on every path that calls this, so it adds no new service and no new failure
+ * mode. `hit_rate_limit` increments atomically inside one statement, so two
+ * instances racing on the same key cannot both read the same count.
+ *
+ * The in-process map survives as a FALLBACK, not as the mechanism. If the
+ * database call fails, blocking every checkout because a counter could not be
+ * written is a worse outcome than falling back to a per-instance bound, so it
+ * degrades to what it used to be and says so in the log.
  */
 
 type Bucket = { count: number; resetAt: number };
@@ -92,14 +100,57 @@ export function tooManyRequests(verdict: RateLimitVerdict, message: string) {
  *
  * Returns a response to send, or null to continue.
  */
-export function enforceRateLimit(
+export async function enforceRateLimit(
   request: Request,
   opts: { scope: string; limit: number; windowSeconds: number; message: string; extraKey?: string },
-): NextResponse | null {
+): Promise<NextResponse | null> {
   const key = opts.extraKey
     ? `${clientKey(request, opts.scope)}:${opts.extraKey}`
     : clientKey(request, opts.scope);
 
-  const verdict = rateLimit(key, opts.limit, opts.windowSeconds);
+  const verdict = await sharedRateLimit(key, opts.limit, opts.windowSeconds);
   return verdict.ok ? null : tooManyRequests(verdict, opts.message);
+}
+
+/**
+ * The shared counter, with the local one behind it.
+ *
+ * Deliberately not exported: every caller should go through enforceRateLimit
+ * so the fallback behaviour is identical everywhere.
+ */
+async function sharedRateLimit(
+  key: string,
+  limit: number,
+  windowSeconds: number,
+): Promise<RateLimitVerdict> {
+  try {
+    const db = createServiceClient();
+    const { data, error } = await db.rpc("hit_rate_limit", {
+      p_key: key,
+      p_limit: limit,
+      p_window_seconds: windowSeconds,
+    });
+
+    if (error) throw error;
+
+    const row = (Array.isArray(data) ? data[0] : data) as
+      | { allowed: boolean; remaining: number; retry_after_seconds: number }
+      | undefined;
+
+    if (!row) throw new Error("hit_rate_limit returned no row");
+
+    return {
+      ok: row.allowed,
+      remaining: row.remaining,
+      retryAfterSeconds: row.retry_after_seconds,
+    };
+  } catch (err) {
+    // Degrade to per-instance rather than locking everyone out of checkout
+    // because a counter could not be written.
+    console.warn(
+      `[rate-limit] shared counter unavailable, falling back to in-process:`,
+      err instanceof Error ? err.message : err,
+    );
+    return rateLimit(key, limit, windowSeconds);
+  }
 }

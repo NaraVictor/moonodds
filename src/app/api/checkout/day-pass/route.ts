@@ -6,7 +6,7 @@ import { getProviders } from "@/lib/providers";
 import { PASS_PRICE_USD, usdToPesewas } from "@/lib/pricing";
 import { getUsdToGhsRateForServer } from "@/lib/pricing-server";
 import { settlePayment } from "@/lib/payments";
-import { requireVerifiedEmail } from "@/lib/require-verified";
+import { requireVerifiedContact } from "@/lib/require-verified";
 import { SITE_URL } from "@/lib/site-url";
 
 /**
@@ -25,7 +25,7 @@ import { SITE_URL } from "@/lib/site-url";
  */
 
 export async function POST(request: Request) {
-  const limited = enforceRateLimit(request, {
+  const limited = await enforceRateLimit(request, {
     scope: "checkout-pass",
     limit: 10,
     windowSeconds: 10 * 60,
@@ -43,7 +43,7 @@ export async function POST(request: Request) {
   }
 
   // Nothing is charged to an address nobody has proven they control.
-  const verified = await requireVerifiedEmail();
+  const verified = await requireVerifiedContact();
   if (!verified.ok) {
     return NextResponse.json({ error: verified.reason }, { status: verified.status });
   }

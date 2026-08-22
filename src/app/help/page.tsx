@@ -10,6 +10,7 @@ export const metadata: Metadata = {
   title: "Help centre",
   description:
     "How the day pass, free picks, confidence scores, slips and grading work.",
+  alternates: { canonical: "/help" },
 };
 
 /**
@@ -19,7 +20,18 @@ export const metadata: Metadata = {
  * findable with in-page search for free, and this content has to work on a
  * phone with a weak connection before it has to animate.
  */
-const FAQS: { q: string; a: React.ReactNode }[] = [
+/**
+ * `plain` exists for the FAQPage structured data below.
+ *
+ * Schema.org wants text and these answers are JSX, so rather than stringifying
+ * React at runtime, each one carries a plain-text twin. The duplication is
+ * deliberate and the shorter form is the point: the rich result shows two
+ * lines, so an answer written for the page reads as truncated in search.
+ *
+ * Keep them saying the same thing. A FAQ answer that contradicts the page it
+ * is drawn from is the kind of mismatch that costs the rich result entirely.
+ */
+const FAQS: { q: string; a: React.ReactNode; plain: string }[] = [
   {
     q: "What do I get for free?",
     a: (
@@ -31,6 +43,8 @@ const FAQS: { q: string; a: React.ReactNode }[] = [
         permanently.
       </>
     ),
+    plain:
+      "Two predictions a day in full, including the call, the confidence score and the reasoning, without an account. They are drawn from the day's three highest-confidence picks. Every settled prediction is free to everyone, permanently.",
   },
   {
     q: "What does the day pass include?",
@@ -41,6 +55,8 @@ const FAQS: { q: string; a: React.ReactNode }[] = [
         covers a single day and then expires on its own.
       </>
     ),
+    plain:
+      "Every prediction published that day, with full reasoning, for one day. There is no subscription, no minimum term and nothing to cancel.",
   },
   {
     q: "What does the confidence score mean?",
@@ -52,6 +68,8 @@ const FAQS: { q: string; a: React.ReactNode }[] = [
         nine times in ten.
       </>
     ),
+    plain:
+      "How strongly the model rates its own call on a 0 to 10 scale, after every filter and penalty has been applied. It is a measure of the model's conviction, not a probability of winning.",
   },
   {
     q: "Why is a match on the board with the prediction hidden?",
@@ -63,6 +81,8 @@ const FAQS: { q: string; a: React.ReactNode }[] = [
         itself, its confidence and its reasoning.
       </>
     ),
+    plain:
+      "The fixture, the teams and the kickoff are public for everyone. The call, the market and the reasoning are what a day pass unlocks, because the market alone gives away where we think the mispricing is.",
   },
   {
     q: "How are results graded?",
@@ -75,6 +95,8 @@ const FAQS: { q: string; a: React.ReactNode }[] = [
         fix can never diverge from an automatic one.
       </>
     ),
+    plain:
+      "Automatically from the final score, using the same grading code for manual corrections. Markets we cannot settle are flagged for review rather than recorded as losses, and draw-no-bet draws and handicap pushes void.",
   },
   {
     q: "What is a slip?",
@@ -85,6 +107,8 @@ const FAQS: { q: string; a: React.ReactNode }[] = [
         slip places nothing anywhere. It is a notebook, not a bet.
       </>
     ),
+    plain:
+      "A saved set of predictions you are following together, with combined odds and a running record. Legs carry a real price from the odds snapshot, not one derived from confidence.",
   },
   {
     q: "Can I get a refund?",
@@ -100,6 +124,8 @@ const FAQS: { q: string; a: React.ReactNode }[] = [
         service promising otherwise is not being straight with you.
       </>
     ),
+    plain:
+      "Yes, if a pass was charged in error or if we fail to publish predictions on a day you paid for. Refunds revoke the access they bought.",
   },
   {
     q: "Which leagues do you cover?",
@@ -109,6 +135,8 @@ const FAQS: { q: string; a: React.ReactNode }[] = [
         The league filter on the board always shows exactly what is live today.
       </>
     ),
+    plain:
+      "The competitions selected in the daily fetch, currently six major European leagues. Coverage depends on fixtures being available for the day.",
   },
 ];
 
@@ -118,9 +146,32 @@ export default async function HelpPage() {
     data: { user },
   } = await supabase.auth.getUser();
 
+  /*
+   * FAQPage structured data.
+   *
+   * These eight questions are the ones people actually arrive searching for,
+   * so they are the page's best claim on a rich result. Built from the same
+   * array the page renders, which is what stops the markup and the visible
+   * answers drifting apart — a mismatch Google treats as a reason to drop the
+   * result rather than a detail to overlook.
+   */
+  const faqSchema = {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    mainEntity: FAQS.map((f) => ({
+      "@type": "Question",
+      name: f.q,
+      acceptedAnswer: { "@type": "Answer", text: f.plain },
+    })),
+  };
+
   return (
     <>
       <SiteHeader signedIn={!!user} />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(faqSchema) }}
+      />
       <PageShell
         eyebrow="Help centre"
         title="How Kicka works."

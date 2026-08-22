@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { SITE_URL } from "@/lib/site-url";
 import { createClient } from "@/lib/supabase/server";
 import { SiteHeader } from "@/components/layout/site-header";
 import { SiteFooter } from "@/components/layout/site-footer";
@@ -124,6 +125,38 @@ export default async function PredictionPage({
     organizer: { "@type": "Organization", name: "Kicka" },
   };
 
+  /**
+   * BreadcrumbList.
+   *
+   * These pages are the long tail — one per real fixture — and they are
+   * reached from search rather than from the board, so the result is the first
+   * time anyone sees where the page sits. The trail is what turns a bare URL in
+   * the result into Kicka › Prediction history › this fixture.
+   *
+   * Every fixture page really is reachable by that path, which is the
+   * condition for using this at all: a breadcrumb describing navigation that
+   * does not exist is markup Google is entitled to distrust.
+   */
+  const breadcrumbLd = meta && {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "Kicka", item: SITE_URL },
+      {
+        "@type": "ListItem",
+        position: 2,
+        name: "Prediction history",
+        item: `${SITE_URL}/history`,
+      },
+      {
+        "@type": "ListItem",
+        position: 3,
+        name: `${meta.homeName} v ${meta.awayName}`,
+        item: `${SITE_URL}/predictions/${id}`,
+      },
+    ],
+  };
+
   return (
     <>
       {jsonLd && (
@@ -132,6 +165,12 @@ export default async function PredictionPage({
           // Serialised through JSON.stringify, so the only thing that reaches
           // the page is data we selected by name from our own database.
           dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+        />
+      )}
+      {breadcrumbLd && (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbLd) }}
         />
       )}
       <SiteHeader signedIn={!!user} />

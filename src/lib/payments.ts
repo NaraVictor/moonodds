@@ -142,7 +142,7 @@ async function queueReceipt(
     amount_usd: number;
   },
 ) {
-  await db.from("jobs").insert({
+  const { error } = await db.from("jobs").insert({
     kind: "payment_receipt",
     payload: {
       userId: payment.user_id,
@@ -153,6 +153,14 @@ async function queueReceipt(
       amountUsd: payment.amount_usd,
     },
   });
+
+  // 23505 is the partial unique index on (payload->>'reference') for receipts,
+  // and it means another settlement channel got here first. That is the
+  // expected outcome of a race the three channels are designed to have, not a
+  // failure: the receipt exists, which is the whole objective.
+  if (error && error.code !== "23505") {
+    console.error(`[payments] could not queue receipt for ${payment.reference}:`, error);
+  }
 }
 
 /**

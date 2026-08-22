@@ -329,13 +329,36 @@ async function recentMatchesFor(
       21 * 86400_000,
   ).toISOString();
 
-  const { data: history } = await db
-    .from("fixtures")
-    .select("id, fixture_date, home_team_id, away_team_id, home:teams!fixtures_home_team_id_fkey(name), away:teams!fixtures_away_team_id_fkey(name)")
-    .eq("status", "finished")
-    .gte("fixture_date", earliest)
-    .or(`home_team_id.in.(${teamIds.join(",")}),away_team_id.in.(${teamIds.join(",")})`)
-    .order("fixture_date", { ascending: false });
+  // Two .in() queries rather than one interpolated .or(). The values here are
+  // UUIDs read from our own fixtures table so the string form was safe, but
+  // building a PostgREST filter by concatenation is a pattern that only stays
+  // safe while nobody points it at user input, and .in() is parameterised.
+  const columns =
+    "id, fixture_date, home_team_id, away_team_id, home:teams!fixtures_home_team_id_fkey(name), away:teams!fixtures_away_team_id_fkey(name)";
+
+  const [asHome, asAway] = await Promise.all([
+    db.from("fixtures").select(columns)
+      .eq("status", "finished").gte("fixture_date", earliest)
+      .in("home_team_id", teamIds)
+      .order("fixture_date", { ascending: false }),
+    db.from("fixtures").select(columns)
+      .eq("status", "finished").gte("fixture_date", earliest)
+      .in("away_team_id", teamIds)
+      .order("fixture_date", { ascending: false }),
+  ]);
+
+  // A fixture where both sides are in the batch comes back from both queries.
+  const seen = new Set<string>();
+  const history = [...(asHome.data ?? []), ...(asAway.data ?? [])]
+    .filter((h) => {
+      const id = h.id as string;
+      if (seen.has(id)) return false;
+      seen.add(id);
+      return true;
+    })
+    .sort((a, b) =>
+      String(b.fixture_date).localeCompare(String(a.fixture_date)),
+    );
 
   const byTeam = new Map<string, RecentMatch[]>();
   for (const h of history ?? []) {
@@ -857,6 +880,38 @@ export async function runDrainJobs(batchSize = 20) {
         err: err instanceof Error ? err.message : String(err),
       });
       failed++;
+
+      /*
+       * A job that has exhausted its retries is parked in 'dead' rather than
+       * dropped, which is right, but it was visible only to an admin who
+       * happened to open the Office queue. A dead payment_receipt is a paying
+       * customer with no proof of purchase, in a product whose Terms promise
+       * refunds; a dead daily_picks_ready is nobody being told the picks exist.
+       *
+       * A retry that will run again is not worth waking anyone for, so only
+       * the final failure reports.
+       */
+      // fail_job returns void, so the outcome is read back. One extra select on
+      // a path that only runs when something already went wrong, in exchange
+      // for not changing the signature of a function running in production.
+      const { data: after } = await db
+        .from("jobs")
+        .select("status, attempts, max_attempts")
+        .eq("id", job.id)
+        .maybeSingle();
+
+      if (after?.status === "dead") {
+        reportError(err, {
+          scope: "jobs/dead",
+          level: "fatal",
+          detail: {
+            kind: job.kind,
+            jobId: job.id,
+            attempts: after.attempts,
+            maxAttempts: after.max_attempts,
+          },
+        });
+      }
     }
   }
 

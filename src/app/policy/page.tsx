@@ -6,6 +6,7 @@ import { BottomNav } from "@/components/layout/bottom-nav";
 import { PageShell, Section } from "@/components/legal/page-shell";
 
 export const metadata: Metadata = {
+  alternates: { canonical: "/policy" },
   title: "Privacy policy",
   description: "What Kicka collects, why, and what you can ask us to do with it.",
 };

@@ -415,3 +415,21 @@ enabled = true
 # declarative_schema_path = "./database"
 # JSON string passed through to pg-delta SQL formatting.
 # format_options = "{\"keywordCase\":\"upper\",\"indent\":2,\"maxWidth\":80,\"commaStyle\":\"trailing\"}"
+
+[auth.external.google]
+enabled = true
+client_id = "env(SUPABASE_AUTH_GOOGLE_CLIENT_ID)"
+secret = "env(SUPABASE_AUTH_GOOGLE_SECRET)"
+# Left empty so Supabase uses its own callback, which then forwards to
+# /auth/callback on our origin. The redirect registered with Google must be
+# the SUPABASE one (<project>.supabase.co/auth/v1/callback), not ours; putting
+# our URL there is the usual reason this returns redirect_uri_mismatch.
+redirect_uri = ""
+skip_nonce_check = false
+
+[auth.hook.send_sms]
+# Supabase calls this to deliver a one-time code. It generates and verifies the
+# code itself, so nothing here ever sees a code it could leak.
+enabled = true
+uri = "env(SUPABASE_SMS_HOOK_URI)"
+secrets = "env(SUPABASE_SMS_HOOK_SECRET)"
