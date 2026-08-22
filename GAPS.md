@@ -213,6 +213,16 @@ Not gaps against the original, things this port has stubbed deliberately.
 - Terms section 10 still has four blanks: registration number, registered
   address, governing law, and courts. These are facts, not decisions anyone
   can infer, and a governing-law clause guessed at is worse than one absent.
+- **No cookie-consent banner, and Google Analytics sets cookies.** The policy
+  now discloses the analytics, says what each one collects, and points to the
+  browser-level opt-out, which is honest but is not consent. Under the UK/EU
+  GDPR and Ghana's Data Protection Act, non-essential cookies are supposed to
+  be opt-in *before* they are set, and the tag currently fires on first paint.
+  Vercel Web Analytics is the easier half: it sets no cookies and builds no
+  profile, so it is defensible without a banner. Google Analytics is the part
+  that needs either a consent gate or Google Consent Mode. Flagged rather than
+  built, because a banner is a product decision about the first thing every
+  visitor sees.
 - The privacy policy never names a data controller. It did not before the
   rename either, but now that the operating entity is known, it is a blank that
   can be filled rather than one that could not.

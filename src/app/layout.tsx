@@ -5,6 +5,9 @@ import { AgeGate } from "@/components/legal/age-gate";
 import { THEME_INIT_SCRIPT } from "@/lib/theme";
 import { SITE_URL } from "@/lib/site-url";
 import { BetSlipFab, BetSlipSheet } from "@/components/slip/bet-slip";
+import { Analytics } from "@vercel/analytics/next";
+import { GoogleAnalytics } from "@next/third-parties/google";
+import { GA_MEASUREMENT_ID, analyticsEnabled } from "@/lib/analytics";
 import "./globals.css";
 
 /**
@@ -163,6 +166,25 @@ export default function RootLayout({
           <BetSlipFab />
           <BetSlipSheet />
         </Providers>
+
+        {/* Analytics last, after the content it measures.
+
+            Both are gated on analyticsEnabled() rather than rendered
+            unconditionally, because a development session and a preview
+            deployment are not traffic: counting them makes the numbers wrong
+            in a way that is invisible once they are mixed in. Vercel's own
+            component no-ops off Vercel, Google's does not.
+
+            Neither of these works without the Content-Security-Policy entries
+            in next.config.ts. A blocked analytics script fails exactly as
+            silently as a missing one: no error, no data, just a dashboard that
+            stays at zero and reads like nobody visited. */}
+        {analyticsEnabled() && (
+          <>
+            <Analytics />
+            {GA_MEASUREMENT_ID && <GoogleAnalytics gaId={GA_MEASUREMENT_ID} />}
+          </>
+        )}
       </body>
     </html>
   );

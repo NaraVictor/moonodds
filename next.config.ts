@@ -22,6 +22,23 @@ const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
  *
  * img-src carries the API-Football CDN, which is where every crest and league
  * badge in the product comes from.
+ *
+ * ANALYTICS. Both analytics integrations are dead without their entries here,
+ * and they fail in the quietest way this app has: the browser refuses the
+ * script, the page renders perfectly, and the dashboard simply stays at zero,
+ * which is indistinguishable from having no visitors. There is no server-side
+ * error and nothing in the product looks wrong.
+ *
+ * Vercel Web Analytics serves its script and posts its beacon from the site's
+ * own origin once deployed (/_vercel/insights/*), so 'self' covers production.
+ * va.vercel-scripts.com is listed because the package falls back to it when it
+ * cannot find those routes, which is every environment that is not a Vercel
+ * deployment.
+ *
+ * Google Analytics needs three separate directives and it is the connect-src
+ * one that gets forgotten: the tag loads from googletagmanager.com but sends
+ * its measurements to google-analytics.com, so allowing only the script host
+ * produces a tag that initialises cleanly and never reports anything.
  */
 const csp = [
   "default-src 'self'",
@@ -29,11 +46,12 @@ const csp = [
   "object-src 'none'",
   "frame-ancestors 'none'",
   "form-action 'self'",
-  "script-src 'self' 'unsafe-inline' https://js.paystack.co",
+  "script-src 'self' 'unsafe-inline' https://js.paystack.co https://www.googletagmanager.com https://va.vercel-scripts.com",
   "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: blob: https://media.api-sports.io",
+  // GA still falls back to a tracking pixel where fetch is unavailable.
+  "img-src 'self' data: blob: https://media.api-sports.io https://www.google-analytics.com https://www.googletagmanager.com",
   "font-src 'self' data:",
-  `connect-src 'self' ${SUPABASE_URL} https://api.paystack.co wss://*.supabase.co`.trim(),
+  `connect-src 'self' ${SUPABASE_URL} https://api.paystack.co wss://*.supabase.co https://www.google-analytics.com https://*.google-analytics.com https://*.analytics.google.com https://*.googletagmanager.com https://va.vercel-scripts.com`.trim(),
   // Paystack's checkout renders in an iframe it injects.
   "frame-src https://checkout.paystack.com https://js.paystack.co",
   "upgrade-insecure-requests",

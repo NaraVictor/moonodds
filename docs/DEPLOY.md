@@ -22,6 +22,7 @@ in a chat window.
 | `API_FOOTBALL_KEY` | Vercel **only** | |
 | `RESEND_API_KEY` | Vercel **only** | |
 | `CRON_SECRET` | Vercel **and** `app.settings` | Must match in both places or every cron job 401s |
+| `NEXT_PUBLIC_GA_MEASUREMENT_ID` | Vercel (**Production only**) + `.env.local` | Public. Scoping it to Production is what keeps preview traffic out of the numbers |
 | `SENTRY_DSN` | Vercel + `.env.local` | Server-side only. Never `NEXT_PUBLIC_`: nothing in the browser reports errors here, so exposing it only invites someone else's events into your project |
 
 Get the anon and service-role keys from
@@ -181,6 +182,45 @@ pnpm verify:live football
 the problem and no amount of deploy fixing will produce a pick. A paid tier is
 what lifts it; the daily call budget in `ai_engine_config.api_budget` should be
 raised at the same time, since it is currently sized for 100 calls a day.
+
+---
+
+## 2c. Analytics
+
+Two integrations, and each has one step that cannot be done from this
+repository.
+
+**Vercel Web Analytics** must be enabled once in the dashboard, under
+**Analytics** on the project. Until it is, the `/_vercel/insights/*` routes do
+not exist and the component requests a script that is not there. You can see
+exactly that locally: a production build off Vercel logs
+`Refused to execute script from '/_vercel/insights/script.js'` because the path
+404s and returns `text/plain`. On a deployment with Analytics enabled, the
+platform serves it. No environment variable is involved.
+
+**Google Analytics** needs `NEXT_PUBLIC_GA_MEASUREMENT_ID`, currently
+`G-EK0CCDQ2CZ`. It is public, it ships to every browser, and it is not a
+secret.
+
+> **Scope it to the Production environment only.** This is the gate that keeps
+> preview deployments out of the numbers, and it is the only one that does not
+> depend on a setting. A preview is a production *build*, so `NODE_ENV` cannot
+> tell them apart, and `NEXT_PUBLIC_VERCEL_ENV` exists only when
+> **Enable access to System Environment Variables** is ticked in project
+> settings. With the ID absent from preview, there is no tag to fire whatever
+> that checkbox says.
+
+Both depend on the CSP in `next.config.ts`, which now carries
+`googletagmanager.com` and `va.vercel-scripts.com` on `script-src`, the
+Google Analytics hosts on `connect-src`, and the pixel hosts on `img-src`. The
+`connect-src` entry is the one that gets forgotten: the tag loads from
+googletagmanager.com but *reports* to google-analytics.com, so allowing only
+the script host gives you a tag that initialises perfectly and sends nothing.
+Verified against a production build: `/g/collect?...&en=page_view` fires.
+
+To check a deployment, open the site and look for a request to
+`google-analytics.com/g/collect` and one to `/_vercel/insights/view`. A CSP
+refusal appears in the console; a missing dashboard number does not.
 
 ---
 

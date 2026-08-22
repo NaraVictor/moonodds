@@ -32,7 +32,7 @@ export default async function TermsPage() {
         eyebrow="Legal"
         title="Terms of use"
         intro="Plain terms for a simple product. Read them before you buy a pass."
-        updated="15 August 2026"
+        updated="22 August 2026"
       >
         <Section title="1. What Kicka provides">
           <p>

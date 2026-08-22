@@ -31,13 +31,26 @@ export default async function PolicyPage() {
         eyebrow="Legal"
         title="Privacy policy"
         intro="We collect what the product needs to work, and nothing we'd struggle to justify."
-        updated="15 August 2026"
+        updated="22 August 2026"
       >
         <Section title="What we collect">
           <p>
             <strong className="text-foreground">If you browse without an account:</strong>{" "}
-            nothing that identifies you. Your 18+ confirmation and your card or
-            table preference are stored in your own browser, not on our servers.
+            no name, email or phone number. Your 18+ confirmation and your card
+            or table preference are stored in your own browser, not on our
+            servers.
+          </p>
+          <p>
+            <strong className="text-foreground">Analytics, whether or not you have an
+            account:</strong>{" "}
+            we measure which pages are visited and roughly where visitors come
+            from, so we know what the product is actually used for. Vercel Web
+            Analytics counts page views without cookies and without building a
+            profile of you. Google Analytics does use cookies and does assign
+            your browser an identifier, and it receives your approximate
+            location, derived from your IP address, along with your device and
+            browser type. Neither one is given your email, your phone number,
+            your payment details or the slips you save.
           </p>
           <p>
             <strong className="text-foreground">If you create an account:</strong> your
@@ -59,8 +72,9 @@ export default async function PolicyPage() {
         <Section title="What we use it for">
           <p>
             To give you access to what you paid for, to send the alerts you asked
-            for, to show you your own saved slips, and to answer you when you get
-            in touch. That is the whole list.
+            for, to show you your own saved slips, to answer you when you get in
+            touch, and to measure which parts of the product are used. That is
+            the whole list.
           </p>
           <p>
             We do not sell personal data. We do not share it with advertisers. We
@@ -75,6 +89,9 @@ export default async function PolicyPage() {
             receives no information about you, we ask it about matches, not
             about people. Email and SMS alerts are delivered by a messaging
             provider that receives only the address needed to deliver them.
+            Site hosting and page-view measurement are provided by Vercel, and
+            Google Analytics processes the analytics described above. Google
+            may process that data outside your country.
           </p>
         </Section>
 
@@ -104,6 +121,13 @@ export default async function PolicyPage() {
           <p>
             Clearing your browser storage removes the 18+ confirmation and view
             preference held on your device.
+          </p>
+          <p>
+            For analytics, most browsers can block third-party scripts and
+            cookies, and Google publishes a browser add-on that opts you out of
+            Google Analytics everywhere. Any tracker blocker will stop it here.
+            Nothing in the product depends on analytics, so blocking it costs
+            you no functionality.
           </p>
         </Section>
 
