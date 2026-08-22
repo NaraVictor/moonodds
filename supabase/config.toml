@@ -64,11 +64,14 @@ enabled = true
 schema_paths = []
 
 [db.seed]
-# If enabled, seeds the database after migrations during a db reset.
-enabled = true
+# Off deliberately. This used to load seed.sql, so every `supabase start` and
+# every `db reset` produced a database pre-filled with invented predictions and
+# demo accounts, which is exactly the "mocked data" the product should not ship.
+# The security suite applies its own fixture from supabase/tests/ instead.
+enabled = false
 # Specifies an ordered list of seed files to load during db reset.
 # Supports glob patterns relative to supabase directory: "./seeds/*.sql"
-sql_paths = ["./seed.sql"]
+sql_paths = []
 
 [db.network_restrictions]
 # Enable management of network restrictions.

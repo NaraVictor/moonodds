@@ -76,15 +76,6 @@ export async function GET() {
     }
   }
 
-  add(
-    "dev-bypass",
-    !(isProd && process.env.DEV_BYPASS_AUTH === "true"),
-    "blocking",
-    process.env.DEV_BYPASS_AUTH === "true"
-      ? "set, and ignored in production builds"
-      : "off",
-  );
-
   /* ------------------------------ database ------------------------------ */
 
   try {

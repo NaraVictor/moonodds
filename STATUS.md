@@ -1,7 +1,8 @@
 # Kicka: build status
 
 Kicka, migrated from the original Convex + Hercules build to Next.js 16 +
-Supabase + HeroUI v3, with dummy data and mocked providers.
+Supabase + HeroUI v3. Live providers only; the sample data and the mock
+provider layer have been removed.
 
 Run `pnpm dev` (port 3100) with local Supabase up (`npx supabase start`).
 
@@ -98,8 +99,11 @@ accounts, one per access tier, password `kicka`.
 ---
 
 ### Backend: done
-Provider abstraction (`src/lib/providers/`) with mock and live implementations
-behind one `MOCK_PROVIDERS` switch. Six cron routes, all exercised end to end:
+Provider abstraction (`src/lib/providers/`). There was a mocked implementation
+behind a `MOCK_PROVIDERS` switch; both are gone. The switch defaulted to ON
+(`process.env.MOCK_PROVIDERS !== "false"`), so any environment that simply
+forgot the variable served invented fixtures and invented predictions while
+looking healthy, which is not a default to carry into production. Six cron routes, all exercised end to end:
 
 ```
 fetch-fixtures   {"ok":true,"leagues":6,"fixtures":8,"upserted":8}
@@ -129,26 +133,31 @@ Guarded server-side before any admin UI reaches the browser.
 
 ---
 
-## Auth bypass for testing
+## No auth bypass, and no sample data
 
-`DEV_BYPASS_AUTH=true` + `NEXT_PUBLIC_DEV_BYPASS_AUTH=true` are set in
-`.env.local`. Every route is walkable without signing in.
+Both were removed rather than defaulted off.
 
-**To restore the guards:** set both to `false` and restart. Nothing else changes
-the guards were never deleted, only short-circuited at one call site each
-(`src/lib/dev-bypass.ts`).
+- `DEV_BYPASS_AUTH`, `NEXT_PUBLIC_DEV_BYPASS_AUTH`, `src/lib/dev-bypass.ts`,
+  the role switcher and the bypass banner are deleted. Every guard is now
+  unconditional in every environment, instead of being hard-off in production
+  and switchable everywhere else.
+- `supabase/seed.sql` is deleted and seeding is disabled in `config.toml`, so
+  `supabase start` and `db reset` produce an empty database.
 
-Three things keep this safe:
+Two things came out of that file that were never sample data, and both moved
+rather than being deleted:
 
-1. **Hard-off in production.** Verified against a real `pnpm start` with the
-   flag still set: `/office` → 307 to sign-in, every API route → 401, banner
-   absent. Not configurable.
-2. **It never touches the database.** RLS, the gated picks RPC and the
-   privilege-guard trigger all still apply. Running `pnpm verify:security` with
-   the bypass on gives **18/20**, and the only two failures are exactly the two
-   HTTP route-guard checks the bypass disables. All 18 data-layer checks still
-   pass. Turn it off and it's 20/20 again.
-3. **A red banner sits on every page** while it's active.
+- **The engine configuration**, to `20260821092000_engine_config.sql`. Without
+  an active `ai_engine_config` row, `runDailyPicks` returns
+  `{skipped: "no active engine config"}` forever, silently. It had never
+  reached the deployed database at all, because `db push` applies migrations
+  and never runs seeds, so production held the full schema and no config.
+- **The security suite's data**, to `supabase/tests/security-fixture.sql`,
+  applied by `pnpm verify:security` itself. The twenty checks are assertions
+  about access, and access cannot be tested against an empty board: a paywall
+  test that passes because there is nothing behind the paywall is worse than
+  no test. The suite refuses to run against a non-local URL, because the
+  fixture creates known-password accounts and one super-admin.
 
 ### Engine prompt: v2.2, templated
 
@@ -175,7 +184,8 @@ Three guardrails, because the failure mode here is silence:
   emitting `"Home"` instead of `"1"` produced a pick that graded
   `review_needed` forever, never won, never lost.
 
-Prompt lives in `src/lib/engine/prompt.ts` and is injected into `seed.sql` by
+Prompt lives in `src/lib/engine/prompt.ts` and is injected into
+`20260821092000_engine_config.sql` by
 `pnpm engine:sync`; `pnpm engine:check` fails if the two drift.
 
 Corrections to the prompt itself are recorded in `GAPS.md`.

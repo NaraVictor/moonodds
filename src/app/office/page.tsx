@@ -3,8 +3,6 @@ import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { SiteHeader } from "@/components/layout/site-header";
 import { BottomNav } from "@/components/layout/bottom-nav";
 import { OfficeClient } from "./office-client";
-import { devBypassEnabled } from "@/lib/dev-bypass";
-import { RoleSwitcher } from "@/components/dev/role-switcher";
 
 export const metadata = { title: "Office" };
 
@@ -19,28 +17,16 @@ export default async function OfficePage() {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const bypass = devBypassEnabled();
-
-  if (!user && !bypass) redirect("/auth/sign-in");
-
-  if (bypass && !user) {
-    return (
-      <>
-        <SiteHeader signedIn={false} />
-        <OfficeClient adminName="bypass (not signed in)" anonymousBypass />
-        <RoleSwitcher />
-      </>
-    );
-  }
+  if (!user) redirect("/auth/sign-in");
 
   const admin = createServiceClient();
   const { data: profile } = await admin
     .from("profiles")
     .select("is_super_admin, display_name")
-    .eq("id", user!.id)
+    .eq("id", user.id)
     .maybeSingle();
 
-  if (!profile?.is_super_admin && !bypass) {
+  if (!profile?.is_super_admin) {
     return (
       <>
         <SiteHeader signedIn />
@@ -60,7 +46,6 @@ export default async function OfficePage() {
       <SiteHeader signedIn />
       <OfficeClient adminName={profile?.display_name ?? user!.email ?? "admin"} />
       <BottomNav />
-      {process.env.NODE_ENV !== "production" && <RoleSwitcher />}
     </>
   );
 }

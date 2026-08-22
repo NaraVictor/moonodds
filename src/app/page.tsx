@@ -3,7 +3,6 @@ import { PicksHome } from "@/components/home/picks-home";
 import { SiteHeader } from "@/components/layout/site-header";
 import { SiteFooter } from "@/components/layout/site-footer";
 import { BottomNav } from "@/components/layout/bottom-nav";
-import { RoleSwitcher } from "@/components/dev/role-switcher";
 
 /**
  * The board, for everyone.
@@ -29,7 +28,6 @@ export default async function HomePage() {
       <PicksHome />
       <SiteFooter />
       <BottomNav />
-      {process.env.NODE_ENV !== "production" && <RoleSwitcher />}
     </>
   );
 }

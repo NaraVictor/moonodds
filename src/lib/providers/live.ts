@@ -866,27 +866,60 @@ export const liveMessaging: MessagingProvider = {
     }
   },
 
+  /**
+   * SMS through mNotify.
+   *
+   * This was written against Hubtel and read HUBTEL_CLIENT_ID and
+   * HUBTEL_CLIENT_SECRET, while the configured credentials were MNOTIFY_KEY
+   * and MNOTIFY_SENDER, which nothing in the codebase read. So SMS was
+   * configured and unsendable at the same time: every send threw "Hubtel
+   * credentials are not set" from a deployment that had perfectly good SMS
+   * credentials sitting in its environment.
+   *
+   * Like API-Football, mNotify answers a rejected message with **HTTP 200**
+   * and a status in the body, so `res.ok` is not the check. Codes are strings:
+   * 2000 is success, 1005 an invalid recipient, 1006 an unregistered sender id,
+   * 1007 insufficient balance. Anything that is not 2000 is a failure and is
+   * raised with the code intact, because "SMS did not arrive" and "your sender
+   * ID was never approved" need different people to fix them.
+   */
   async sendSms({ to, message }) {
-    const id = process.env.HUBTEL_CLIENT_ID;
-    const secret = process.env.HUBTEL_CLIENT_SECRET;
-    if (!id || !secret) throw new Error("Hubtel credentials are not set.");
+    const key = process.env.MNOTIFY_KEY;
+    if (!key) throw new Error("MNOTIFY_KEY is not set.");
 
-    const auth = Buffer.from(`${id}:${secret}`).toString("base64");
-    const res = await fetch("https://smsc.hubtel.com/v1/messages/send", {
-      method: "POST",
-      headers: {
-        Authorization: `Basic ${auth}`,
-        "Content-Type": "application/json",
+    const res = await fetch(
+      `https://api.mnotify.com/api/sms/quick?key=${encodeURIComponent(key)}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          // The API takes a list even for one number.
+          recipient: [to],
+          sender: process.env.MNOTIFY_SENDER ?? "Kicka",
+          message,
+          is_schedule: false,
+          schedule_date: "",
+        }),
+        signal: AbortSignal.timeout(15_000),
       },
-      body: JSON.stringify({
-        From: process.env.HUBTEL_SENDER_ID ?? "Kicka",
-        To: to,
-        Content: message,
-      }),
-    });
+    );
 
     if (!res.ok) {
-      throw new Error(`Hubtel ${res.status}: ${(await res.text()).slice(0, 200)}`);
+      throw new Error(`mNotify ${res.status}: ${(await res.text()).slice(0, 200)}`);
+    }
+
+    const json = (await res.json().catch(() => null)) as
+      | { status?: string; code?: string; message?: string }
+      | null;
+
+    // A body we cannot parse is not a success. Treating it as one is how a
+    // provider change turns into "nobody got their alerts" with a clean log.
+    if (!json) throw new Error("mNotify: unreadable response body");
+
+    if (String(json.code) !== "2000" && json.status !== "success") {
+      throw new Error(
+        `mNotify rejected the message (code ${json.code ?? "none"}): ${json.message ?? json.status ?? "no detail"}`,
+      );
     }
   },
 };

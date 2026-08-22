@@ -1,7 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Sora, Plus_Jakarta_Sans } from "next/font/google";
 import { Providers } from "./providers";
-import { BypassBanner } from "@/components/dev/bypass-banner";
 import { AgeGate } from "@/components/legal/age-gate";
 import { THEME_INIT_SCRIPT } from "@/lib/theme";
 import { SITE_URL } from "@/lib/site-url";
@@ -156,7 +155,6 @@ export default function RootLayout({
             }),
           }}
         />
-        <BypassBanner />
         <AgeGate />
         {/* Slip lives at the root so it survives navigation, it has to follow
             you from the board to a detail page and back. */}

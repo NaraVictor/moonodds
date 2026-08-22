@@ -151,27 +151,9 @@ export default async function TermsPage() {
 
         <Section title="10. Who you are contracting with">
           <p>
-            Kicka is operated by the entity named below, and these terms are
-            governed by the law stated there.
+            Kicka is operated by <strong>Keypad Systems</strong>. Your agreement
+            is with that entity.
           </p>
-          <ul>
-            <li>
-              <strong>Legal entity:</strong> Keypad Systems
-            </li>
-            <li>
-              <strong>Company registration number:</strong> ________
-            </li>
-            <li>
-              <strong>Registered address:</strong> ________
-            </li>
-            <li>
-              <strong>Governing law:</strong> ________ (which country&rsquo;s law
-              applies to these terms)
-            </li>
-            <li>
-              <strong>Courts:</strong> ________ (where a dispute is heard)
-            </li>
-          </ul>
         </Section>
 
         <Section title="11. Contact">

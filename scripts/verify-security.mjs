@@ -12,6 +12,8 @@
 
 import { createClient } from "@supabase/supabase-js";
 import { readFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 
 const env = Object.fromEntries(
   readFileSync(new URL("../.env.local", import.meta.url), "utf8")
@@ -22,6 +24,43 @@ const env = Object.fromEntries(
       return [l.slice(0, i).trim(), l.slice(i + 1).trim()];
     }),
 );
+
+/**
+ * Apply the test fixture before asserting anything.
+ *
+ * These checks are assertions about ACCESS, and access cannot be tested
+ * against an empty database: "a locked-out user gets 0 picks but a true total"
+ * needs picks to be locked out of. The data used to arrive via seed.sql, which
+ * `supabase start` ran automatically, so the suite silently depended on the
+ * application shipping dummy data. Seeding is off now, so the suite loads its
+ * own fixture and that dependency is explicit.
+ *
+ * Deliberately targets the LOCAL stack, with no --linked flag anywhere near
+ * it. This creates accounts with a known password and marks one super-admin;
+ * pointing it at a deployed database would be the worst thing in this
+ * repository, so it is not reachable by passing a different flag.
+ */
+function applyFixture() {
+  if (!/(localhost|127\.0\.0\.1)/.test(URL_ ?? "")) {
+    console.error(
+      `\nRefusing to run: NEXT_PUBLIC_SUPABASE_URL is "${URL_}", which is not local.\n` +
+        `This suite loads a fixture with known-password accounts and a super-admin.\n`,
+    );
+    process.exit(1);
+  }
+
+  const path = fileURLToPath(new URL("../supabase/tests/security-fixture.sql", import.meta.url));
+  try {
+    execFileSync("supabase", ["db", "query", "--file", path], { stdio: "pipe" });
+  } catch (err) {
+    const detail = [err?.stdout?.toString(), err?.stderr?.toString(), err?.message]
+      .filter(Boolean)
+      .join(" ")
+      .slice(0, 400);
+    console.error(`\nCould not apply supabase/tests/security-fixture.sql:\n${detail}\n`);
+    process.exit(1);
+  }
+}
 
 const URL_ = env.NEXT_PUBLIC_SUPABASE_URL;
 const ANON = env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -41,11 +80,6 @@ const results = [];
 function check(name, passed, detail) {
   results.push({ name, passed, detail });
   if (!passed) failures++;
-}
-
-/** Not run, and not counted either way, the reason is printed instead. */
-function skip(name, detail) {
-  results.push({ name, skipped: true, detail });
 }
 
 function anonClient() {
@@ -73,6 +107,8 @@ const dayWindow = () => {
 
 async function main() {
   console.log(`\nVerifying against ${URL_}\n`);
+
+  applyFixture();
 
   // --- 1. Direct table access must be impossible for everyone ---------------
   {
@@ -314,24 +350,13 @@ async function main() {
   // --- 7. Office admin surface -------------------------------------------
   const APP = "http://localhost:3100";
 
-  /**
-   * These two probe HTTP guards that DEV_BYPASS_AUTH deliberately switches off.
-   * Running them against a bypassed dev server reports a failure that is not
-   * one, and a suite that is expected to be red is a suite nobody reads, so
-   * they're skipped explicitly, and loudly, instead.
+  /*
+   * These two probe HTTP guards that used to be switchable off by
+   * DEV_BYPASS_AUTH, so they were skipped whenever it was set. The bypass is
+   * gone, the guards are unconditional, and there is no longer any state in
+   * which these are expected to fail. They always run.
    */
-  const bypassed = process.env.DEV_BYPASS_AUTH === "true";
-
-  if (bypassed) {
-    skip(
-      "unauthenticated cannot trigger Office actions",
-      "DEV_BYPASS_AUTH=true, guard intentionally off; unset it to test",
-    );
-    skip(
-      "cron endpoints reject a bad bearer secret",
-      "DEV_BYPASS_AUTH=true, guard intentionally off; unset it to test",
-    );
-  } else {
+  {
     {
       const res = await fetch(`${APP}/api/office`, {
         method: "POST",

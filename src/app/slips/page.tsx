@@ -2,8 +2,6 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { SiteHeader } from "@/components/layout/site-header";
 import { BottomNav } from "@/components/layout/bottom-nav";
-import { RoleSwitcher } from "@/components/dev/role-switcher";
-import { devBypassEnabled } from "@/lib/dev-bypass";
 import { SlipsClient } from "./slips-client";
 
 export const metadata = {
@@ -19,14 +17,13 @@ export default async function SlipsPage() {
     data: { user },
   } = await supabase.auth.getUser();
 
-  if (!user && !devBypassEnabled()) redirect("/auth/sign-in");
+  if (!user) redirect("/auth/sign-in");
 
   return (
     <>
       <SiteHeader signedIn={!!user} />
       <SlipsClient />
       <BottomNav />
-      {process.env.NODE_ENV !== "production" && <RoleSwitcher />}
     </>
   );
 }

@@ -203,8 +203,9 @@ Not gaps against the original, things this port has stubbed deliberately.
 - `liveFootball.fetchStats` is implemented against `/fixtures/headtohead` and
   `/teams/statistics`, and every field it reads is asserted by
   `pnpm verify:live`.
-- `MOCK_PROVIDERS` is `false`. Fixtures, stats, AI and payments all go to the
-  real providers. See the plan blocker in `STATUS.md` before expecting output.
+- `MOCK_PROVIDERS` is gone, along with the mock provider layer. Fixtures,
+  stats, AI and payments have one implementation each and it is the real one.
+  See the plan blocker in `STATUS.md` before expecting output.
 - Terms section 10 names the operator: **Keypad Systems**.
 
 **Still open:**
@@ -259,10 +260,11 @@ Two consequences worth recording, because both are silent:
   the Office's "inert for want of a feed" note, and a tag left on after the
   data arrives tells an operator a working control is dead, which is the same
   lie as the tag being missing, pointed the other way.
-- The mock provider carries the new inputs too, with meeting lists whose
-  results add up to the aggregates printed beside them. Without that, every
-  local run would exercise the skip path, which is the branch least likely to
-  be right and the one nobody would notice was wrong.
+- The mock provider carried the new inputs too, with meeting lists whose
+  results added up to the aggregates printed beside them. That provider has
+  since been deleted along with the rest of the sample data, so the skip path
+  is now exercised only where it is real: a fixture whose feed genuinely
+  returned nothing.
 
 ## Settled: licensing
 

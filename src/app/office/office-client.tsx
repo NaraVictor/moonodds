@@ -15,7 +15,6 @@ import {
   X,
   Clock,
   AlertTriangle,
-  ShieldOff,
 } from "@/components/ui/icons";
 import {
   useAdminPredictions,
@@ -157,10 +156,8 @@ function Loading({ rows = 3 }: { rows?: number }) {
 
 export function OfficeClient({
   adminName,
-  anonymousBypass = false,
 }: {
   adminName: string;
-  anonymousBypass?: boolean;
 }) {
   const [tab, setTab] = useState<TabKey>("pipeline");
 
@@ -173,21 +170,6 @@ export function OfficeClient({
           Run the pipeline, review what the engine proposes, and manage access.
         </p>
       </header>
-
-      {anonymousBypass && (
-        <Alert
-          status="warning"
-          title="Reachable, but reading nothing"
-          icon={<ShieldOff className="h-4 w-4" />}
-          className="mb-6"
-        >
-          The bypass gets you to this page but doesn&rsquo;t fake an identity,
-          admin tables are protected by row-level security, not the route guard.
-          With no session every panel reads back empty. Actions still run. Sign
-          in as <code className="font-mono text-[0.9em]">admin@kicka.test</code>{" "}
-          via the flask button and the data appears.
-        </Alert>
-      )}
 
       <nav
         aria-label="Office sections"

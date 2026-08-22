@@ -72,6 +72,9 @@ jobs:
         with:
           version: latest
 
+      # `supabase start` no longer seeds: seeding is off in config.toml, so a
+      # fresh database comes up empty. verify:security applies its own fixture
+      # from supabase/tests/ as its first act.
       - name: Start Supabase
         run: |
           supabase start
@@ -93,9 +96,6 @@ jobs:
           NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ env.SUPABASE_ANON_KEY }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ env.SUPABASE_SERVICE_ROLE_KEY }}
           CRON_SECRET: ci-cron-secret
-          MOCK_PROVIDERS: "true"
-          DEV_BYPASS_AUTH: "false"
-          NEXT_PUBLIC_DEV_BYPASS_AUTH: "false"
 
       - name: Verify security
         run: pnpm verify:security
@@ -104,10 +104,6 @@ jobs:
           NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ env.SUPABASE_ANON_KEY }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ env.SUPABASE_SERVICE_ROLE_KEY }}
           CRON_SECRET: ci-cron-secret
-          # The suite asserts on the HTTP route guards too, so the bypass has to
-          # be off or two checks fail for a reason that is not a regression.
-          DEV_BYPASS_AUTH: "false"
-          NEXT_PUBLIC_DEV_BYPASS_AUTH: "false"
 
       - name: Supabase logs on failure
         if: failure()

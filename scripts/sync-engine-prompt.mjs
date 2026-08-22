@@ -1,19 +1,22 @@
 #!/usr/bin/env node
 /**
- * Inject src/lib/engine/prompt.ts into supabase/seed.sql.
+ * Inject src/lib/engine/prompt.ts into the engine-config migration.
  *
  * The prompt has to exist in two places, TypeScript, so the app can reset a
  * config back to it, and SQL, so a fresh `supabase db reset` seeds it. Two
  * hand-maintained copies of a 20KB document drift within a week, and the
  * failure is invisible: the app shows one prompt, the engine runs the other.
  *
- * So one is generated from the other, written between markers in seed.sql.
+ * So one is generated from the other, written between markers in
+ * supabase/migrations/20260821092000_engine_config.sql. That used to be
+ * seed.sql; the config moved to a migration when the sample data was deleted,
+ * because `db push` runs migrations and never runs seeds.
  * A separate file included with psql's \ir would be tidier, but the Supabase
  * CLI sends the seed to the server as one batch and never interprets client-side
  * meta-commands, \ir arrives at Postgres verbatim and fails on the backslash.
  *
  * Usage:
- *   node scripts/sync-engine-prompt.mjs           write into seed.sql
+ *   node scripts/sync-engine-prompt.mjs           write into the migration
  *   node scripts/sync-engine-prompt.mjs --check   verify it is current
  */
 
@@ -23,7 +26,7 @@ import { dirname, join } from "node:path";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const SOURCE = join(root, "src/lib/engine/prompt.ts");
-const TARGET = join(root, "supabase/seed.sql");
+const TARGET = join(root, "supabase/migrations/20260821092000_engine_config.sql");
 const VARIABLES = join(root, "src/lib/engine/variables.ts");
 
 const START = "-- ENGINE PROMPT START";
@@ -75,24 +78,24 @@ where id = 'c0000001-0000-4000-8000-000000000001';
 
 ${END}`;
 
-const seed = readFileSync(TARGET, "utf8");
-const start = seed.indexOf(START);
-const end = seed.indexOf(END);
+const target = readFileSync(TARGET, "utf8");
+const start = target.indexOf(START);
+const end = target.indexOf(END);
 if (start === -1 || end === -1 || end < start) {
-  console.error(`Could not find the ${START} / ${END} markers in supabase/seed.sql.`);
+  console.error(`Could not find the ${START} / ${END} markers in ${TARGET}.`);
   process.exit(1);
 }
 
-const next = seed.slice(0, start) + block + seed.slice(end + END.length);
+const next = target.slice(0, start) + block + target.slice(end + END.length);
 
 if (process.argv.includes("--check")) {
-  if (seed !== next) {
-    console.error("seed.sql prompt block is stale, prompt.ts has changed. Run: pnpm engine:sync");
+  if (target !== next) {
+    console.error("engine-config migration prompt block is stale, prompt.ts has changed. Run: pnpm engine:sync");
     process.exit(1);
   }
-  console.log(`seed.sql prompt block is current (v${version}, ${used.length} variables).`);
+  console.log(`engine-config migration prompt block is current (v${version}, ${used.length} variables).`);
   process.exit(0);
 }
 
 writeFileSync(TARGET, next);
-console.log(`Updated supabase/seed.sql, prompt v${version}, ${used.length} variables.`);
+console.log(`Updated the engine-config migration, prompt v${version}, ${used.length} variables.`);

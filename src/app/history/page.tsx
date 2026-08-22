@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import { createClient } from "@/lib/supabase/server";
 import { SiteHeader } from "@/components/layout/site-header";
 import { BottomNav } from "@/components/layout/bottom-nav";
-import { RoleSwitcher } from "@/components/dev/role-switcher";
 import { HistoryClient } from "./history-client";
 
 const DESCRIPTION =
@@ -46,7 +45,6 @@ export default async function HistoryPage() {
       <SiteHeader signedIn={!!user} />
       <HistoryClient />
       <BottomNav />
-      {process.env.NODE_ENV !== "production" && <RoleSwitcher />}
     </>
   );
 }

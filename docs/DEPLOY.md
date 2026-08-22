@@ -80,7 +80,13 @@ Then push:
 supabase db push
 ```
 
-**`db push` does not run `seed.sql`.** Seeds are local-only, which is correct:
+**`db push` does not run seeds, and there is no longer a seed to run.** The
+sample data was deleted and seeding is off in `config.toml`, so a fresh
+database comes up empty. The engine configuration that used to arrive via the
+seed is now `20260821092000_engine_config.sql`, a migration, which is what
+`db push` applies. That distinction was a live bug: the deployed database had
+the full schema and no engine config, so every daily-picks run would have
+skipped even with a working API plan. Historical note, seeds were local-only:
 the demo accounts and fixture data must never reach production.
 
 ### If the project is not empty
@@ -271,10 +277,13 @@ two:
 
 ## 5. Still required before taking real money
 
-- `MOCK_PROVIDERS` must be `false`. `liveFootball.fetchStats` is implemented and
+- `MOCK_PROVIDERS` no longer exists. There is one set of providers and they are
+  all live, so every key below is required rather than optional.
+  `liveFootball.fetchStats` is implemented and
   verified against the live API with `pnpm verify:live football`.
-- `DEV_BYPASS_AUTH` must be absent or `false`. It is ignored in production
-  builds regardless, but leaving it set is a confusing signal.
+- `DEV_BYPASS_AUTH` no longer exists. The auth bypass, the role switcher and
+  the bypass banner were removed outright, so the guards are unconditional in
+  every environment rather than merely hard-off in production.
 - Terms section 10 still has blank company details: legal entity, registration
   number, registered address, governing law and courts. Fill these before
   taking money from the public; they are what make the contract enforceable.

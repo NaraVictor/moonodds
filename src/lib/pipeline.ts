@@ -6,6 +6,7 @@ import { renderPrompt } from "./engine/template";
 import { resolveEngineVariables } from "./engine/variables";
 import { normalisePredictedValue } from "./engine/output";
 import { ENGINE_PROMPT_VERSION } from "./engine/prompt";
+import { reportError } from "./report-error";
 
 /**
  * The daily pipeline, ported from convex/cron_jobs and convex/football.
@@ -862,6 +863,50 @@ export async function runDrainJobs(batchSize = 20) {
   return { claimed: jobs.length, done, failed };
 }
 
+/**
+ * One recipient's delivery, isolated from everyone else's.
+ *
+ * A broadcast used to be a bare `await` inside `for (const r of recipients)`,
+ * so the first failure threw out of the loop and every recipient after it got
+ * nothing, including the channels that were working. One unreachable number
+ * silenced the whole announcement, and the job then retried the entire list
+ * from the top, re-sending to everyone who had already been reached before the
+ * throw.
+ *
+ * Failures are reported rather than swallowed. A send that fails silently is
+ * the same as one that never happened, and this is the code path that tells
+ * people their picks are ready.
+ */
+export async function deliver(
+  scope: string,
+  channel: "email" | "sms",
+  send: () => Promise<void>,
+): Promise<boolean> {
+  try {
+    await send();
+    return true;
+  } catch (err) {
+    reportError(err, { scope, level: "warning", detail: { channel } });
+    return false;
+  }
+}
+
+/**
+ * Fail the job only when nothing at all got through.
+ *
+ * Partial delivery must not retry: the outbox would re-send to everyone who
+ * already received it. Total failure almost always means a credential or a
+ * provider outage, which is exactly what retrying is for.
+ */
+export function settleBroadcast(scope: string, sent: number, failed: number) {
+  if (failed > 0 && sent === 0) {
+    throw new Error(`${scope}: every delivery failed (${failed} attempted)`);
+  }
+  if (failed > 0) {
+    console.warn(`[kicka] ${scope}: delivered ${sent}, failed ${failed}`);
+  }
+}
+
 async function handleJob(
   job: { kind: string; payload: Record<string, unknown> },
   messaging: ReturnType<typeof getProviders>["messaging"],
@@ -874,22 +919,37 @@ async function handleJob(
         .select("user_id, email_enabled, sms_enabled, profiles(email, phone)")
         .eq("daily_picks_alert", true);
 
+      let sent = 0;
+      let failed = 0;
+
       for (const r of recipients ?? []) {
         const profile = asOne(r.profiles) as { email: string | null; phone: string | null } | null;
         if (r.email_enabled && profile?.email) {
-          await messaging.sendEmail({
-            to: profile.email,
-            subject: `Today's picks are ready`,
-            html: `<p>${job.payload.count} new picks are live on Kicka.</p>`,
-          });
+          const email = profile.email;
+          const ok = await deliver("jobs/daily_picks_ready", "email", () =>
+            messaging.sendEmail({
+              to: email,
+              subject: `Today's picks are ready`,
+              html: `<p>${job.payload.count} new picks are live on Kicka.</p>`,
+            }),
+          );
+          if (ok) sent++;
+          else failed++;
         }
         if (r.sms_enabled && profile?.phone) {
-          await messaging.sendSms({
-            to: profile.phone,
-            message: `Kicka: ${job.payload.count} new picks are live.`,
-          });
+          const phone = profile.phone;
+          const ok = await deliver("jobs/daily_picks_ready", "sms", () =>
+            messaging.sendSms({
+              to: phone,
+              message: `Kicka: ${job.payload.count} new picks are live.`,
+            }),
+          );
+          if (ok) sent++;
+          else failed++;
         }
       }
+
+      settleBroadcast("jobs/daily_picks_ready", sent, failed);
       return;
     }
 
@@ -903,20 +963,35 @@ async function handleJob(
         home: string; away: string; league: string; market: string; confidence: number;
       };
 
+      let sent = 0;
+      let failed = 0;
+
       for (const r of recipients ?? []) {
         const profile = asOne(r.profiles) as { email: string | null; phone: string | null } | null;
         const line = `${p.home} v ${p.away} · ${p.market} · ${Math.round(p.confidence * 10)}% confidence`;
         if (r.email_enabled && profile?.email) {
-          await messaging.sendEmail({
-            to: profile.email,
-            subject: `High-confidence call: ${p.home} v ${p.away}`,
-            html: `<p>${line}</p><p>${p.league}</p>`,
-          });
+          const email = profile.email;
+          const ok = await deliver("jobs/high_confidence_pick", "email", () =>
+            messaging.sendEmail({
+              to: email,
+              subject: `High-confidence call: ${p.home} v ${p.away}`,
+              html: `<p>${line}</p><p>${p.league}</p>`,
+            }),
+          );
+          if (ok) sent++;
+          else failed++;
         }
         if (r.sms_enabled && profile?.phone) {
-          await messaging.sendSms({ to: profile.phone, message: `Kicka: ${line}` });
+          const phone = profile.phone;
+          const ok = await deliver("jobs/high_confidence_pick", "sms", () =>
+            messaging.sendSms({ to: phone, message: `Kicka: ${line}` }),
+          );
+          if (ok) sent++;
+          else failed++;
         }
       }
+
+      settleBroadcast("jobs/high_confidence_pick", sent, failed);
       return;
     }
 
