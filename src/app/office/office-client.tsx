@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   Zap,
+  LayoutGrid,
   ListChecks,
   CheckCircle2,
   Database,
@@ -25,6 +26,7 @@ import {
   useOfficeAction,
   usePredictionRuns,
   useTuningReports,
+  useDashboardMetrics,
   usePredictionReport,
   useUserPicksReport,
   useAllConfigs,
@@ -66,6 +68,7 @@ import { useBacktest } from "@/lib/queries";
  */
 
 const TABS = [
+  { key: "dashboard", label: "Dashboard", Icon: LayoutGrid },
   { key: "pipeline", label: "Pipeline", Icon: Zap },
   { key: "predictions", label: "Predictions", Icon: ListChecks },
   { key: "grade", label: "Grade", Icon: CheckCircle2 },
@@ -159,7 +162,7 @@ export function OfficeClient({
 }: {
   adminName: string;
 }) {
-  const [tab, setTab] = useState<TabKey>("pipeline");
+  const [tab, setTab] = useState<TabKey>("dashboard");
 
   return (
     <main className="mx-auto w-full max-w-5xl px-5 py-8">
@@ -197,6 +200,7 @@ export function OfficeClient({
       </nav>
 
       <div className="rise">
+        {tab === "dashboard" && <DashboardPanel />}
         {tab === "pipeline" && <PipelinePanel />}
         {tab === "predictions" && <PredictionsPanel />}
         {tab === "grade" && <GradePanel />}
@@ -2174,6 +2178,171 @@ function Stat({
         {value}
       </p>
       <p className="label mt-1">{label}</p>
+    </div>
+  );
+}
+
+/* ------------------------------ dashboard ------------------------------ */
+
+/**
+ * The Office landing tab.
+ *
+ * Two groups, and the split is the whole design. "As of today" ignores the
+ * date filter, because a catalogue size or an all-time total has no meaningful
+ * reading for "the last 7 days"; "in the selected range" answers it. A board
+ * whose tiles quietly mean different things is worse than a board with fewer
+ * tiles, and the headings are what stop someone reading a lifetime total as a
+ * weekly one.
+ *
+ * Every figure comes from one RPC. Ten round trips to render one screen is ten
+ * chances for a half-drawn dashboard and ten sets of numbers that can disagree
+ * with each other about when they were taken.
+ */
+function DashboardPanel() {
+  const [preset, setPreset] = useState("30d");
+  const range = rangeFor(preset);
+  const { data, isPending } = useDashboardMetrics(range);
+
+  const money = (n: number) =>
+    `$${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+  // A rate with no denominator is unknown, not zero. Rendering 0% for a week
+  // with nothing settled reports a perfect miss record that never happened.
+  const pct = (n: number | null) => (n === null ? "—" : `${n}%`);
+  const num = (n: number) => n.toLocaleString();
+
+  const rangeLabel =
+    PRESETS.find((p) => p.v === preset)?.label.toLowerCase() ?? "the selected range";
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap gap-1.5">
+        {PRESETS.map((p) => {
+          const on = preset === p.v;
+          return (
+            <button
+              key={p.v}
+              type="button"
+              onClick={() => setPreset(p.v)}
+              aria-current={on ? "page" : undefined}
+              className={`press rounded-full border px-4 py-2 text-[13px] font-semibold ${
+                on
+                  ? "border-transparent bg-feature text-feature-foreground"
+                  : "border-border bg-surface text-muted hover:text-foreground"
+              }`}
+            >
+              {p.label}
+            </button>
+          );
+        })}
+      </div>
+
+      <Panel
+        title="As of today"
+        description="Current totals. These ignore the date filter above."
+      >
+        {isPending || !data ? (
+          <Loading rows={2} />
+        ) : (
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <Stat label="Total users" value={num(data.asOfToday.users)} />
+            <Stat
+              label="Passes active today"
+              value={num(data.asOfToday.activePassesToday)}
+              tone="var(--won-ink)"
+            />
+            <Stat label="Predictions to date" value={num(data.asOfToday.predictions)} />
+            <Stat label="Fixtures tracked" value={num(data.asOfToday.fixtures)} />
+            <Stat label="Leagues" value={num(data.asOfToday.leagues)} />
+            <Stat label="Teams" value={num(data.asOfToday.teams)} />
+            <Stat
+              label="Suspended"
+              value={num(data.asOfToday.suspended)}
+              tone={data.asOfToday.suspended > 0 ? "var(--lost-ink)" : undefined}
+            />
+          </div>
+        )}
+      </Panel>
+
+      <Panel title="Money" description={`Gross, for ${rangeLabel}.`}>
+        {isPending || !data ? (
+          <Loading rows={2} />
+        ) : (
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <Stat label="Revenue" value={money(data.inRange.revenue)} tone="var(--won-ink)" />
+            <Stat label="Day passes" value={money(data.inRange.passRevenue)} />
+            <Stat label="Extra picks" value={money(data.inRange.extraRevenue)} />
+            {/* Per PAYING user. Dividing by everyone who signed up measures how
+                many have not paid, which the signups tile already answers. */}
+            <Stat
+              label="Avg per paying user"
+              value={data.inRange.arpu === null ? "—" : money(data.inRange.arpu)}
+            />
+            <Stat label="Passes sold" value={num(data.inRange.passesSold)} />
+            <Stat label="Paying users" value={num(data.inRange.payingUsers)} />
+            <Stat label="Extra-pick orders" value={num(data.inRange.extraOrders)} />
+            <Stat label="Extra games unlocked" value={num(data.inRange.extraGames)} />
+          </div>
+        )}
+      </Panel>
+
+      <Panel
+        title="Customers"
+        description="Churn is someone who bought in the previous window of the same length and not in this one. Return rate is buyers who bought on more than one day."
+      >
+        {isPending || !data ? (
+          <Loading rows={2} />
+        ) : (
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <Stat label="New sign-ups" value={num(data.inRange.newUsers)} />
+            <Stat
+              label="Return rate"
+              value={pct(data.inRange.returnRate)}
+              tone="var(--won-ink)"
+            />
+            <Stat
+              label="Churn rate"
+              value={pct(data.inRange.churnRate)}
+              tone={
+                data.inRange.churnRate && data.inRange.churnRate > 0
+                  ? "var(--lost-ink)"
+                  : undefined
+              }
+            />
+            <Stat label="Repeat buyers" value={num(data.inRange.returningBuyers)} />
+          </div>
+        )}
+        {data && data.inRange.churnRate === null && (
+          <p className="mt-3 text-[12px] text-muted">
+            Churn needs a previous window to compare against, so it is blank on
+            All time and until there are buyers in the period before this one.
+          </p>
+        )}
+      </Panel>
+
+      <Panel
+        title="Performance"
+        description={`Settled picks and slips in ${rangeLabel}. Pending ones are excluded: an ungraded pick is not a miss.`}
+      >
+        {isPending || !data ? (
+          <Loading rows={2} />
+        ) : (
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <Stat label="Hit rate" value={pct(data.inRange.hitRate)} tone="var(--won-ink)" />
+            <Stat
+              label="Miss rate"
+              value={data.inRange.hitRate === null ? "—" : `${(100 - data.inRange.hitRate).toFixed(1)}%`}
+              tone="var(--lost-ink)"
+            />
+            <Stat label="Won" value={num(data.inRange.wins)} />
+            <Stat label="Lost" value={num(data.inRange.losses)} />
+            <Stat label="Slip win rate" value={pct(data.inRange.slipWinRate)} />
+            <Stat label="Slips settled" value={num(data.inRange.slipsSettled)} />
+            <Stat label="Slips saved" value={num(data.inRange.slipsTotal)} />
+            <Stat label="Picks settled" value={num(data.inRange.settled)} />
+          </div>
+        )}
+      </Panel>
     </div>
   );
 }

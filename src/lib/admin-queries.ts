@@ -166,6 +166,65 @@ export type UserPicksReport = {
   }[];
 };
 
+export type DashboardMetrics = {
+  /** Ignores the date range: catalogue sizes and all-time totals. */
+  asOfToday: {
+    users: number;
+    suspended: number;
+    activePassesToday: number;
+    predictions: number;
+    leagues: number;
+    teams: number;
+    fixtures: number;
+  };
+  /**
+   * Answers the date range.
+   *
+   * Every rate is `number | null`, and the null is load-bearing: a hit rate
+   * with nothing settled is unknown, not zero, and rendering it as 0% would
+   * report a perfect miss record for a quiet week.
+   */
+  inRange: {
+    newUsers: number;
+    passesSold: number;
+    payingUsers: number;
+    passRevenue: number;
+    extraOrders: number;
+    extraGames: number;
+    extraRevenue: number;
+    revenue: number;
+    arpu: number | null;
+    settled: number;
+    wins: number;
+    losses: number;
+    hitRate: number | null;
+    slipsSettled: number;
+    slipsTotal: number;
+    slipWinRate: number | null;
+    returnRate: number | null;
+    returningBuyers: number;
+    churnRate: number | null;
+    lapsedBuyers: number;
+    priorBuyers: number;
+  };
+};
+
+/** Everything the dashboard shows, in one call. Null dates mean all time. */
+export function useDashboardMetrics(range: { start?: string; end?: string }) {
+  return useQuery({
+    queryKey: ["office", "dashboard", range],
+    queryFn: async (): Promise<DashboardMetrics> => {
+      const supabase = createClient();
+      const { data, error } = await supabase.rpc("get_dashboard_metrics", {
+        p_start: range.start ?? null,
+        p_end: range.end ?? null,
+      });
+      if (error) throw error;
+      return data as DashboardMetrics;
+    },
+  });
+}
+
 /** Engine performance for a window. Null dates mean all time. */
 export function usePredictionReport(range: { start?: string; end?: string; leagueId?: string }) {
   return useQuery({
