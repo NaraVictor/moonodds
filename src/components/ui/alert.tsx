@@ -21,6 +21,17 @@ import type { ReactNode } from "react";
  * `status` maps to HeroUI's scale: danger for failures, warning for conditions
  * the operator should notice, accent for gated or promotional states, success
  * for confirmations.
+ *
+ * THE INDICATOR IS ALWAYS RENDERED, and that is not decoration. HeroUI's
+ * `.alert--danger` rule colours exactly two things, the indicator and the
+ * title, and nothing else. An alert built from a description alone therefore
+ * inherited the plain `--surface` background and grey text no matter what
+ * status it was given: a failure and a confirmation rendered identically, as a
+ * white box. `status` looked applied, in the markup and in the class list, and
+ * was doing nothing a person could see.
+ *
+ * Passing no children to AlertIndicator makes HeroUI supply the icon for the
+ * status, which is what carries the colour.
  */
 export function Alert({
   status = "danger",
@@ -37,8 +48,8 @@ export function Alert({
   className?: string;
 }) {
   return (
-    <AlertRoot status={status} className={className}>
-      {icon !== undefined && <AlertIndicator>{icon}</AlertIndicator>}
+    <AlertRoot status={status} className={className} role="alert">
+      <AlertIndicator>{icon}</AlertIndicator>
       <AlertContent>
         {title && <AlertTitle>{title}</AlertTitle>}
         {children && <AlertDescription>{children}</AlertDescription>}

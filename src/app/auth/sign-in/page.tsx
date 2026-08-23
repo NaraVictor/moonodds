@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import type { Metadata } from "next";
-import { Alert } from "@heroui/react/alert";
+import { Alert } from "@/components/ui/alert";
 import { createClient } from "@/lib/supabase/server";
 import { Logo } from "@/components/brand/logo";
 import { SignInForm } from "./sign-in-form";
@@ -50,11 +50,9 @@ export default async function SignInPage({
 
         {error && (
           <Alert status="danger">
-            <Alert.Description>
-              {error === "google-unavailable"
-                ? "Google sign-in isn't available right now. Use a code instead."
-                : error}
-            </Alert.Description>
+            {error === "google-unavailable"
+              ? "Google sign-in isn't available right now. Use a code instead."
+              : error}
           </Alert>
         )}
 

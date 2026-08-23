@@ -1,4 +1,5 @@
 import { createServerClient } from "@supabase/ssr";
+import { supabaseCredentials } from "./credentials";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { cookies } from "next/headers";
 
@@ -11,8 +12,8 @@ export async function createClient() {
   const cookieStore = await cookies();
 
   return createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    supabaseCredentials().url,
+    supabaseCredentials().key,
     {
       cookies: {
         getAll() {
@@ -53,7 +54,7 @@ export function createServiceClient() {
   // client layers cookie-based auth over the key, which downgrades the request
   // to the anon role, RLS then applies and every pipeline read comes back
   // empty with no error to explain it.
-  return createSupabaseClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, key, {
+  return createSupabaseClient(supabaseCredentials().url, key, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
 }

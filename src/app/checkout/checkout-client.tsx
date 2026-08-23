@@ -6,7 +6,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Card } from "@heroui/react/card";
 import { Button } from "@heroui/react/button";
 import { Chip } from "@heroui/react/chip";
-import { Alert } from "@heroui/react/alert";
+import { Alert } from "@/components/ui/alert";
 import { Skeleton } from "@heroui/react/skeleton";
 import { Check, ShieldCheck, Sparkles } from "@/components/ui/icons";
 import { useAccessState, useLeagueOptions } from "@/lib/queries";
@@ -145,24 +145,19 @@ export function CheckoutClient({ kind }: { kind: Kind }) {
 
       {error && (
         <Alert status="danger">
-          <Alert.Description>{error}</Alert.Description>
+          {error}
         </Alert>
       )}
 
       {kind === "day-pass" && access?.hasFullAccess && (
         <Alert status="success">
-          <Alert.Description>
-            You already have full access today, no need to buy again.
-          </Alert.Description>
+          You already have full access today, no need to buy again.
         </Alert>
       )}
 
       {kind === "extra-picks" && !access?.hasFullAccess && (
-        <Alert status="warning">
-          <Alert.Title>Pass holders only</Alert.Title>
-          <Alert.Description>
-            Extra league picks are a day-pass perk. Grab a pass first.
-          </Alert.Description>
+        <Alert status="warning" title="Pass holders only">
+          Extra league picks are a day-pass perk. Grab a pass first.
         </Alert>
       )}
 

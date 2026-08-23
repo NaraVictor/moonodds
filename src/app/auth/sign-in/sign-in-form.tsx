@@ -2,7 +2,8 @@
 
 import { useActionState, useState } from "react";
 import { Button } from "@heroui/react/button";
-import { Alert } from "@heroui/react/alert";
+import { Alert } from "@/components/ui/alert";
+import { PendingButton } from "@/components/ui/pending-button";
 import { requestCode, verifyCode, signInWithGoogle } from "@/lib/auth-actions";
 
 const FIELD =
@@ -44,9 +45,7 @@ export function SignInForm() {
         </div>
 
         {verifyState && "error" in verifyState && (
-          <Alert status="danger">
-            <Alert.Description>{verifyState.error}</Alert.Description>
-          </Alert>
+          <Alert status="danger">{verifyState.error}</Alert>
         )}
 
         <div className="space-y-1.5">
@@ -65,9 +64,9 @@ export function SignInForm() {
           />
         </div>
 
-        <Button type="submit" isPending={verifying} className="w-full">
+        <PendingButton isPending={verifying} pendingLabel="Checking…" className="w-full">
           Continue
-        </Button>
+        </PendingButton>
 
         <p className="text-center text-[12px] text-muted">
           Didn&rsquo;t arrive?{" "}
@@ -102,9 +101,7 @@ export function SignInForm() {
         <input type="hidden" name="channel" value="email" />
 
         {sendState && "error" in sendState && (
-          <Alert status="danger">
-            <Alert.Description>{sendState.error}</Alert.Description>
-          </Alert>
+          <Alert status="danger">{sendState.error}</Alert>
         )}
 
         <div className="space-y-1.5">
@@ -126,9 +123,9 @@ export function SignInForm() {
           />
         </div>
 
-        <Button type="submit" isPending={sending} className="w-full">
+        <PendingButton isPending={sending} pendingLabel="Sending…" className="w-full">
           Send me a code
-        </Button>
+        </PendingButton>
       </form>
 
       <p className="text-center text-[12px] leading-relaxed text-muted">

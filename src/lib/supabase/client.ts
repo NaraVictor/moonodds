@@ -1,4 +1,5 @@
 import { createBrowserClient } from "@supabase/ssr";
+import { supabaseCredentials } from "./credentials";
 
 /**
  * Browser-side Supabase client.
@@ -8,8 +9,9 @@ import { createBrowserClient } from "@supabase/ssr";
  * exclusively through the gated RPCs.
  */
 export function createClient() {
-  return createBrowserClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-  );
+  // Non-null assertions used to hide a missing or mismatched key until
+  // Supabase rejected the request, by which point the only evidence was the
+  // words "Invalid API key" under a sign-in field.
+  const { url, key } = supabaseCredentials();
+  return createBrowserClient(url, key);
 }
