@@ -178,8 +178,10 @@ site_url = "http://localhost:3100"
 additional_redirect_urls = [
   "http://localhost:3100/auth/callback",
   "https://kicka.app/auth/callback",
-  # Vercel preview deployments get a fresh hostname per branch.
-  "https://*-kicka.vercel.app/auth/callback",
+  # No preview wildcard. Vercel hostnames are {project}-{hash}-{scope}, and a
+  # pattern loose enough to match without knowing the scope would trust every
+  # deployment on vercel.app — including whoever wanted the auth code. Add the
+  # exact shape from a real preview URL if previews need Google sign-in.
 ]
 # How long tokens are valid for, in seconds. Defaults to 3600 (1 hour), maximum 604,800 (1 week).
 jwt_expiry = 3600

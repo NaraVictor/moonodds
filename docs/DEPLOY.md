@@ -258,12 +258,26 @@ callback being followed.
 
 In **Authentication → URL Configuration**:
 
-| Field | Value |
-| --- | --- |
-| Site URL | `https://kicka.app` |
-| Redirect URLs | `https://kicka.app/auth/callback` |
-| | `https://*-kicka.vercel.app/auth/callback` (previews) |
-| | `http://localhost:3100/auth/callback` (local against this project) |
+| Field | Value | Set |
+| --- | --- | --- |
+| Site URL | `https://kicka.app` | yes |
+| Redirect URLs | `https://kicka.app/auth/callback` | yes |
+| | `http://localhost:3100/auth/callback` | yes |
+| | *preview pattern* | **no, see below** |
+
+**Site URL must be `https://`.** It was `http://kicka.app`, which matters
+because this is the fallback destination for any redirect that does not match
+the allow-list: an insecure URL, handed out by a site that otherwise sends
+HSTS.
+
+**The preview pattern is deliberately absent.** Vercel preview hostnames are
+`{project}-{hash}-{scope}.vercel.app`, and the scope slug is not recoverable
+from this repository. A guessed wildcard is worse than no entry: an allow-list
+is what stops a crafted `?redirect_to=` handing someone's auth code to another
+origin, and `https://*.vercel.app/auth/callback` would trust every deployment
+on the platform, including an attacker's. Read a real preview URL from the
+Vercel dashboard and add that exact shape, or leave it out and test Google on
+production only.
 
 The silent-discard behaviour is the allow-list doing its job — it is what stops
 someone appending `?redirect_to=their-site` and being handed a session. The
