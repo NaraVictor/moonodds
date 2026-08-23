@@ -98,12 +98,27 @@ export async function requestCode(
       return { error: "That doesn't look like an email address." };
     }
 
+    /*
+     * NO emailRedirectTo, deliberately.
+     *
+     * Supplying one tells Supabase to build a magic link, and a link is the
+     * one thing this flow must not send: following it opens Supabase's verify
+     * endpoint in whatever browser the mail client chooses, which is not the
+     * browser holding the PKCE verifier cookie, and the exchange fails with
+     * "PKCE code verifier not found in storage". A six-digit code typed back
+     * into the page works from any device because it carries no browser state.
+     *
+     * The email template must render {{ .Token }} for this to be useful. That
+     * is set in config.toml for local and in the dashboard for the deployed
+     * project — the default template is a link.
+     */
     const { error } = await supabase.auth.signInWithOtp({
       email: identifier,
-      options: {
-        shouldCreateUser: true,
-        emailRedirectTo: `${siteUrl()}/auth/callback`,
-      },
+      // First time through, this creates the account. There is no separate
+      // sign-up and no confirmation step: receiving the code IS the proof the
+      // address is real, so asking for a second confirmation would be asking
+      // someone to prove the same thing twice.
+      options: { shouldCreateUser: true },
     });
     if (error) return { error: error.message };
     return { sent: true, channel: "email" };

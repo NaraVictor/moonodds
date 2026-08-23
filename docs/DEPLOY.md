@@ -246,6 +246,38 @@ registering ours is the usual cause of `redirect_uri_mismatch`.
 `/api/auth/sms-hook` and the phone handling all remain, so re-enabling it is a
 form change plus the hook configuration in **Authentication → Hooks**.
 
+### The email templates, and the one that catches everyone
+
+**Supabase's default templates send a LINK. This product needs a CODE.**
+Following the link produces `PKCE code verifier not found in storage`, because
+it opens in whichever browser the mail client hands it to, and the verifier
+cookie lives in the browser that made the request. A typed code carries no
+browser state and works from any device, which is why it is the only route in.
+
+Two templates, not one. Supabase picks by whether the account already exists:
+
+| Template | When it fires | Must contain |
+| --- | --- | --- |
+| **Confirm signup** | address we have never seen — *everyone, once* | `{{ .Token }}` |
+| **Magic Link** | address that already has an account | `{{ .Token }}` |
+
+Fixing only Magic Link is the easy mistake: it looks fixed when you test with
+your own account and sends a link to every genuinely new person.
+
+`config.toml` configures these for LOCAL only. The deployed project reads its
+templates from **Authentication → Emails**, so paste the bodies from
+`supabase/templates/` into both, there. Subject for both: *Your Kicka sign-in
+code*.
+
+> `supabase config push` would do it in one command and pushes the WHOLE file,
+> including the locally generated `SUPABASE_SMS_HOOK_SECRET` and every rate
+> limit. On a project whose SMTP, Google credentials and SMS hook were set in
+> the dashboard, that overwrites working settings with local ones. Paste the
+> two templates instead.
+
+After changing them, sign in with an address that has **never** been used, not
+one that already exists — that is the path the default template breaks.
+
 ### The password grant
 
 No account has a password. Real accounts never set one, and the security

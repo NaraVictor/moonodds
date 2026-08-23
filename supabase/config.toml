@@ -276,6 +276,31 @@ otp_expiry = 900
 # sender_name = "Admin"
 
 # Uncomment to customize email template
+# The sign-in code email.
+#
+# Supabase's DEFAULT template for this hook is a magic LINK. That is not the
+# flow this product uses, and following one produces "PKCE code verifier not
+# found in storage": the link opens in whatever browser the mail client hands
+# it to, which is not the browser holding the verifier cookie. The template
+# below renders {{ .Token }} instead, the six-digit code the form asks for.
+#
+# THIS FILE ONLY CONFIGURES LOCAL SUPABASE. The deployed project reads its
+# templates from the dashboard, so the same change must be made there or
+# production keeps sending links. See docs/DEPLOY.md.
+# The first code, for an address we have not seen before.
+#
+# Supabase chooses the template by whether the account exists, and an unknown
+# address gets "Confirm signup" rather than "Magic Link". Configuring only the
+# latter leaves every genuinely new person receiving a confirmation LINK, which
+# is the exact case that fails: everyone is new exactly once.
+[auth.email.template.confirmation]
+subject = "Your Kicka sign-in code"
+content_path = "./supabase/templates/confirm-signup.html"
+
+[auth.email.template.magic_link]
+subject = "Your Kicka sign-in code"
+content_path = "./supabase/templates/magic-link.html"
+
 # [auth.email.template.invite]
 # subject = "You have been invited"
 # content_path = "./supabase/templates/invite.html"

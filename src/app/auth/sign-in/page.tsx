@@ -52,7 +52,9 @@ export default async function SignInPage({
           <Alert status="danger">
             {error === "google-unavailable"
               ? "Google sign-in isn't available right now. Use a code instead."
-              : error}
+              : error === "google-failed"
+                ? "That Google sign-in didn't complete. Try again, or use a code instead."
+                : error}
           </Alert>
         )}
 
