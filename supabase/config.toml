@@ -275,6 +275,11 @@ secure_password_change = false
 # Controls the minimum amount of time that must pass before sending another signup confirmation or password reset email.
 max_frequency = "1s"
 # Number of characters used in the email OTP.
+#
+# LOCAL ONLY, like everything else in this file. The deployed project issues
+# whatever is set in its own dashboard, and it was issuing 8 while the sign-in
+# form demanded exactly 6 — a correct code, truncated by the input and then
+# rejected. The form accepts 6 to 10 now rather than trusting these to agree.
 otp_length = 6
 # Number of seconds before the email OTP expires (defaults to 1 hour).
 # 15 minutes, not the hour it shipped with. A six-digit code is a million

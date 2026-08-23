@@ -585,6 +585,43 @@ export function useUpdateNotificationPreferences() {
   });
 }
 
+/**
+ * Change the name other people see.
+ *
+ * Worth being able to change, because nobody chose it: sign-up asks for an
+ * address and nothing else, so everyone starts as a generated pairing like
+ * "Brave Anchor 905". That is a good default and a poor identity.
+ *
+ * Trimmed and length-capped here as well as in the input, since the input is
+ * only a suggestion to anyone using the API directly. An empty name is
+ * refused rather than stored: a blank display name renders as a gap wherever
+ * it appears, and the profile page falls back to "-" which reads like a bug.
+ * RLS constrains the row to the caller and the privilege-freeze trigger keeps
+ * is_super_admin and is_suspended out of reach, so this cannot become an
+ * escalation even though the client writes it directly.
+ */
+export function useUpdateDisplayName() {
+  const qc = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (raw: string) => {
+      const displayName = raw.trim().slice(0, 40);
+      if (!displayName) throw new Error("Give yourself a name of some sort.");
+
+      const supabase = createClient();
+      const { data: auth } = await supabase.auth.getUser();
+      if (!auth.user) throw new Error("Sign in to change your name.");
+
+      const { error } = await supabase
+        .from("profiles")
+        .update({ display_name: displayName })
+        .eq("id", auth.user.id);
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: keys.profile }),
+  });
+}
+
 export function useUpdatePhone() {
   const qc = useQueryClient();
 

@@ -39,7 +39,7 @@ export function SignInForm() {
         <input type="hidden" name="identifier" value={identifier} />
 
         <div className="rounded-xl border border-border bg-surface-secondary px-3.5 py-3 text-[13px]">
-          We sent a 6-digit code to{" "}
+          We sent a code to{" "}
           <strong className="font-semibold">{identifier}</strong>. It expires
           shortly, so use it now.
         </div>
@@ -58,9 +58,9 @@ export function SignInForm() {
             inputMode="numeric"
             autoComplete="one-time-code"
             required
-            maxLength={6}
-            placeholder="000000"
-            className={`${FIELD} numeral text-center text-lg tracking-[0.4em]`}
+            maxLength={10}
+            placeholder="Enter your code"
+            className={`${FIELD} numeral text-center text-lg tracking-[0.3em]`}
           />
         </div>
 

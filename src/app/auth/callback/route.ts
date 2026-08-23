@@ -6,7 +6,7 @@ import { reportError } from "@/lib/report-error";
 /**
  * Where Google comes back to. Only Google.
  *
- * Email sign-in never reaches here: it sends a six-digit code that is typed
+ * Email sign-in never reaches here: it sends a numeric code that is typed
  * back into the page, precisely so it does not depend on which browser a mail
  * client decides to open. Supabase's PKCE flow stores a verifier when the
  * hand-off starts and reads it back here, and a link followed from an inbox

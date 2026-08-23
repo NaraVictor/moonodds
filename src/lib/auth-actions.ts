@@ -105,7 +105,7 @@ export async function requestCode(
      * one thing this flow must not send: following it opens Supabase's verify
      * endpoint in whatever browser the mail client chooses, which is not the
      * browser holding the PKCE verifier cookie, and the exchange fails with
-     * "PKCE code verifier not found in storage". A six-digit code typed back
+     * "PKCE code verifier not found in storage". A numeric code typed back
      * into the page works from any device because it carries no browser state.
      *
      * The email template must render {{ .Token }} for this to be useful. That
@@ -147,11 +147,21 @@ export async function verifyCode(
 ): Promise<AuthResult> {
   const channel = String(formData.get("channel") ?? "email") === "sms" ? "sms" : "email";
   const identifier = String(formData.get("identifier") ?? "").trim();
-  const token = String(formData.get("code") ?? "").replace(/\s/g, "");
+  // Digits only, and whatever length the project issues.
+  //
+  // This required exactly six, because config.toml sets otp_length = 6. That
+  // setting governs LOCAL Supabase only: the deployed project was issuing
+  // EIGHT, so a real code pasted into a six-character field was truncated by
+  // the input and then refused by this check, with "Enter the 6-digit code"
+  // telling someone holding a correct code that it was the wrong shape.
+  //
+  // Supabase permits 6 to 10, so the range is accepted rather than a number
+  // pinned here to match a setting that lives somewhere else.
+  const token = String(formData.get("code") ?? "").replace(/\D/g, "");
 
-  if (!/^\d{6}$/.test(token)) return { error: "Enter the 6-digit code." };
+  if (!/^\d{6,10}$/.test(token)) return { error: "Enter the code we sent you." };
 
-  // Ten verifications per fifteen minutes. A six-digit code is a million
+  // Ten verifications per fifteen minutes. Six digits is a million
   // possibilities, so the limit is what makes guessing it impractical rather
   // than merely slow; Supabase expires the code as well.
   const verdict = await sharedRateLimit(await actionKey("otp-verify"), 10, 15 * 60);

@@ -13,6 +13,7 @@ import {
   useProfile,
   useUpdateNotificationPreferences,
   useUpdatePhone,
+  useUpdateDisplayName,
   useProfileStats,
   useMyLeaguePerformance,
   usePlayLimits,
@@ -45,11 +46,14 @@ export function ProfileClient() {
   const { data: access } = useAccessState();
   const updatePrefs = useUpdateNotificationPreferences();
   const updatePhone = useUpdatePhone();
+  const updateName = useUpdateDisplayName();
   const { theme, choose: chooseTheme } = useTheme();
   const { data: stats } = useProfileStats();
   const { data: leagues } = useMyLeaguePerformance();
 
   const [phone, setPhone] = useState<string | null>(null);
+  // null means "not being edited"; the stored name shows until someone starts.
+  const [name, setName] = useState<string | null>(null);
   const prefsRow = prefs as Record<string, boolean> | null;
 
   if (isPending) {
@@ -85,13 +89,50 @@ export function ProfileClient() {
             >
               {initials}
             </span>
-            <div className="min-w-0">
-              <p className="truncate text-[17px] font-semibold">
-                {profile?.display_name ?? "-"}
+            <div className="min-w-0 flex-1">
+              {/* Editable in place. Nobody chose this name — sign-up asks for an
+                  address and nothing else, so everyone starts as a generated
+                  pairing. Putting the field where the name already is means
+                  changing it is one click from noticing it, rather than a
+                  settings page away. */}
+              <label htmlFor="displayName" className="sr-only">
+                Display name
+              </label>
+              <input
+                id="displayName"
+                value={name ?? profile?.display_name ?? ""}
+                onChange={(e) => setName(e.target.value)}
+                maxLength={40}
+                placeholder="Your name"
+                aria-describedby="displayNameHelp"
+                className="w-full truncate rounded-lg border border-transparent bg-transparent px-2 py-1 text-[17px] font-semibold -ml-2 hover:border-border focus-visible:border-field-border focus-visible:bg-field focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+              />
+              <p className="truncate px-2 -ml-2 text-[13px] text-muted">
+                {profile?.email}
               </p>
-              <p className="truncate text-[13px] text-muted">{profile?.email}</p>
             </div>
+
+            {name !== null && name.trim() !== (profile?.display_name ?? "") && (
+              <button
+                type="button"
+                disabled={updateName.isPending || !name.trim()}
+                onClick={() =>
+                  updateName.mutate(name, { onSuccess: () => setName(null) })
+                }
+                className="press h-9 flex-none rounded-full bg-accent px-4 text-[13px] font-semibold text-accent-foreground disabled:opacity-40"
+              >
+                {updateName.isPending ? "Saving…" : "Save"}
+              </button>
+            )}
           </div>
+
+          {updateName.isError && (
+            <p id="displayNameHelp" className="px-6 pb-4 -mt-2 text-[12px]" style={{ color: "var(--lost-ink)" }}>
+              {updateName.error instanceof Error
+                ? updateName.error.message
+                : "Could not save that name."}
+            </p>
+          )}
 
           <div
             className={`border-t px-6 py-5 ${
@@ -633,12 +674,16 @@ function DataRights() {
 
         {confirming ? (
           <>
+            {/* --feature-lost, not --lost-ink. The ink tokens lighten in dark
+                mode because they are designed to sit ON a pale wash; used as
+                the ground under white text they fall to about 1.4:1. This is
+                the ground token and holds in both themes. */}
             <button
               type="button"
               disabled={busy}
               onClick={remove}
-              className="press h-11 rounded-full px-5 text-[13px] font-semibold disabled:opacity-40"
-              style={{ background: "var(--lost-wash)", color: "var(--lost-ink)" }}
+              className="press h-11 rounded-full px-5 text-[13px] font-semibold text-white disabled:opacity-40"
+              style={{ background: "var(--feature-lost)" }}
             >
               {busy ? "Deleting…" : "Really delete everything"}
             </button>
@@ -654,7 +699,12 @@ function DataRights() {
           <button
             type="button"
             onClick={() => setConfirming(true)}
-            className="press h-11 rounded-full border border-border px-5 text-[13px] font-semibold text-muted hover:text-foreground"
+            className="press h-11 rounded-full border px-5 text-[13px] font-semibold"
+            style={{
+              borderColor: "var(--lost-edge)",
+              color: "var(--lost-ink)",
+              background: "var(--lost-wash)",
+            }}
           >
             Delete my account
           </button>
