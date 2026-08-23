@@ -17,7 +17,9 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "verify:secrets": "node scripts/verify-no-secrets.mjs",
-    "verify:live": "node scripts/verify-live-providers.mjs"
+    "verify:live": "node scripts/verify-live-providers.mjs",
+    "templates:push": "node scripts/push-email-templates.mjs",
+    "templates:check": "node scripts/push-email-templates.mjs --check"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.116.0",

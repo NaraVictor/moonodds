@@ -291,35 +291,36 @@ Supabase for a callback on that host and the allow-list correctly refuses it.
 
 ### The email templates, and the one that catches everyone
 
-**Supabase's default templates send a LINK. This product needs a CODE.**
-Following the link produces `PKCE code verifier not found in storage`, because
-it opens in whichever browser the mail client hands it to, and the verifier
-cookie lives in the browser that made the request. A typed code carries no
-browser state and works from any device, which is why it is the only route in.
+**Supabase's defaults send a LINK. This product needs a CODE.** Following the
+link produces `PKCE code verifier not found in storage`, because it opens in
+whichever browser the mail client hands it to while the verifier cookie lives
+in the browser that made the request.
 
-Two templates, not one. Supabase picks by whether the account already exists:
+Two templates, because Supabase picks by whether the account already exists:
 
-| Template | When it fires | Must contain |
+| Template | Fires when | Must contain |
 | --- | --- | --- |
-| **Confirm signup** | address we have never seen — *everyone, once* | `{{ .Token }}` |
-| **Magic Link** | address that already has an account | `{{ .Token }}` |
+| **Confirm signup** | address never seen — *everyone, once* | `{{ .Token }}` |
+| **Magic Link** | account already exists | `{{ .Token }}` |
 
-Fixing only Magic Link is the easy mistake: it looks fixed when you test with
-your own account and sends a link to every genuinely new person.
+Fixing only Magic Link looks correct when you test with your own account and
+sends a link to every genuinely new person.
 
-`config.toml` configures these for LOCAL only. The deployed project reads its
-templates from **Authentication → Emails**, so paste the bodies from
-`supabase/templates/` into both, there. Subject for both: *Your Kicka sign-in
-code*.
+Both live in `supabase/templates/`. `config.toml` points at them for local; the
+deployed project keeps its own copies, so after editing either one:
 
-> `supabase config push` would do it in one command and pushes the WHOLE file,
-> including the locally generated `SUPABASE_SMS_HOOK_SECRET` and every rate
-> limit. On a project whose SMTP, Google credentials and SMS hook were set in
-> the dashboard, that overwrites working settings with local ones. Paste the
-> two templates instead.
+```bash
+pnpm templates:push
+```
 
-After changing them, sign in with an address that has **never** been used, not
-one that already exists — that is the path the default template breaks.
+`pnpm templates:check` compares without writing and exits non-zero on drift,
+which is what to run if production ever starts sending links again.
+
+The script refuses to push a template containing `{{ .ConfirmationURL }}` or
+missing `{{ .Token }}`, and patches one field at a time: the Management API
+sits behind a WAF that answers a burst of writes with `403 error code: 1010`,
+a Cloudflare block that looks exactly like a rejected payload. Keep the HTML
+plain — no comments, no `<script>`, no `<style>` blocks — for the same reason.
 
 ### The password grant
 
