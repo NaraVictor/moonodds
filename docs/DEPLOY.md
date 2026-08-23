@@ -246,6 +246,35 @@ registering ours is the usual cause of `redirect_uri_mismatch`.
 `/api/auth/sms-hook` and the phone handling all remain, so re-enabling it is a
 form change plus the hook configuration in **Authentication → Hooks**.
 
+### URL configuration, or Google sends people to localhost
+
+**Set this before testing Google in production.** Supabase validates every
+`redirect_to` against an allow-list, and a URL that is not on it is not
+rejected with an error — it is silently discarded and replaced with **Site
+URL**. A project that has never had its URLs set still carries the scaffold
+default, so a production sign-in completes at Google, comes back, and lands on
+`http://localhost:3000/?code=...`: the root path, because it was never our
+callback being followed.
+
+In **Authentication → URL Configuration**:
+
+| Field | Value |
+| --- | --- |
+| Site URL | `https://kicka.app` |
+| Redirect URLs | `https://kicka.app/auth/callback` |
+| | `https://*-kicka.vercel.app/auth/callback` (previews) |
+| | `http://localhost:3100/auth/callback` (local against this project) |
+
+The silent-discard behaviour is the allow-list doing its job — it is what stops
+someone appending `?redirect_to=their-site` and being handed a session. The
+cost is that a missing entry looks like a bug in your app rather than a gap in
+a list, so add the preview pattern at the same time or every branch deploy
+fails the same way and you debug it twice.
+
+Also confirm `NEXT_PUBLIC_SITE_URL` in Vercel. Unset, it falls back to
+`https://kicka.app`, which is right; set to anything else, the app asks
+Supabase for a callback on that host and the allow-list correctly refuses it.
+
 ### The email templates, and the one that catches everyone
 
 **Supabase's default templates send a LINK. This product needs a CODE.**

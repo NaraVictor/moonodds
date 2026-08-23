@@ -159,11 +159,28 @@ max_indexes = 5
 enabled = true
 # The base URL of your website. Used as an allow-list for redirects and for constructing URLs used
 # in emails.
-site_url = "http://127.0.0.1:3000"
+# Where Supabase sends people when it has nowhere better to send them.
+#
+# This was the scaffold default, http://127.0.0.1:3000, on a port this project
+# has never used. That is not cosmetic: when a redirect_to is NOT on the
+# allow-list below, Supabase DISCARDS it and falls back here, which is why
+# Google sign-in in production landed on localhost:3000/?code=... — the root
+# path rather than /auth/callback, because it was never our URL being followed.
+site_url = "http://localhost:3100"
 # The public URL that Auth serves on. Defaults to the API external URL with `/auth/v1` appended.
 # external_url = ""
 # A list of *exact* URLs that auth providers are permitted to redirect to post authentication.
-additional_redirect_urls = ["https://127.0.0.1:3000"]
+# The allow-list. Anything not matching one of these is thrown away rather than
+# honoured, which is exactly what you want — it is the check that stops an
+# attacker appending ?redirect_to=their-site and receiving somebody's session.
+# It also means a MISSING entry fails silently, by sending people to site_url
+# instead of erroring.
+additional_redirect_urls = [
+  "http://localhost:3100/auth/callback",
+  "https://kicka.app/auth/callback",
+  # Vercel preview deployments get a fresh hostname per branch.
+  "https://*-kicka.vercel.app/auth/callback",
+]
 # How long tokens are valid for, in seconds. Defaults to 3600 (1 hour), maximum 604,800 (1 week).
 jwt_expiry = 3600
 # JWT issuer URL. If not set, defaults to auth.external_url.
