@@ -286,7 +286,28 @@ async function resend() {
     headers: { Authorization: `Bearer ${key}` },
     signal: AbortSignal.timeout(20_000),
   });
-  record("resend: key accepted", res.ok, res.ok ? "authenticated" : `HTTP ${res.status}`);
+
+  /*
+   * A send-only key is the CORRECT key to deploy, and it cannot list domains.
+   * Resend answers those with 401 and `restricted_api_key`, which read as a
+   * dead key and would have failed this preflight for the most sensible
+   * possible configuration. A check that goes red on a correct setup is worse
+   * than no check, because the next real failure is the one nobody looks at.
+   */
+  let detail;
+  let ok = res.ok;
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    if (body?.name === "restricted_api_key") {
+      ok = true;
+      detail = "authenticated (send-only key, cannot list domains — expected)";
+    } else {
+      detail = `HTTP ${res.status}${body?.message ? `: ${body.message}` : ""}`;
+    }
+  } else {
+    detail = "authenticated";
+  }
+  record("resend: key accepted", ok, detail);
 }
 
 const suites = { football, anthropic, paystack, resend, sentry };
