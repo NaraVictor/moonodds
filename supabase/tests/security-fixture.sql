@@ -100,6 +100,22 @@ from auth.users u
 where u.email like '%@kicka.test'
 on conflict do nothing;
 
+-- ---------------------------------------------------------------------------
+-- No passwords, on purpose
+--
+-- These accounts were created with crypt('kicka') because the suite used to
+-- sign in with signInWithPassword. It now mints sessions through the admin
+-- API, so the passwords have no remaining use and are removed: an unusable
+-- hash means the password grant cannot be exercised against these accounts
+-- even if it were re-enabled at the provider by accident.
+--
+-- `verify-security` asserts exactly that, so this is not merely tidiness, it is
+-- the state one of the checks is testing for.
+-- ---------------------------------------------------------------------------
+update auth.users
+set encrypted_password = null
+where email like '%@kicka.test';
+
 -- The on_auth_user_created trigger has already made the profiles; set the flags.
 update public.profiles set is_super_admin = true
   where id = '55555555-5555-4555-8555-555555555555';

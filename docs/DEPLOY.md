@@ -226,33 +226,61 @@ refusal appears in the console; a missing dashboard number does not.
 
 ## 2d. Authentication
 
-Passwordless. There is no password field in the product: a one-time code by
-email or SMS, or Google. Three things must be configured or sign-in does not
-work at all.
+Passwordless and email-only. A one-time code to an email address, or Google.
+There is no password field, no sign-up form, no date-of-birth step and no
+confirmation screen: an address plus a code is the whole flow, and a display
+name is generated rather than asked for.
 
-**Email codes** go through whatever SMTP Supabase is configured with. The
-built-in service is rate limited to a handful an hour and is not for
-production — set custom SMTP in **Authentication → Emails**, pointed at the
-same Resend account as `RESEND_API_KEY`.
+**Email codes** go through Supabase's SMTP, not through the app's
+`RESEND_API_KEY`. Set custom SMTP in **Authentication → Emails** pointed at the
+same Resend account. The built-in sender applies a low ceiling of its own
+whatever `email_sent` says in `config.toml`, which is the quiet way this stays
+broken after looking configured.
 
-**Google** needs an OAuth client, with the callback registered as
-`https://sktaghkuppcqzsltuffu.supabase.co/auth/v1/callback` — the SUPABASE
-one, not `https://kicka.app/auth/callback`. The browser reaches Supabase
-first, and registering ours is the usual cause of `redirect_uri_mismatch`.
-Then set `SUPABASE_AUTH_GOOGLE_CLIENT_ID` and `SUPABASE_AUTH_GOOGLE_SECRET`.
+**Google** needs an OAuth client whose registered callback is the SUPABASE one,
+`https://sktaghkuppcqzsltuffu.supabase.co/auth/v1/callback`, not
+`https://kicka.app/auth/callback`. The browser reaches Supabase first;
+registering ours is the usual cause of `redirect_uri_mismatch`.
 
-**SMS codes** need the send-SMS hook, because Supabase speaks natively only to
-Twilio, MessageBird, Vonage and Textlocal, and this product uses mNotify. In
-**Authentication → Hooks**, enable *Send SMS*, point it at
-`https://kicka.app/api/auth/sms-hook`, and copy the generated secret into
-`SUPABASE_SMS_HOOK_SECRET`. Supabase generates and verifies the code; the hook
-only delivers it, so nothing on our side ever holds a code it could leak.
+**SMS is built and switched off** in the UI. The provider hook at
+`/api/auth/sms-hook` and the phone handling all remain, so re-enabling it is a
+form change plus the hook configuration in **Authentication → Hooks**.
 
-> **The password grant is still enabled at the provider.** Removing the UI does
-> not disable it, and the security suite signs in with it to reach its five
-> fixture accounts. Real accounts never set a password, so they have none to
-> guess. Turning it off entirely means rewriting that suite to mint sessions
-> through the admin API first.
+### The password grant
+
+No account has a password. Real accounts never set one, and the security
+fixture nulls the hashes it creates, which `pnpm verify:security` asserts by
+trying the old fixture password and requiring a refusal.
+
+> Do not try to turn this off in `config.toml`. `enable_password_signin = false`
+> reads like the right setting and there is no evidence the CLI honours it:
+> feeding it an entirely invented key passes validation without complaint. Turn
+> the toggle off in **Authentication → Sign In / Providers → Email → Allow
+> password sign-in** instead, where you can see the state you set.
+
+### Appointing an admin
+
+`/office` is guarded server-side on `profiles.is_super_admin`, and a trigger
+stops anyone setting that column on themselves — correct, and it leaves no way
+to appoint the first admin except by hand. `app.super_admin_allowlist` is that
+way.
+
+`naravictor4@gmail.com` is on it. Production currently has zero profiles, so
+nobody is an admin yet: the flag is applied by the sign-up trigger the first
+time that address signs in. To add another, insert the address and re-run the
+promotion, or simply add it before the person signs up.
+
+```sql
+insert into app.super_admin_allowlist (email, note)
+values ('someone@example.com', 'why');
+
+-- Promote them if they already have an account.
+update public.profiles p set is_super_admin = true
+from app.super_admin_allowlist a
+where lower(p.email) = lower(a.email) and p.is_super_admin is distinct from true;
+
+select email, is_super_admin from public.profiles where is_super_admin;
+```
 
 ---
 

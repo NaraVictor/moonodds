@@ -213,6 +213,13 @@ Not gaps against the original, things this port has stubbed deliberately.
 - Terms section 10 still has four blanks: registration number, registered
   address, governing law, and courts. These are facts, not decisions anyone
   can infer, and a governing-law clause guessed at is worse than one absent.
+- **Age is now affirmed but not recorded.** Collecting a date of birth at first
+  sign-in was removed to keep access to a single field, so the only age check
+  left is the per-device 18+ interstitial. That is what the product had before,
+  and it is weaker than what it briefly had: the Terms assert 18+ and there is
+  now no per-account record to point at. A deliberate trade of evidence for
+  speed of entry, recorded because it is the kind of decision that looks like
+  an oversight later.
 - **No cookie-consent banner, and Google Analytics sets cookies.** The policy
   now discloses the analytics, says what each one collects, and points to the
   browser-level opt-out, which is honest but is not consent. Under the UK/EU

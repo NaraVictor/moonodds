@@ -11,13 +11,19 @@ const FIELD =
 /**
  * Sign in, without a password.
  *
- * One form, two steps. There is no separate sign-up: a code proves you control
- * the address, and whether an account already existed behind it is our problem
- * rather than something to make someone choose from a menu before they can
- * start.
+ * One form, two steps, one field. There is no separate sign-up: a code proves
+ * you control the address, and whether an account already existed behind it is
+ * our bookkeeping rather than something to make someone choose from a menu
+ * before they can start.
+ *
+ * Email only for now. SMS works end to end and is switched off here rather
+ * than removed, so turning it back on is a form change.
+ *
+ * Nothing else is collected. No name, no date of birth, no confirmation step:
+ * a name is generated on the way in and can be changed later on the profile
+ * page, which is the only screen where it appears.
  */
 export function SignInForm() {
-  const [channel, setChannel] = useState<"email" | "sms">("email");
   const [identifier, setIdentifier] = useState("");
 
   const [sendState, send, sending] = useActionState(requestCode, undefined);
@@ -28,7 +34,7 @@ export function SignInForm() {
   if (codeSent) {
     return (
       <form action={verify} className="space-y-4">
-        <input type="hidden" name="channel" value={channel} />
+        <input type="hidden" name="channel" value="email" />
         <input type="hidden" name="identifier" value={identifier} />
 
         <div className="rounded-xl border border-border bg-surface-secondary px-3.5 py-3 text-[13px]">
@@ -93,7 +99,7 @@ export function SignInForm() {
       </div>
 
       <form action={send} className="space-y-4">
-        <input type="hidden" name="channel" value={channel} />
+        <input type="hidden" name="channel" value="email" />
 
         {sendState && "error" in sendState && (
           <Alert status="danger">
@@ -101,52 +107,23 @@ export function SignInForm() {
           </Alert>
         )}
 
-        <div
-          className="flex gap-1 rounded-xl border border-border p-1"
-          role="tablist"
-          aria-label="How to receive your code"
-        >
-          {(["email", "sms"] as const).map((c) => (
-            <button
-              key={c}
-              type="button"
-              role="tab"
-              aria-selected={channel === c}
-              onClick={() => setChannel(c)}
-              className={`flex-1 rounded-lg px-3 py-1.5 text-[13px] font-medium transition-colors ${
-                channel === c
-                  ? "bg-accent text-accent-foreground"
-                  : "text-muted hover:text-foreground"
-              }`}
-            >
-              {c === "email" ? "Email" : "Phone"}
-            </button>
-          ))}
-        </div>
-
         <div className="space-y-1.5">
           <label htmlFor="identifier" className="text-sm font-medium">
-            {channel === "email" ? "Email" : "Phone number"}
+            Email
           </label>
           <input
             id="identifier"
             name="identifier"
-            key={channel}
-            type={channel === "email" ? "email" : "tel"}
-            inputMode={channel === "email" ? "email" : "tel"}
-            autoComplete={channel === "email" ? "email" : "tel"}
+            type="email"
+            inputMode="email"
+            autoComplete="email"
             required
+            autoFocus
             value={identifier}
             onChange={(e) => setIdentifier(e.target.value)}
-            placeholder={channel === "email" ? "you@example.com" : "024 123 4567"}
+            placeholder="you@example.com"
             className={FIELD}
           />
-          {channel === "sms" && (
-            <p className="text-[12px] text-muted">
-              Ghanaian numbers can start with 0. Anywhere else, include the
-              country code.
-            </p>
-          )}
         </div>
 
         <Button type="submit" isPending={sending} className="w-full">

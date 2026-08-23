@@ -115,10 +115,11 @@ export async function enforceRateLimit(
 /**
  * The shared counter, with the local one behind it.
  *
- * Deliberately not exported: every caller should go through enforceRateLimit
- * so the fallback behaviour is identical everywhere.
+ * Exported for server actions, which never receive a Request and so cannot use
+ * enforceRateLimit. They were left on the per-instance counter, which mattered
+ * more once one of them became the sign-in itself.
  */
-async function sharedRateLimit(
+export async function sharedRateLimit(
   key: string,
   limit: number,
   windowSeconds: number,

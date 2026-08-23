@@ -44,7 +44,7 @@ function applyFixture() {
   if (!/(localhost|127\.0\.0\.1)/.test(URL_ ?? "")) {
     console.error(
       `\nRefusing to run: NEXT_PUBLIC_SUPABASE_URL is "${URL_}", which is not local.\n` +
-        `This suite loads a fixture with known-password accounts and a super-admin.\n`,
+        `This suite loads a fixture that creates accounts and marks one super-admin.\n`,
     );
     process.exit(1);
   }
@@ -64,7 +64,9 @@ function applyFixture() {
 
 const URL_ = env.NEXT_PUBLIC_SUPABASE_URL;
 const ANON = env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+const SERVICE = env.SUPABASE_SERVICE_ROLE_KEY;
 
+// Kept only so the check below can try it and be refused.
 const PASSWORD = "kicka";
 const ACCOUNTS = {
   passHolder: "pass@kicka.test",
@@ -88,10 +90,40 @@ function anonClient() {
   });
 }
 
+/**
+ * A session for a fixture account, without a password.
+ *
+ * This used to call signInWithPassword, which was the last thing in the
+ * codebase that needed the password grant to exist. Now that no real account
+ * has a password and the grant is off, the suite mints its own session the way
+ * an operator would: the admin API issues a one-time link, and the anon client
+ * redeems the token from it.
+ *
+ * Nothing about what is being tested changes. These checks are assertions
+ * about what a session may READ, and a session is a session however it was
+ * obtained; the sign-in path itself is exercised separately, below.
+ */
 async function signedIn(email) {
+  const admin = createClient(URL_, SERVICE, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+
+  const { data, error } = await admin.auth.admin.generateLink({
+    type: "magiclink",
+    email,
+  });
+  if (error) throw new Error(`could not mint a link for ${email}: ${error.message}`);
+
+  const tokenHash = data?.properties?.hashed_token;
+  if (!tokenHash) throw new Error(`no token in the link for ${email}`);
+
   const c = anonClient();
-  const { error } = await c.auth.signInWithPassword({ email, password: PASSWORD });
-  if (error) throw new Error(`sign-in failed for ${email}: ${error.message}`);
+  const { error: verifyErr } = await c.auth.verifyOtp({
+    token_hash: tokenHash,
+    type: "magiclink",
+  });
+  if (verifyErr) throw new Error(`sign-in failed for ${email}: ${verifyErr.message}`);
+
   return c;
 }
 
@@ -346,6 +378,27 @@ async function main() {
   }
 
   // --- report ---------------------------------------------------------------
+
+  // --- 6b. The password grant must be dead -------------------------------
+  {
+    /*
+     * The product removed every password field, which is not the same thing as
+     * the grant being unusable: Supabase will still accept signInWithPassword
+     * for any account that has a hash. Real accounts never set one and the
+     * fixture accounts have had theirs nulled, so this proves the difference
+     * between "we stopped offering passwords" and "passwords do not work".
+     */
+    const c = anonClient();
+    const { data, error } = await c.auth.signInWithPassword({
+      email: ACCOUNTS.admin,
+      password: PASSWORD,
+    });
+    check(
+      "the admin account cannot be reached with its old password",
+      Boolean(error) && !data?.session,
+      error ? `refused: ${error.message}` : "SIGNED IN — the password grant is live",
+    );
+  }
 
   // --- 7. Office admin surface -------------------------------------------
   const APP = "http://localhost:3100";

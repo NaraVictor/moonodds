@@ -229,6 +229,23 @@ web3 = 30
 # secret = ""
 
 [auth.email]
+#
+# THE PASSWORD GRANT IS NOT DISABLED FROM THIS FILE.
+#
+# `enable_password_signin = false` looks like it belongs here, and there is no
+# evidence it does anything: this CLI accepts unknown keys in config.toml
+# without complaint, verified by feeding it an invented one and watching it
+# pass validation. A setting that might be inert is worse than none, because it
+# reads as protection in a diff and in a review.
+#
+# What makes the grant unusable is that no account has a password. Real
+# accounts never set one, sign-up collects only an address, and the security
+# fixture nulls the hashes it used to create. verify-security asserts it by
+# trying the old fixture password and requiring a refusal.
+#
+# Turn the provider toggle off too: Authentication -> Sign In / Providers ->
+# Email -> Allow password sign-in. See docs/DEPLOY.md.
+#
 # Allow/disallow new user signups via email to your project.
 enable_signup = true
 # If enabled, a user will be required to confirm any email change on both the old, and new email
