@@ -11,7 +11,10 @@ import { Skeleton } from "@heroui/react/skeleton";
 import { Check, ShieldCheck, Sparkles } from "@/components/ui/icons";
 import { useAccessState, useLeagueOptions } from "@/lib/queries";
 import { LinkButton } from "@/components/ui/link-button";
-import { extraPicksPriceUsd } from "@/lib/pricing";
+import { extraPicksPriceUsd ,
+  EXTRA_PICK_PRICE_PER_GROUP_USD,
+  EXTRA_PICK_GAMES_PER_GROUP,
+} from "@/lib/pricing";
 import { openPaystack } from "@/lib/paystack-popup";
 
 type Kind = "day-pass" | "extra-picks";
@@ -21,9 +24,12 @@ type Stage = "idle" | "initialising" | "paying" | "verifying" | "done";
  * Checkout.
  *
  * Two calls: POST initialises and records the reference against the buyer,
- * PATCH verifies and activates. With MOCK_PROVIDERS on there is no Paystack
- * popup, the "pay" step is simulated so the whole flow stays walkable without
- * real money moving.
+ * PATCH verifies and activates. Between them the customer completes Paystack's
+ * own popup, so no card detail ever reaches this code or our servers.
+ *
+ * PATCH is the fast path rather than the authoritative one. The Paystack
+ * webhook and the reconciliation sweep call the same settlePayment, so a
+ * customer who pays and then closes the tab still gets what they bought.
  */
 export function CheckoutClient({ kind }: { kind: Kind }) {
   const router = useRouter();
@@ -68,9 +74,9 @@ export function CheckoutClient({ kind }: { kind: Kind }) {
 
       setStage("paying");
 
-      // Mocked providers return no access code, so there is no popup to open
-      // and the flow goes straight to verification. With a real key this is the
-      // Paystack window, and nothing is charged until the customer completes it.
+      // Paystack's own window. Nothing is charged until the customer completes
+      // it, and the guard stays because a provider that returns no access code
+      // should skip to verification rather than throw at the customer.
       if (init.accessCode) {
         const outcome = await openPaystack(init.accessCode);
         if (outcome.status === "cancelled") {
@@ -215,7 +221,8 @@ export function CheckoutClient({ kind }: { kind: Kind }) {
               <p className="display text-4xl">${priceUsd}</p>
               {kind === "extra-picks" && (
                 <p className="text-xs text-muted">
-                  {games} games · $2 per group of 3
+                  {games} games · ${EXTRA_PICK_PRICE_PER_GROUP_USD} per group of{" "}
+                  {EXTRA_PICK_GAMES_PER_GROUP}
                 </p>
               )}
             </div>
@@ -250,9 +257,8 @@ export function CheckoutClient({ kind }: { kind: Kind }) {
           <div className="flex items-start gap-2 text-[11px] leading-relaxed text-muted">
             <ShieldCheck className="mt-0.5 h-3.5 w-3.5 flex-none" />
             <p>
-              Charged in GHS at the live rate. Payments are simulated while
-              <code className="mx-1 font-mono">MOCK_PROVIDERS=true</code>, no
-              card is taken and no money moves.
+              Charged in GHS at the live exchange rate. Card details go straight
+              to Paystack and never touch our servers.
             </p>
           </div>
         </Card.Content>

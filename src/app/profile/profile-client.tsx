@@ -22,6 +22,9 @@ import {
 } from "@/lib/queries";
 import { formatPercent } from "@/lib/format";
 import { LinkButton } from "@/components/ui/link-button";
+import {
+  PASS_PRICE_USD,
+} from "@/lib/pricing";
 
 const CHANNELS = [
   { key: "email_enabled", label: "Email", detail: "To your account address", Icon: Mail },
@@ -164,7 +167,7 @@ export function ProfileClient() {
                       : "No active pass"}
                   </p>
                   <p className="mt-0.5 text-[13px] text-muted">
-                    Unlock the full board for $3.
+                    Unlock the full board for ${PASS_PRICE_USD}.
                   </p>
                 </div>
                 <LinkButton href="/checkout/day-pass" size="sm" variant="primary">

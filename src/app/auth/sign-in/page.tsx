@@ -19,6 +19,10 @@ export const metadata: Metadata = {
  * There is no separate "create an account" page any more. A one-time code
  * proves control of an address; whether a row already existed behind it is our
  * bookkeeping, not a question to put to somebody before they can start.
+ *
+ * The heading says what the page gives you rather than which of two things you
+ * are doing, because the distinction it used to offer is one the product no
+ * longer makes.
  */
 export default async function SignInPage({
   searchParams,
@@ -42,9 +46,10 @@ export default async function SignInPage({
         </Link>
 
         <div className="space-y-1.5 text-center">
-          <h1 className="display text-2xl">Sign in or join</h1>
+          <h1 className="display text-2xl">Access your account</h1>
           <p className="text-sm text-muted">
-            Same door either way. We&rsquo;ll send you a code.
+            New or returning, it&rsquo;s the same door. We&rsquo;ll send you a
+            code.
           </p>
         </div>
 

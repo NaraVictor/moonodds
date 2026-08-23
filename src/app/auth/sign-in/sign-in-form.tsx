@@ -6,8 +6,16 @@ import { Alert } from "@/components/ui/alert";
 import { PendingButton } from "@/components/ui/pending-button";
 import { requestCode, verifyCode, signInWithGoogle } from "@/lib/auth-actions";
 
+/**
+ * Both fields centre their content, including the placeholder.
+ *
+ * The code field was already centred and the email was not, which read as an
+ * inconsistency between two steps of one flow rather than a deliberate
+ * difference. There is a single input on each step, so there is no column edge
+ * for a left-aligned value to line up with.
+ */
 const FIELD =
-  "w-full rounded-xl border border-field-border bg-field px-3.5 py-2.5 text-sm text-field-foreground outline-none placeholder:text-field-placeholder focus-visible:ring-2 focus-visible:ring-focus";
+  "w-full rounded-xl border border-field-border bg-field px-3.5 py-3 text-sm text-center text-field-foreground outline-none placeholder:text-field-placeholder focus-visible:ring-2 focus-visible:ring-focus";
 
 /**
  * Sign in, without a password.
@@ -64,7 +72,11 @@ export function SignInForm() {
           />
         </div>
 
-        <PendingButton isPending={verifying} pendingLabel="Checking…" className="w-full">
+        <PendingButton
+          isPending={verifying}
+          pendingLabel="Checking…"
+          className="h-[3.3rem] w-full text-[15px]"
+        >
           Continue
         </PendingButton>
 
@@ -85,7 +97,7 @@ export function SignInForm() {
   return (
     <div className="space-y-5">
       <form action={signInWithGoogle}>
-        <Button type="submit" variant="secondary" className="w-full">
+        <Button type="submit" variant="secondary" className="h-[3.3rem] w-full text-[15px]">
           <GoogleMark />
           Continue with Google
         </Button>
@@ -123,7 +135,11 @@ export function SignInForm() {
           />
         </div>
 
-        <PendingButton isPending={sending} pendingLabel="Sending…" className="w-full">
+        <PendingButton
+          isPending={sending}
+          pendingLabel="Sending…"
+          className="h-[3.3rem] w-full text-[15px]"
+        >
           Send me a code
         </PendingButton>
       </form>

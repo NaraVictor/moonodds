@@ -29,6 +29,12 @@ import {
 import { useBoardView } from "@/lib/view-preference";
 import { formatPercent } from "@/lib/format";
 import type { Market, Pick, UnlockedPick } from "@/lib/types";
+import {
+  PASS_PRICE_USD,
+  EXTRA_PICK_GAMES_PER_LEAGUE,
+  EXTRA_PICK_PRICE_PER_GROUP_USD,
+  EXTRA_PICK_GAMES_PER_GROUP,
+} from "@/lib/pricing";
 
 /**
  * The board.
@@ -348,7 +354,7 @@ export function PicksHome() {
                   : "One pass, one day, every prediction. No subscription."}
               </p>
               <LinkButton href="/checkout/day-pass" size="lg" variant="primary" className="mt-5">
-                Unlock today · $3
+                Unlock today · ${PASS_PRICE_USD}
               </LinkButton>
             </div>
           )}
@@ -377,7 +383,9 @@ export function PicksHome() {
                 </div>
               ) : (
                 <div className="rounded-[1.5rem] border border-border bg-surface p-10 text-center text-sm text-muted">
-                  Pick up to 3 games from any league we cover, $2 per group of 3.
+                  Pick up to {EXTRA_PICK_GAMES_PER_LEAGUE} games from any league we
+                  cover, ${EXTRA_PICK_PRICE_PER_GROUP_USD} per group of{" "}
+                  {EXTRA_PICK_GAMES_PER_GROUP}.
                 </div>
               )}
             </section>

@@ -136,7 +136,7 @@ const FAQS: { q: string; a: React.ReactNode; plain: string }[] = [
       </>
     ),
     plain:
-      "The competitions selected in the daily fetch, currently six major European leagues. Coverage depends on fixtures being available for the day.",
+      "The major European competitions by default, with more added over time. The league filter on the board shows exactly what is live on any given day.",
   },
 ];
 
