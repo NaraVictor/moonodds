@@ -32,7 +32,7 @@ export default async function PolicyPage() {
         eyebrow="Legal"
         title="Privacy policy"
         intro="We collect what the product needs to work, and nothing we'd struggle to justify."
-        updated="22 August 2026"
+        updated="23 August 2026"
       >
         <Section title="What we collect">
           <p>
@@ -50,8 +50,9 @@ export default async function PolicyPage() {
             profile of you. Google Analytics does use cookies and does assign
             your browser an identifier, and it receives your approximate
             location, derived from your IP address, along with your device and
-            browser type. Neither one is given your email, your phone number,
-            your payment details or the slips you save.
+            browser type — <strong>and it only runs if you allow it</strong>.
+            Neither one is given your email, your phone number, your payment
+            details or the slips you save.
           </p>
           <p>
             <strong className="text-foreground">If you create an account:</strong> your
@@ -124,11 +125,17 @@ export default async function PolicyPage() {
             preference held on your device.
           </p>
           <p>
-            For analytics, most browsers can block third-party scripts and
-            cookies, and Google publishes a browser add-on that opts you out of
-            Google Analytics everywhere. Any tracker blocker will stop it here.
-            Nothing in the product depends on analytics, so blocking it costs
-            you no functionality.
+            Google Analytics is off until you allow it. We ask once, in a bar at
+            the bottom of the page that blocks nothing, and if you ignore it the
+            answer stays no. You can change your mind by clearing this
+            site&rsquo;s storage in your browser, which makes us ask again.
+            Nothing in the product depends on analytics, so declining costs you
+            no functionality.
+          </p>
+          <p>
+            Vercel&rsquo;s page-view counting is not covered by that choice,
+            because it sets no cookie, stores no identifier and builds no
+            profile of you. Any tracker blocker will stop both.
           </p>
         </Section>
 

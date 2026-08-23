@@ -2,11 +2,13 @@ import type { Metadata, Viewport } from "next";
 import { Sora, Plus_Jakarta_Sans } from "next/font/google";
 import { Providers } from "./providers";
 import { AgeGate } from "@/components/legal/age-gate";
+import { ConsentBar } from "@/components/legal/consent-bar";
+import { AnalyticsGate } from "@/components/legal/analytics-gate";
 import { THEME_INIT_SCRIPT } from "@/lib/theme";
+import { CONSENT_INIT_SCRIPT } from "@/lib/consent";
 import { SITE_URL } from "@/lib/site-url";
 import { BetSlipFab, BetSlipSheet } from "@/components/slip/bet-slip";
 import { Analytics } from "@vercel/analytics/next";
-import { GoogleAnalytics } from "@next/third-parties/google";
 import { GA_MEASUREMENT_ID, analyticsEnabled } from "@/lib/analytics";
 import "./globals.css";
 
@@ -127,6 +129,11 @@ export default function RootLayout({
     >
       <head>
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
+        {/* Consent Mode defaults, before anything Google loads further down.
+            Order is the whole mechanism: set these after gtag.js initialises
+            and it has already written its cookie, at which point asking is
+            theatre. */}
+        <script dangerouslySetInnerHTML={{ __html: CONSENT_INIT_SCRIPT }} />
       </head>
       <body className="min-h-full flex flex-col bg-background text-foreground">
         {/* Site-level structured data. The SearchAction is what lets a result
@@ -159,6 +166,7 @@ export default function RootLayout({
           }}
         />
         <AgeGate />
+        <ConsentBar />
         {/* Slip lives at the root so it survives navigation, it has to follow
             you from the board to a detail page and back. */}
         <Providers>
@@ -178,11 +186,16 @@ export default function RootLayout({
             Neither of these works without the Content-Security-Policy entries
             in next.config.ts. A blocked analytics script fails exactly as
             silently as a missing one: no error, no data, just a dashboard that
-            stays at zero and reads like nobody visited. */}
+            stays at zero and reads like nobody visited.
+
+            Google additionally waits for consent: AnalyticsGate renders
+            nothing until someone allows it, so the tag is never requested
+            rather than merely being denied cookies. Vercel's is cookieless
+            and runs regardless. */}
         {analyticsEnabled() && (
           <>
             <Analytics />
-            {GA_MEASUREMENT_ID && <GoogleAnalytics gaId={GA_MEASUREMENT_ID} />}
+            <AnalyticsGate gaId={GA_MEASUREMENT_ID} />
           </>
         )}
       </body>

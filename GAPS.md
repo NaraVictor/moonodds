@@ -220,16 +220,17 @@ Not gaps against the original, things this port has stubbed deliberately.
   now no per-account record to point at. A deliberate trade of evidence for
   speed of entry, recorded because it is the kind of decision that looks like
   an oversight later.
-- **No cookie-consent banner, and Google Analytics sets cookies.** The policy
-  now discloses the analytics, says what each one collects, and points to the
-  browser-level opt-out, which is honest but is not consent. Under the UK/EU
-  GDPR and Ghana's Data Protection Act, non-essential cookies are supposed to
-  be opt-in *before* they are set, and the tag currently fires on first paint.
-  Vercel Web Analytics is the easier half: it sets no cookies and builds no
-  profile, so it is defensible without a banner. Google Analytics is the part
-  that needs either a consent gate or Google Consent Mode. Flagged rather than
-  built, because a banner is a product decision about the first thing every
-  visitor sees.
+- ~~No cookie-consent banner~~ **Closed.** Google Analytics is opt-in: the tag
+  is not requested at all until someone allows it, and Consent Mode defaults
+  sit in `<head>` as a second line in case it ever loads by another route.
+  Verified with cookies and storage cleared, no script request, no `_ga`
+  cookie, no ping; on Allow the tag loads and reports `gcs=G101` without a
+  reload. Consent Mode alone would have been defensible, since a denied tag
+  sends only a cookieless ping, but not requesting it is easier to defend than
+  explaining what a cookieless ping is. Vercel's counter runs regardless: no
+  cookie, no identifier, no profile. The bar is non-blocking by design, because
+  a second interruption after the age gate would cost more than the analytics
+  are worth.
 - The privacy policy never names a data controller. It did not before the
   rename either, but now that the operating entity is known, it is a blank that
   can be filled rather than one that could not.
