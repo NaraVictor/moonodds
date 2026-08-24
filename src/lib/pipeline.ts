@@ -885,12 +885,20 @@ ${briefs.join("\n")}`;
     .in("fixture_id", fixtureIds);
 
   const existing = new Map<string, NonNullable<typeof existingRows>[number]>();
+  const superseded: NonNullable<typeof existingRows> = [];
   for (const row of existingRows ?? []) {
     // Keep the strongest where a previous run left several, so the incoming
     // pick has to beat the best of them rather than whichever sorted first.
     const held = existing.get(row.fixture_id as string);
-    if (!held || Number(row.confidence_score) > Number(held.confidence_score)) {
+    if (!held) {
       existing.set(row.fixture_id as string, row);
+      continue;
+    }
+    if (Number(row.confidence_score) > Number(held.confidence_score)) {
+      existing.set(row.fixture_id as string, row);
+      superseded.push(held);
+    } else {
+      superseded.push(row);
     }
   }
 
@@ -903,11 +911,46 @@ ${briefs.join("\n")}`;
    * pick scores higher: the better call is not worth changing what somebody
    * already bought.
    */
-  const heldIds = [...existing.values()].map((r) => r.id as string);
+  // Every candidate, not only the strongest per fixture: the losers below are
+  // deleted, and a delete needs the same "is anyone holding this" answer that a
+  // replace does.
+  const heldIds = [...existing.values(), ...superseded].map((r) => r.id as string);
   const { data: legs } = heldIds.length
     ? await db.from("slip_legs").select("prediction_id").in("prediction_id", heldIds)
     : { data: [] as { prediction_id: string }[] };
   const slipped = new Set((legs ?? []).map((l) => l.prediction_id as string));
+
+  /*
+   * Duplicates left behind before one-pick-per-fixture existed.
+   *
+   * Keeping only the strongest in `existing` decides which row this run will
+   * compete with, but it does not remove the others — so a fixture that
+   * collected three picks over three runs kept showing all three on the board,
+   * and the rule was enforced going forward while the backlog stayed live.
+   *
+   * The same two exemptions as everywhere else: a pick a customer holds, and a
+   * pick that has been settled or flagged. Deleting either would rewrite
+   * something a person has acted on. Anything left is a row no one has seen and
+   * nothing points at.
+   */
+  const removable = superseded
+    .filter((r) => r.status === "pending" && !slipped.has(r.id as string))
+    .map((r) => r.id as string);
+
+  let cleaned = 0;
+  if (removable.length) {
+    const { error } = await db.from("predictions").delete().in("id", removable);
+    if (error) {
+      // Not fatal: the run's own picks are still correct, and a stale duplicate
+      // is the state we were already in.
+      console.warn(`[engine] could not clear ${removable.length} duplicate pick(s):`, error.message);
+    } else {
+      cleaned = removable.length;
+      console.warn(
+        `[engine] cleared ${cleaned} duplicate pick(s) left by earlier runs on today's board`,
+      );
+    }
+  }
 
   let written = 0;
   let rejected = 0;
@@ -1086,6 +1129,7 @@ ${briefs.join("\n")}`;
     rejected,
     configFallbacks: rendered.fallbacks.length,
     warnings: rendered.warnings.length,
+    duplicatesCleared: cleaned,
     fixtures: fixtures.length,
     modelDurationMs,
     durationMs,

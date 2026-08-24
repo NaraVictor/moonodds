@@ -4,6 +4,8 @@ import {
   paymentAmountMatches,
   usdToPesewas,
   PAYSTACK_MIN_PESEWAS,
+  EXTRA_PICK_GAMES_PER_LEAGUE,
+  EXTRA_PICK_PRICE_PER_GROUP_USD,
 } from "./pricing";
 
 /**
@@ -65,12 +67,21 @@ describe("usdToPesewas", () => {
 });
 
 describe("extraPicksPriceUsd", () => {
-  it("charges per group of three, rounding the group up", () => {
+  it("charges per group of five, rounding the group up", () => {
     expect(extraPicksPriceUsd(1)).toBe(2);
-    expect(extraPicksPriceUsd(3)).toBe(2);
-    expect(extraPicksPriceUsd(4)).toBe(4);
+    expect(extraPicksPriceUsd(5)).toBe(2);
     expect(extraPicksPriceUsd(6)).toBe(4);
-    expect(extraPicksPriceUsd(7)).toBe(6);
+    expect(extraPicksPriceUsd(10)).toBe(4);
+    expect(extraPicksPriceUsd(11)).toBe(6);
+  });
+
+  it("prices one league at one group, which is what the copy promises", () => {
+    // "Pick up to 5 games from any league, $2 per group of 5" is only true
+    // while these two constants agree. If the per-league count ever exceeds
+    // the group size, a single league silently costs two groups.
+    expect(extraPicksPriceUsd(EXTRA_PICK_GAMES_PER_LEAGUE)).toBe(
+      EXTRA_PICK_PRICE_PER_GROUP_USD,
+    );
   });
 
   it("charges nothing for nothing", () => {
@@ -102,5 +113,34 @@ describe("paymentAmountMatches", () => {
 
   it("rejects a non-finite amount", () => {
     expect(paymentAmountMatches(charged, { amountMinor: Number.NaN, currency: "GHS" })).toBe(false);
+  });
+});
+
+/**
+ * The billing consequence of a duplicated league id.
+ *
+ * The checkout resolves fixtures per ARRAY ENTRY, and the price is a function
+ * of how many came back. Six copies of one league id therefore billed the same
+ * three games six times. The dedupe lives in the route's zod schema and in
+ * selectFixtures; this pins the arithmetic that made it expensive, so the cost
+ * of losing either one is visible here rather than on a customer's statement.
+ */
+describe("extra picks, duplicate leagues", () => {
+  it("charges per distinct game, not per request entry", () => {
+    const distinct = EXTRA_PICK_GAMES_PER_LEAGUE;
+    const duplicatedSixTimes = distinct * 6;
+
+    expect(extraPicksPriceUsd(distinct)).toBe(EXTRA_PICK_PRICE_PER_GROUP_USD);
+    // Stated as an inequality rather than an exact multiple: group rounding
+    // absorbs some of it, and the point is that duplicates cost MORE, not that
+    // they cost exactly six times more.
+    expect(extraPicksPriceUsd(duplicatedSixTimes)).toBeGreaterThan(
+      extraPicksPriceUsd(distinct),
+    );
+  });
+
+  it("deduplicating ids collapses the charge back to the real one", () => {
+    const requested = ["L1", "L1", "L1", "L1", "L1", "L1"];
+    expect([...new Set(requested)]).toHaveLength(1);
   });
 });

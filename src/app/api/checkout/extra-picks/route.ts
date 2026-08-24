@@ -22,7 +22,28 @@ import { SITE_URL } from "@/lib/site-url";
  * is what get_my_extra_picks() later reads.
  */
 
-const Init = z.object({ leagueIds: z.array(z.uuid()).min(1).max(6) });
+/**
+ * `leagueIds` is deduplicated, and that is a billing control.
+ *
+ * Nothing enforced uniqueness, and selectFixtures resolves fixtures per ARRAY
+ * ENTRY rather than per distinct league. Six copies of one league id therefore
+ * resolved the same three fixtures six times, and the price is a function of
+ * how many fixtures came back — so the same three games were billed at six
+ * times the price, and the order was written with eighteen fixture ids and a
+ * num_games of eighteen to match.
+ *
+ * The UI does not send duplicates today, which is exactly why this went
+ * unnoticed: it takes a double-submit or one bad render to overcharge somebody,
+ * and nothing downstream would have flagged it, because every figure on the
+ * payment row agrees with every other one.
+ */
+const Init = z.object({
+  leagueIds: z
+    .array(z.uuid())
+    .min(1)
+    .max(6)
+    .transform((ids) => [...new Set(ids)]),
+});
 
 async function selectFixtures(
   db: ReturnType<typeof createServiceClient>,
@@ -33,7 +54,11 @@ async function selectFixtures(
     Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1),
   );
 
-  const chosen: string[] = [];
+  // A Set, not an array. The caller is deduplicated above, but this function
+  // is what the price is computed from, so it does not rely on that: two
+  // different leagues cannot share a fixture today, and if that ever changes
+  // the charge must not double.
+  const chosen = new Set<string>();
   for (const leagueId of leagueIds) {
     const { data } = await db
       .from("fixtures")
@@ -45,9 +70,9 @@ async function selectFixtures(
       .order("fixture_date")
       .limit(EXTRA_PICK_GAMES_PER_LEAGUE);
 
-    chosen.push(...(data ?? []).map((f) => f.id));
+    for (const f of data ?? []) chosen.add(f.id as string);
   }
-  return chosen;
+  return [...chosen];
 }
 
 export async function POST(request: Request) {

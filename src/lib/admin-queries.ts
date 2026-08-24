@@ -19,7 +19,8 @@ export const adminKeys = {
   runs: ["office", "runs"] as const,
   jobs: ["office", "jobs"] as const,
   catalog: ["office", "catalog"] as const,
-  predictions: (page: number) => ["office", "predictions", page] as const,
+  // Not keyed on the page: one fetch backs every page. See useAdminPredictions.
+  predictions: ["office", "predictions"] as const,
   ungraded: ["office", "ungraded"] as const,
   board: ["office", "board"] as const,
   fx: ["office", "fx"] as const,
@@ -370,9 +371,24 @@ function asOne<T>(v: T | T[] | null | undefined): T | null {
 
 const PAGE_SIZE = 25;
 
-export function useAdminPredictions(page: number) {
+/**
+ * Every prediction, fetched once.
+ *
+ * `get_picks_by_status` has no limit or offset — it serialises the whole table
+ * into one JSON document — and this hook used to key its cache on the page
+ * number while ignoring the page in the query. So turning to page 2 was not
+ * paging through a cached result; it was fetching every prediction ever made,
+ * again, to display twenty-five of them. Ten pages, ten full fetches.
+ *
+ * Keyed without the page now, so the fetch happens once and paging is free.
+ * That is a mitigation and not the cure: the payload still grows with the
+ * table, and the real fix is limit/offset on the RPC itself. Worth doing when
+ * the row count makes it worth a migration — this stops the cost multiplying by
+ * however many pages someone clicks through in the meantime.
+ */
+function useAllAdminPredictions() {
   return useQuery({
-    queryKey: adminKeys.predictions(page),
+    queryKey: adminKeys.predictions,
     queryFn: async () => {
       const supabase = createClient();
       // Admins read predictions through the same gated RPC everyone uses,
@@ -382,14 +398,25 @@ export function useAdminPredictions(page: number) {
         filter: "all",
       });
       if (error) throw error;
-      const picks = (data as { picks: unknown[] })?.picks ?? [];
-      return {
-        rows: picks.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE),
-        total: picks.length,
-        pageSize: PAGE_SIZE,
-      };
+      return (data as { picks: unknown[] })?.picks ?? [];
     },
   });
+}
+
+export function useAdminPredictions(page: number) {
+  const query = useAllAdminPredictions();
+  const picks = query.data ?? [];
+
+  return {
+    ...query,
+    data: query.data
+      ? {
+          rows: picks.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE),
+          total: picks.length,
+          pageSize: PAGE_SIZE,
+        }
+      : undefined,
+  };
 }
 
 /** Every Office write funnels through here so errors surface consistently. */

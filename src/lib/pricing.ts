@@ -61,8 +61,20 @@ export const MAX_USD_TO_GHS = 60;
 /** Paystack rejects anything under GHS 1 on a cedi transaction. */
 export const PAYSTACK_MIN_PESEWAS = 100;
 
-export const EXTRA_PICK_GAMES_PER_LEAGUE = 3;
-export const EXTRA_PICK_GAMES_PER_GROUP = 3;
+/**
+ * How many games one league unlocks, and how many one $2 group covers.
+ *
+ * These two are equal on purpose and the customer-facing copy reads them
+ * together: "up to 5 games from any league, $2 per group of 5". Raising only
+ * the first would keep the group at three and quietly turn a $2 league into a
+ * $4 one — more games at double the price, which is not the offer.
+ *
+ * So they move together. If they ever need to diverge, the copy in
+ * picks-home.tsx and checkout-client.tsx has to say so explicitly, because
+ * today it presents them as one number.
+ */
+export const EXTRA_PICK_GAMES_PER_LEAGUE = 5;
+export const EXTRA_PICK_GAMES_PER_GROUP = 5;
 export const EXTRA_PICK_PRICE_PER_GROUP_USD = 2;
 
 /**
@@ -98,7 +110,7 @@ export function usdToPesewas(usd: number, rate: number): number {
   return pesewas;
 }
 
-/** $2 per group of up to 3 games. 1 to 3 games is $2, 4 to 6 is $4. */
+/** $2 per group of up to 5 games. 1 to 5 games is $2, 6 to 10 is $4. */
 export function extraPicksPriceUsd(numGames: number): number {
   if (!Number.isFinite(numGames) || numGames <= 0) return 0;
   return (

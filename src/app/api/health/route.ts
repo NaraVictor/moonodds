@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
+import { enforceRateLimit } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 
@@ -26,7 +27,18 @@ const EXPECTED_CRON_JOBS = 10;
  *
  * Public, and safe to be: it reports whether values are configured and whether
  * they still look like the local defaults, never the values themselves.
+ *
+ * Two things that follow from being public and were missing. It is rate limited
+ * like every other unauthenticated route — it is the only one here that does
+ * four database round trips per call, which makes it the cheapest amplifier in
+ * the app. And database errors are reported as a fixed string rather than
+ * passed through: a Postgres message names tables, columns and sometimes the
+ * value that failed, and "never the values themselves" has to include the ones
+ * that arrive inside an error. The detail still reaches the server log.
  */
+
+/** Anything a caller must not be told, said once. */
+const DB_ERROR = "query failed, see server logs";
 
 type Check = {
   name: string;
@@ -35,7 +47,15 @@ type Check = {
   detail: string;
 };
 
-export async function GET() {
+export async function GET(request: Request) {
+  const limited = await enforceRateLimit(request, {
+    scope: "health",
+    limit: 30,
+    windowSeconds: 60,
+    message: "Too many health checks.",
+  });
+  if (limited) return limited;
+
   const checks: Check[] = [];
   const isProd = process.env.NODE_ENV === "production";
 
@@ -151,13 +171,15 @@ export async function GET() {
       .eq("status", "active")
       .maybeSingle();
 
+    if (cfgErr) console.error("[health] db:engine_config:", cfgErr);
+
     const promptChars = (cfg?.system_prompt as string | undefined)?.length ?? 0;
     add(
       "db:engine_config",
       Boolean(cfg) && promptChars > 1000,
       "blocking",
       cfgErr
-        ? cfgErr.message
+        ? DB_ERROR
         : !cfg
           ? "no ACTIVE engine config — every daily-picks run will skip and report success"
           : promptChars <= 1000
@@ -183,15 +205,44 @@ export async function GET() {
       deadCount ? `${deadCount} job(s) exhausted their retries and were parked` : "none",
     );
 
-    const { error: reachErr } = await db.from("leagues").select("id").limit(1);
-    add("db:reachable", !reachErr, "blocking", reachErr ? reachErr.message : "ok");
-  } catch (err) {
+    /*
+     * Work that was queued and never picked up.
+     *
+     * Dead jobs are checked above, and dead was the wrong thing to watch on its
+     * own: a job only reaches dead by being ATTEMPTED and failing. A drain-jobs
+     * that never runs at all produces no dead jobs, no failures, and no signal
+     * anywhere — the queue simply fills with rows whose attempts stay at zero.
+     * That is the state this deployment is in, and every check above passed
+     * while ten notifications sat unsent.
+     *
+     * Age, not depth. A queue with items in it is a queue doing its job; a
+     * queue holding something from an hour ago is a queue nobody is draining.
+     * An hour is generous against a drain that runs on a minutes-scale
+     * schedule, and it is well inside the window where an unsent payment
+     * receipt still looks like a delay rather than a broken promise.
+     */
+    const staleBefore = new Date(Date.now() - 60 * 60_000).toISOString();
+    const { count: staleQueued } = await db
+      .from("jobs")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "queued")
+      .lt("created_at", staleBefore);
+
     add(
-      "db:reachable",
-      false,
+      "db:job_queue",
+      (staleQueued ?? 0) === 0,
       "blocking",
-      err instanceof Error ? err.message : "could not reach the database",
+      staleQueued
+        ? `${staleQueued} job(s) queued over an hour and never attempted — nothing is draining the queue, so no receipts or notifications are being sent`
+        : "no stale work",
     );
+
+    const { error: reachErr } = await db.from("leagues").select("id").limit(1);
+    if (reachErr) console.error("[health] db:reachable:", reachErr);
+    add("db:reachable", !reachErr, "blocking", reachErr ? DB_ERROR : "ok");
+  } catch (err) {
+    console.error("[health] db unreachable:", err);
+    add("db:reachable", false, "blocking", "could not reach the database");
   }
 
   const blocking = checks.filter((c) => !c.ok && c.severity === "blocking");

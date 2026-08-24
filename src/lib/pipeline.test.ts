@@ -314,3 +314,54 @@ describe("season averages in the prompt", () => {
     expect(out).not.toContain("played");
   });
 });
+
+/**
+ * Which of a fixture's existing picks a fresh run may touch.
+ *
+ * Every branch here is a thing that must NOT happen: overwriting a graded
+ * result, rewriting a pick sitting on someone's slip, or churning the board on
+ * a rerun that found nothing better.
+ */
+describe("replaceVerdict", () => {
+  const none = new Set<string>();
+  const pending = (score: number, id = "p1") => ({
+    id,
+    status: "pending",
+    confidence_score: score,
+  });
+
+  it("writes where the fixture has nothing", () => {
+    expect(replaceVerdict(null, 7.5, none)).toBe("write");
+  });
+
+  it("replaces a weaker pick with a stronger one", () => {
+    expect(replaceVerdict(pending(7.0), 7.6, none)).toBe("write");
+  });
+
+  it("keeps the incumbent on a tie, so a rerun does not churn the board", () => {
+    expect(replaceVerdict(pending(7.4), 7.4, none)).toBe("weaker");
+  });
+
+  it("keeps the incumbent when the new pick is worse", () => {
+    expect(replaceVerdict(pending(8.1), 7.2, none)).toBe("weaker");
+  });
+
+  it("never overwrites a pick a customer is holding, however much better", () => {
+    expect(replaceVerdict(pending(5.0), 9.8, new Set(["p1"]))).toBe("slipped");
+  });
+
+  it("never overwrites a settled or flagged pick", () => {
+    for (const status of ["won", "lost", "void", "review_needed"]) {
+      expect(replaceVerdict({ id: "p1", status, confidence_score: 5 }, 9.8, none)).toBe(
+        "settled",
+      );
+    }
+  });
+
+  it("reads a confidence that arrives as a string", () => {
+    // numeric columns come back as strings through PostgREST, and a string
+    // compare would make "9.5" < "10" false and silently stop replacing.
+    expect(replaceVerdict({ id: "p1", status: "pending", confidence_score: "7.0" }, 7.6, none))
+      .toBe("write");
+  });
+});
