@@ -569,15 +569,39 @@ function seasonLines(
   rawPrior: unknown,
 ): string[] {
   const played = rec.gamesPlayed;
-  const scope = played == null ? "" : ` (${played} played${played < THIN_SEASON_GAMES ? ", THIN" : ""})`;
-  const lines = [
-    `    ${label} season${scope}: ${rec.avgGoalsScored ?? "?"} scored / ` +
-      `${rec.avgGoalsConceded ?? "?"} conceded per game, clean sheets ` +
-      `${rec.cleanSheetRate ?? "?"}, both scored ${rec.bttsRate ?? "?"}`,
-  ];
+
+  /*
+   * Nobody has an average over zero games.
+   *
+   * The upstream endpoint answers a side that has not kicked a ball with zeros
+   * rather than nulls, and this printed them: "0 scored / 0 conceded per game,
+   * clean sheets 0, both scored 0". Every one of those is a CLAIM — that they
+   * score nothing, concede nothing and keep no clean sheets — and the engine
+   * read them as its primary quantitative signal. On the opening weekend of
+   * four leagues at once that was most of the board.
+   *
+   * The H2H line two rows up has said "none available for this pairing" rather
+   * than 0-0-0 since the day it was written, for exactly this reason. This is
+   * the same bug in the same function, on the field the prompt leans on hardest.
+   */
+  const lines =
+    played === 0
+      ? [`    ${label} season: no matches played yet this season`]
+      : [
+          `    ${label} season${played == null ? "" : ` (${played} played${played < THIN_SEASON_GAMES ? ", THIN" : ""})`}: ` +
+            `${rec.avgGoalsScored ?? "?"} scored / ${rec.avgGoalsConceded ?? "?"} conceded per game, ` +
+            `clean sheets ${rec.cleanSheetRate ?? "?"}, both scored ${rec.bttsRate ?? "?"}`,
+        ];
 
   const prior = priorLine(label, rec, (rawPrior ?? null) as Record<string, number> | null);
-  if (prior) lines.push(prior);
+  if (prior) return [...lines, prior];
+
+  // No current season and no prior is the genuinely unknown case — a promoted
+  // side, or one we have only just started tracking. Saying so beats leaving a
+  // bare "no matches played yet", which reads as a gap someone will fill later.
+  if (played === 0) {
+    lines.push(`    ${label} has no record here last season either, treat as unknown`);
+  }
   return lines;
 }
 

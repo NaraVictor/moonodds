@@ -283,6 +283,28 @@ describe("season averages in the prompt", () => {
     expect(out).not.toContain("LAST season");
   });
 
+  it("refuses to state an average over zero games", () => {
+    // The endpoint answers a side that has not kicked a ball with zeros, not
+    // nulls. Printing them claims they score nothing and concede nothing, and
+    // Step 1 reads that as the primary quantitative signal. On an opening
+    // weekend that was four of seven fixtures.
+    const none = { gamesPlayed: 0, avgGoalsScored: 0, avgGoalsConceded: 0, cleanSheetRate: 0, bttsRate: 0 };
+    const out = statsBlock({ home_season: none, away_season: none }, null);
+    expect(out).toContain("Home season: no matches played yet this season");
+    expect(out).not.toMatch(/0 scored \/ 0 conceded/);
+  });
+
+  it("falls back to last season for a side that has not played yet", () => {
+    const none = { gamesPlayed: 0, avgGoalsScored: 0, avgGoalsConceded: 0, cleanSheetRate: 0, bttsRate: 0 };
+    const out = statsBlock({ home_season: none, away_season: none, home_season_prior: settled }, null);
+    expect(out).toContain("Home season: no matches played yet this season");
+    expect(out).toContain("Home LAST season (38 played");
+    // The away side has no prior, so it must read as unknown rather than as a
+    // gap that someone will fill in later.
+    expect(out).toContain("Away has no record here last season either");
+    expect(out).not.toContain("Home has no record here last season");
+  });
+
   it("still renders when the feed omits gamesPlayed entirely", () => {
     const out = statsBlock(
       { home_season: { avgGoalsScored: 1.2 }, away_season: {} },
