@@ -608,13 +608,19 @@ export function normaliseConfidence(raw: number): number {
 }
 
 /**
- * Comfortably inside the 300s route ceiling, with room for one retry.
+ * Inside the 300s route ceiling, with room to fail cleanly rather than vanish.
  *
- * A streamed run over fifteen fixtures is the longest thing this app does, and
- * the whole point of bounding it here is that exceeding the budget should look
- * like an error we raised, not like a function that vanished.
+ * Measured, not guessed: a real run over seven fixtures took 152 seconds end to
+ * end. This was 120s, which the first successful run came close enough to that
+ * it was luck rather than headroom — a slightly slower day or two more fixtures
+ * and the client would have aborted a call that was working.
+ *
+ * 240s leaves the platform's own 300s limit as the outer bound while still
+ * failing as an error we raised. Raising it further is not the answer if runs
+ * get longer; fewer fixtures per session is, because the ceiling above is not
+ * ours to move.
  */
-const ANTHROPIC_TIMEOUT_MS = 120_000;
+const ANTHROPIC_TIMEOUT_MS = 240_000;
 
 export const liveAi: AiProvider = {
   async generatePicks({ systemPrompt, userPrompt, maxPicks }) {

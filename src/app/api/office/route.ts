@@ -12,6 +12,7 @@ import {
   slugify,
 } from "@/lib/pipeline";
 import { getProviders } from "@/lib/providers";
+import { leagueBadgeUrl, teamCrestUrl } from "@/lib/providers/types";
 import type { Market } from "@/lib/types";
 import { runClvCheck, runRecalibration } from "@/lib/tuning";
 import {
@@ -515,6 +516,22 @@ export async function POST(request: Request) {
           results: await getProviders().football.searchTeams(body.query.trim()),
         });
 
+      /*
+       * Import a league AND its squad list in one action.
+       *
+       * These used to be two clicks: "Import" wrote the league row, then "Pull
+       * teams" had to be found and pressed afterwards. A league with no teams
+       * is not a usable catalogue entry — fixtures reference teams, so the
+       * daily fetch has nothing to attach a match to — which made the second
+       * click mandatory and easy to forget. Nobody imports a league because
+       * they want an empty one.
+       *
+       * The team pull is deliberately NOT fatal. If the league saved and the
+       * squad call failed, the league is still legitimately imported and the
+       * operator can retry the teams; throwing here would roll the whole thing
+       * back in the UI while the row sat in the database, which is the worst of
+       * both. The response says which half happened.
+       */
       case "importLeague": {
         const { data, error } = await db
           .from("leagues")
@@ -525,7 +542,7 @@ export async function POST(request: Request) {
               slug: slugify(body.name),
               country: body.country.trim(),
               season: body.season,
-              logo: body.logo ?? null,
+              logo: body.logo ?? leagueBadgeUrl(body.externalId),
               is_active: true,
             },
             { onConflict: "external_id" },
@@ -533,7 +550,39 @@ export async function POST(request: Request) {
           .select("id, name")
           .single();
         if (error) throw new Error(error.message);
-        return NextResponse.json({ league: data });
+
+        let teamsImported = 0;
+        let teamsError: string | null = null;
+
+        if (body.season) {
+          try {
+            const teams = await getProviders().football.fetchTeamsByLeague(
+              body.externalId,
+              body.season,
+            );
+            if (teams.length) {
+              const { error: teamErr } = await db.from("teams").upsert(
+                teams.map((t) => ({
+                  external_id: t.externalId,
+                  league_id: data.id,
+                  name: t.name,
+                  short_name: (t.shortName || autoShortName(t.name)).toUpperCase(),
+                  slug: slugify(t.name),
+                  logo: t.logo ?? teamCrestUrl(t.externalId),
+                  is_active: true,
+                })),
+                { onConflict: "external_id" },
+              );
+              if (teamErr) throw new Error(teamErr.message);
+              teamsImported = teams.length;
+            }
+          } catch (err) {
+            teamsError = err instanceof Error ? err.message : "Could not pull teams.";
+            console.error("[office] importLeague: team pull failed:", err);
+          }
+        }
+
+        return NextResponse.json({ league: data, teamsImported, teamsError });
       }
 
       case "importTeams": {
@@ -554,7 +603,10 @@ export async function POST(request: Request) {
             name: t.name,
             short_name: (t.shortName || autoShortName(t.name)).toUpperCase(),
             slug: slugify(t.name),
-            logo: t.logo,
+            // Fall back to the CDN path derived from the id. It needs no key
+            // and no request, so a provider that omits artwork still yields a
+            // crest rather than a monogram.
+            logo: t.logo ?? teamCrestUrl(t.externalId),
             is_active: true,
           })),
           { onConflict: "external_id" },

@@ -82,6 +82,59 @@ type TabKey = (typeof TABS)[number]["key"];
 
 /* ------------------------------ primitives ------------------------------ */
 
+/**
+ * A league badge or team crest, with a monogram behind it.
+ *
+ * Every one of these comes from API-Football's CDN at a path derived purely
+ * from the entity id, so there is no key, no quota and no request in the
+ * pipeline to produce them. The monogram is not decoration: a broken image in
+ * a catalogue of forty rows is indistinguishable from a row with no data, and
+ * `onError` is the only way to notice a crest that 404s.
+ */
+function Crest({
+  src,
+  name,
+  size = 20,
+}: {
+  src?: string | null;
+  name: string;
+  size?: number;
+}) {
+  const [failed, setFailed] = useState(false);
+  const initials = name.replace(/[^A-Za-z ]/g, "").split(/\s+/).slice(0, 2)
+    .map((w) => w[0]).join("").toUpperCase();
+
+  if (!src || failed) {
+    return (
+      <span
+        aria-hidden="true"
+        className="flex flex-none items-center justify-center rounded-full font-semibold"
+        style={{
+          width: size, height: size, fontSize: size * 0.42,
+          background: "var(--surface-tertiary)", color: "var(--muted)",
+        }}
+      >
+        {initials || "?"}
+      </span>
+    );
+  }
+
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={src}
+      alt=""
+      width={size}
+      height={size}
+      loading="lazy"
+      onError={() => setFailed(true)}
+      className="flex-none object-contain"
+      style={{ width: size, height: size }}
+    />
+  );
+}
+
+
 function Panel({
   title,
   description,
@@ -224,6 +277,83 @@ const STAGES = [
   { action: "recalibrate", label: "Recalibrate", hint: "Propose weight changes from results" },
 ];
 
+/**
+ * A stage result, in words.
+ *
+ * Every runner returns a small object and the panel used to dump it through
+ * JSON.stringify into a <pre>. That is a developer reading their own return
+ * value, not an operator being told what happened — and it hides the two
+ * outcomes that matter most: a stage that ran and did nothing, and a stage
+ * that skipped entirely. `{"skipped":"no active engine config"}` in a green
+ * "finished" box reads as success.
+ *
+ * So each shape gets a sentence and a tone. Anything unrecognised still falls
+ * back to the raw object, because a new field appearing is better shown than
+ * swallowed.
+ */
+type StageOutcome = { tone: "won" | "pending" | "lost"; headline: string; detail?: string };
+
+function describeStage(stage: string, result: unknown): StageOutcome {
+  const r = (result ?? {}) as Record<string, unknown>;
+  const n = (k: string) => Number(r[k] ?? 0);
+
+  // A skip is not a success. It is the single most common way a pipeline stage
+  // does nothing while looking like it worked.
+  if (typeof r.skipped === "string") {
+    return { tone: "pending", headline: "Nothing to do", detail: r.skipped };
+  }
+
+  switch (stage) {
+    case "fetchFixtures":
+      return n("upserted") === 0
+        ? { tone: "pending", headline: "No fixtures found",
+            detail: `Checked ${n("leagues")} league(s) for ${String(r.date ?? "today")}. The API returned nothing, which on a quiet day is normal and otherwise means the plan or the league list.` }
+        : { tone: "won", headline: `${n("upserted")} fixture(s) saved`,
+            detail: `${n("fixtures")} returned across ${n("leagues")} league(s) for ${String(r.date ?? "today")}.` };
+
+    case "fetchStats":
+      return n("fetched") === 0
+        ? { tone: "pending", headline: "No stats fetched",
+            detail: "Nothing upcoming in the next 36 hours to enrich. Run the fixture pull first." }
+        : { tone: "won", headline: `Stats for ${n("upserted")} fixture(s)`,
+            detail: `${n("fetched")} fetched of ${n("requested")} requested, capped at ${n("limit")} by the API budget.` };
+
+    case "generatePicks":
+      return n("generated") === 0
+        ? { tone: "pending", headline: "No picks published",
+            detail: `The engine analysed ${n("considered")}, of which ${n("noBetZone")} were no-bet and ${n("rejected")} fell below the confidence floor.` }
+        : { tone: "won", headline: `${n("generated")} pick(s) published`,
+            detail: `From ${n("considered")} analysed. ${n("noBetZone")} no-bet, ${n("rejected")} below the floor` +
+              (n("configFallbacks") || n("warnings")
+                ? `. ${n("configFallbacks")} config fallback(s), ${n("warnings")} warning(s) — check the Engine tab.`
+                : ".") };
+
+    case "gradeResults":
+      return n("graded") === 0
+        ? { tone: "pending", headline: "Nothing to settle",
+            detail: `${n("fixtures")} finished fixture(s) checked; no ungraded picks against them.` }
+        : { tone: "won", headline: `${n("graded")} pick(s) settled`,
+            detail: `Across ${n("fixtures")} finished fixture(s).` };
+
+    case "clvCheck":
+      return { tone: n("flagged") > 0 ? "pending" : "won",
+        headline: `${n("reviewed")} line(s) reviewed`,
+        detail: n("reviewed") === 0
+          ? "No odds snapshots to compare yet."
+          : `${n("flagged")} moved against us by more than ${String(r.thresholdPct ?? "?")}%.` };
+
+    case "recalibrate":
+      return n("proposals") === 0
+        ? { tone: "won", headline: "No changes proposed",
+            detail: `${n("reviewed")} settled pick(s) reviewed. ${String(r.note ?? "Performance is within target.")}` }
+        : { tone: "pending", headline: `${n("proposals")} change(s) proposed`,
+            detail: `From ${n("reviewed")} settled pick(s). ${r.autoApplied ? "Applied automatically." : "Waiting for approval in the Reports tab."}` };
+
+    default:
+      return { tone: "won", headline: "Finished" };
+  }
+}
+
 function PipelinePanel() {
   const action = useOfficeAction();
   const runs = usePredictionRuns();
@@ -273,16 +403,30 @@ function PipelinePanel() {
 
         {action.error && <ActionError message={action.error.message} />}
 
-        {last && (
-          <div className="mt-4 rounded-2xl border border-won-edge bg-won-wash p-4">
-            <p className="text-[11px] font-bold uppercase tracking-[0.08em]" style={{ color: "var(--won-ink)" }}>
-              {last.stage} finished
-            </p>
-            <pre className="mt-2 overflow-x-auto font-mono text-[11px] leading-relaxed text-muted">
-              {JSON.stringify(last.result, null, 2)}
-            </pre>
-          </div>
-        )}
+        {last && (() => {
+          const o = describeStage(last.stage, last.result);
+          const label = STAGES.find((s) => s.action === last.stage)?.label ?? last.stage;
+          return (
+            <div className={`mt-4 rounded-2xl border p-4 state-${o.tone}`}>
+              <p className="text-[11px] font-bold uppercase tracking-[0.08em]">{label}</p>
+              <p className="mt-1 text-[15px] font-semibold">{o.headline}</p>
+              {o.detail && (
+                <p className="mt-1 text-[13px] leading-relaxed text-muted">{o.detail}</p>
+              )}
+              {/* The raw object stays, folded away. An operator gets the
+                  sentence; whoever is debugging gets the field that did not
+                  make it into one. */}
+              <details className="mt-3">
+                <summary className="cursor-pointer text-[11px] text-muted">
+                  Raw result
+                </summary>
+                <pre className="mt-2 overflow-x-auto font-mono text-[11px] leading-relaxed text-muted">
+                  {JSON.stringify(last.result, null, 2)}
+                </pre>
+              </details>
+            </div>
+          );
+        })()}
       </Panel>
 
       <div className="grid gap-4 lg:grid-cols-2">
@@ -792,7 +936,8 @@ function LeaguesPanel() {
               </li>
             ) : (
               <li key={l.id} className="flex items-center justify-between gap-3 py-3 first:pt-0">
-                <div className="min-w-0">
+                <Crest src={l.logo} name={l.name} size={22} />
+                <div className="min-w-0 flex-1">
                   <p className="truncate text-[13px] font-semibold">{l.name}</p>
                   <p className="truncate text-[11px] text-muted">
                     {l.country} · season {l.season ?? "-"} · id {l.external_id ?? "-"}
@@ -900,6 +1045,7 @@ function TeamsPanel() {
               </li>
             ) : (
               <li key={t.id} className="flex items-center gap-3 py-2.5 first:pt-0">
+                <Crest src={t.logo} name={t.name} />
                 <span className="min-w-0 flex-1 truncate text-[13px]">
                   {t.name}
                   {!t.is_active && <span className="ml-2 text-[11px] text-muted">off</span>}
@@ -926,8 +1072,14 @@ type LeagueHit = {
   name: string;
   country: string;
   currentSeason: number | null;
+  logo: string | null;
 };
-type TeamHit = { externalId: number; name: string; shortName: string | null };
+type TeamHit = {
+  externalId: number;
+  name: string;
+  shortName: string | null;
+  logo: string | null;
+};
 
 function ImportPanel() {
   const { data: catalog } = useCatalog();
@@ -1025,6 +1177,7 @@ function ImportPanel() {
             key={l.externalId}
             className="mt-3 flex flex-wrap items-center gap-3 rounded-2xl bg-surface-secondary p-4"
           >
+            <Crest src={l.logo} name={l.name} size={22} />
             <div className="min-w-0 flex-1">
               <p className="truncate text-[13px] font-semibold">{l.name}</p>
               <p className="truncate text-[11px] text-muted">
@@ -1063,7 +1216,7 @@ function ImportPanel() {
                 }
                 className="press rounded-full bg-accent px-4 py-1.5 text-[12px] font-semibold text-accent-foreground disabled:opacity-40"
               >
-                Import
+                Import with teams
               </button>
             )}
           </div>
@@ -1087,6 +1240,7 @@ function ImportPanel() {
           <ul className="divide-y divide-separator">
             {hits.teams.map((t) => (
               <li key={t.externalId} className="flex items-center gap-3 py-2.5">
+                <Crest src={t.logo} name={t.name} />
                 <span className="min-w-0 flex-1 truncate text-[13px]">{t.name}</span>
                 <span className="numeral flex-none text-[11px] text-muted">
                   {t.shortName ?? "-"}

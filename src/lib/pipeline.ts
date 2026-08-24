@@ -4,7 +4,7 @@ import type { Market } from "./types";
 import type { H2HMeeting, RecentMatch, VenueSplit } from "./providers/types";
 import { renderPrompt } from "./engine/template";
 import { resolveEngineVariables } from "./engine/variables";
-import { normalisePredictedValue } from "./engine/output";
+import { blankToNull, normalisePredictedValue } from "./engine/output";
 import { ENGINE_PROMPT_VERSION } from "./engine/prompt";
 import { reportError } from "./report-error";
 
@@ -676,7 +676,12 @@ ${briefs.join("\n")}`;
   let written = 0;
   let rejected = 0;
 
-  for (const p of qualifying) {
+  for (const raw of qualifying) {
+    // "" is how the schema expresses "no reason", because a nullable string
+    // costs one of the sixteen union slots the model API allows. The column
+    // should hold one representation of absent, so the blanks become nulls
+    // here, at the boundary, rather than downstream of it.
+    const p = blankToNull(raw);
     const fixture = fixtures[p.fixtureIndex];
     if (!fixture || !tipster) continue;
 
@@ -724,10 +729,8 @@ ${briefs.join("\n")}`;
         anchorCapReason: p.anchorCapReason ?? null,
         originalPredictedValue: p.originalPredictedValue ?? null,
         overrideReason: p.overrideReason ?? null,
-        environmentalLog: p.environmentalLog ?? null,
         h2hLog: p.h2hLog ?? null,
         formLog: p.formLog ?? null,
-        personnelLog: p.personnelLog ?? null,
         penaltyLog: p.penaltyLog ?? null,
       },
     });

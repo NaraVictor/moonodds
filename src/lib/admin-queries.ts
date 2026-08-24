@@ -279,6 +279,7 @@ export type CatalogLeague = {
   season: number | null;
   external_id: number | null;
   is_active: boolean;
+  logo: string | null;
 };
 
 export type CatalogTeam = {
@@ -288,6 +289,7 @@ export type CatalogTeam = {
   league_id: string;
   external_id: number | null;
   is_active: boolean;
+  logo: string | null;
 };
 
 export function useCatalog() {
@@ -298,11 +300,11 @@ export function useCatalog() {
       const [leagues, teams] = await Promise.all([
         supabase
           .from("leagues")
-          .select("id, name, country, season, external_id, is_active")
+          .select("id, name, country, season, external_id, is_active, logo")
           .order("name"),
         supabase
           .from("teams")
-          .select("id, name, short_name, league_id, external_id, is_active")
+          .select("id, name, short_name, league_id, external_id, is_active, logo")
           .order("name"),
       ]);
       if (leagues.error) throw leagues.error;

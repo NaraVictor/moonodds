@@ -284,9 +284,15 @@ export function PredictionDetail({ id }: { id: string }) {
             title="Factors considered"
             description="Screens the model applies before it will publish a call."
           >
-            {unlocked && pick.filtersApplied ? (
+            {unlocked && pick.filtersApplied?.length ? (
               <ul className="grid gap-2 sm:grid-cols-2">
-                {Object.entries(pick.filtersApplied).map(([k, passed]) => (
+                {/* Only what fired. The model used to return every flag with a
+                    boolean, so this rendered three dozen rows to say that
+                    almost nothing applied. */}
+                {(Array.isArray(pick.filtersApplied)
+                  ? pick.filtersApplied.map((k) => [k, true] as const)
+                  : Object.entries(pick.filtersApplied)
+                ).map(([k, passed]) => (
                   <li
                     key={k}
                     className="flex items-center gap-2.5 rounded-xl bg-surface-secondary px-3 py-2.5"

@@ -132,8 +132,16 @@ export async function runRecalibration() {
       c >= 9.5 ? "9.5+" : c >= 9 ? "9.0-9.5" : c >= 8.5 ? "8.5-9.0" : c >= 8 ? "8.0-8.5" : "7.0-8.0";
     tally(byBand, band, won);
 
-    for (const [name, on] of Object.entries(p.filters_applied ?? {})) {
-      if (on) tally(byFilter, name, won);
+    /*
+     * An array of the flags that fired, not an object of every flag with a
+     * boolean. Older rows, if any survive, carry the object form, so both are
+     * accepted: a filter's win rate is not worth losing history over.
+     */
+    const flags = p.filters_applied;
+    if (Array.isArray(flags)) {
+      for (const name of flags) tally(byFilter, String(name), won);
+    } else if (flags && typeof flags === "object") {
+      for (const [name, on] of Object.entries(flags)) if (on) tally(byFilter, name, won);
     }
 
     if (p.mra_signal_home) tally(byMra, p.mra_signal_home, won);

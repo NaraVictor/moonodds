@@ -78,7 +78,8 @@ export type Pick = {
   altMarket?: Market | null;
   altPredictedValue?: string | null;
   altConfidence?: number | null;
-  filtersApplied?: Record<string, boolean> | null;
+  // The flags that fired. Older rows may still hold the object form.
+  filtersApplied?: string[] | Record<string, boolean> | null;
   actualResult?: { homeGoals: number; awayGoals: number } | null;
   settledAt?: string | null;
   fixture: {
