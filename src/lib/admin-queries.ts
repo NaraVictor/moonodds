@@ -21,6 +21,7 @@ export const adminKeys = {
   catalog: ["office", "catalog"] as const,
   predictions: (page: number) => ["office", "predictions", page] as const,
   ungraded: ["office", "ungraded"] as const,
+  board: ["office", "board"] as const,
   fx: ["office", "fx"] as const,
 };
 
@@ -315,6 +316,56 @@ export function useCatalog() {
       };
     },
   });
+}
+
+export type BoardFixture = {
+  id: string;
+  fixture_date: string;
+  venue: string | null;
+  leagues: { name: string; country: string; logo: string | null } | null;
+  home: { name: string; short_name: string | null; logo: string | null } | null;
+  away: { name: string; short_name: string | null; logo: string | null } | null;
+};
+
+/**
+ * The board the engine is about to read.
+ *
+ * Scheduled fixtures from now forward, in kickoff order, which is the same
+ * ordering `runDailyPicks` uses to decide what fits inside a session. So the
+ * top of this list IS what gets analysed, and an operator pruning it is
+ * pruning the real input rather than a view of it.
+ *
+ * Straight through PostgREST: leagues, teams and fixtures are granted to
+ * every role, the catalogue is public knowledge.
+ */
+export function useUpcomingFixtures() {
+  return useQuery({
+    queryKey: adminKeys.board,
+    queryFn: async (): Promise<BoardFixture[]> => {
+      const supabase = createClient();
+      const { data, error } = await supabase
+        .from("fixtures")
+        .select(
+          "id, fixture_date, venue, leagues(name, country, logo), home:teams!fixtures_home_team_id_fkey(name, short_name, logo), away:teams!fixtures_away_team_id_fkey(name, short_name, logo)",
+        )
+        .eq("status", "scheduled")
+        .gte("fixture_date", new Date().toISOString())
+        .order("fixture_date")
+        .limit(100);
+      if (error) throw error;
+      // PostgREST types embedded rows as arrays; each of these is to-one.
+      return (data ?? []).map((r) => ({
+        ...r,
+        leagues: asOne(r.leagues),
+        home: asOne(r.home),
+        away: asOne(r.away),
+      })) as BoardFixture[];
+    },
+  });
+}
+
+function asOne<T>(v: T | T[] | null | undefined): T | null {
+  return Array.isArray(v) ? (v[0] ?? null) : (v ?? null);
 }
 
 const PAGE_SIZE = 25;

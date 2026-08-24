@@ -5,6 +5,7 @@ import type { H2HMeeting, RecentMatch, VenueSplit } from "./providers/types";
 import { renderPrompt } from "./engine/template";
 import { resolveEngineVariables } from "./engine/variables";
 import { blankToNull, normalisePredictedValue } from "./engine/output";
+import { ENGINE_CALL_BUDGET_MS, sessionCap } from "./engine/limits";
 import { ENGINE_PROMPT_VERSION } from "./engine/prompt";
 import { reportError } from "./report-error";
 
@@ -109,8 +110,21 @@ export function gradePrediction(
   }
 }
 
-/** Pull fixtures for a date and upsert leagues, teams and fixtures. */
-export async function runFetchFixtures(date: string) {
+/**
+ * Pull fixtures for a date and upsert leagues, teams and fixtures.
+ *
+ * `withStats` chains the stats pull onto the same pass. It is off by default
+ * and ON from the Office, and the asymmetry is deliberate: the scheduled jobs
+ * stage these apart on purpose, fixtures at 00:30 and stats at 05:00, so the
+ * 36-hour stats window is centred on the day the engine runs at 06:00. An
+ * operator pulling fixtures by hand has no second job coming to enrich them,
+ * so for them a fixture pull that leaves the engine with nothing but team
+ * names is a pull that did half a job.
+ */
+export async function runFetchFixtures(
+  date: string,
+  { withStats = false, maxFixtures }: { withStats?: boolean; maxFixtures?: number } = {},
+) {
   const db = createServiceClient();
   const { football } = getProviders();
 
@@ -193,7 +207,18 @@ export async function runFetchFixtures(date: string) {
     if (!error) inserted++;
   }
 
-  return { date, leagues: leagueIds.length, fixtures: raw.length, upserted: inserted };
+  const result = {
+    date,
+    leagues: leagueIds.length,
+    fixtures: raw.length,
+    upserted: inserted,
+  };
+
+  if (!withStats) return result;
+
+  // Nested rather than merged, so `describeStage` can tell "no stats fetched"
+  // apart from "stats were never asked for" — the second is not a failure.
+  return { ...result, stats: await runFetchStats({ maxFixtures }) };
 }
 
 /**
@@ -203,7 +228,7 @@ export async function runFetchFixtures(date: string) {
  * carries fixture names and nothing else, and every "based on the numbers"
  * claim in the product is hollow.
  */
-export async function runFetchStats() {
+export async function runFetchStats({ maxFixtures }: { maxFixtures?: number } = {}) {
   const db = createServiceClient();
   const { football } = getProviders();
 
@@ -222,7 +247,7 @@ export async function runFetchStats() {
   // Two limits, whichever binds first: the session cap, and what the daily
   // budget can actually pay for once results are reserved.
   const budget = config?.api_budget ?? {};
-  const perSession = budget.maxFixturesPerSession ?? 30;
+  const perSession = sessionCap(budget, maxFixtures);
   const perFixture = Math.max(1, budget.callsPerFixtureEstimate ?? 4);
   const spendable = (budget.dailyTotal ?? 500) - (budget.reservedForResults ?? 100);
   const affordable = Math.max(0, Math.floor(spendable / perFixture));
@@ -291,7 +316,15 @@ export async function runFetchStats() {
     if (!error) upserted++;
   }
 
-  return { fetched: stats.length, upserted, requested: fixtures.length, limit };
+  return {
+    fetched: stats.length,
+    upserted,
+    requested: fixtures.length,
+    limit,
+    // Named so the Office can say WHICH bound applied. An override that the
+    // budget quietly ignored looks identical to one that was honoured.
+    boundBy: affordable < perSession ? ("budget" as const) : ("session" as const),
+  };
 }
 
 /**
@@ -534,7 +567,8 @@ function formatCongestion(raw: unknown): string | null {
 }
 
 /** Generate today's picks with the active engine config. */
-export async function runDailyPicks() {
+export async function runDailyPicks({ maxFixtures }: { maxFixtures?: number } = {}) {
+  const startedAt = Date.now();
   const db = createServiceClient();
   const { ai } = getProviders();
 
@@ -558,7 +592,7 @@ export async function runDailyPicks() {
     .gte("fixture_date", now.toISOString())
     .lt("fixture_date", endOfDay.toISOString())
     .order("fixture_date")
-    .limit(config.api_budget?.maxFixturesPerSession ?? 30);
+    .limit(sessionCap(config.api_budget, maxFixtures));
 
   if (!fixtures?.length) return { skipped: "no upcoming fixtures today" };
 
@@ -618,6 +652,18 @@ on what is printed beneath it, not on what other fixtures carry.
 Fixtures:
 ${briefs.join("\n")}`;
 
+  /*
+   * The model call, timed.
+   *
+   * This is the step that became the constraint. It is bounded by a 240s client
+   * timeout inside a 300s platform ceiling, and the only measurement anyone has
+   * is one run of seven fixtures at 152 seconds. Every number downstream of
+   * that — the session cap, the timeout itself — is an extrapolation from a
+   * single point, so the duration is recorded on the run and returned to the
+   * caller rather than being something you find out about by watching a request
+   * die.
+   */
+  const modelStartedAt = Date.now();
   const picks = await ai.generatePicks({
     systemPrompt: rendered.text,
     userPrompt,
@@ -625,6 +671,16 @@ ${briefs.join("\n")}`;
     // prompt's "emit for every fixture" whenever a day carried more than ten.
     maxPicks: fixtures.length,
   });
+  const modelDurationMs = Date.now() - modelStartedAt;
+
+  // Loud at three quarters of the budget, because the failure mode past it is
+  // not a slow run — it is an aborted one that has already been paid for.
+  if (modelDurationMs > 0.75 * ENGINE_CALL_BUDGET_MS) {
+    console.warn(
+      `[engine] model call took ${(modelDurationMs / 1000).toFixed(1)}s over ${fixtures.length} fixture(s), ` +
+        `against a ${ENGINE_CALL_BUDGET_MS / 1000}s timeout. Cut maxFixturesPerSession before it aborts.`,
+    );
+  }
 
   // No-bet fixtures are returned so a missing index still means a truncated
   // response rather than a deliberate decline. They are dropped here.
@@ -643,6 +699,11 @@ ${briefs.join("\n")}`;
         considered: picks.length,
         noBetZone: picks.length - analysed.length,
         floor: minConfidence,
+        // A run that published nothing still spent the time, and it is the run
+        // most likely to have been cut short. No prediction_runs row is written
+        // for it, so this payload is the only place its duration survives.
+        modelDurationMs,
+        fixtures: fixtures.length,
       },
     });
 
@@ -656,6 +717,10 @@ ${briefs.join("\n")}`;
       noBetZone: picks.length - analysed.length,
       note: "none cleared the floor",
       alerted: true,
+      fixtures: fixtures.length,
+      modelDurationMs,
+      durationMs: Date.now() - startedAt,
+      callBudgetMs: ENGINE_CALL_BUDGET_MS,
     };
   }
 
@@ -669,7 +734,17 @@ ${briefs.join("\n")}`;
   const modelVersion = `kicka-quant-v${config.version}-p${ENGINE_PROMPT_VERSION}`;
   const { data: run } = await db
     .from("prediction_runs")
-    .insert({ num_picks: qualifying.length, model_version: modelVersion })
+    .insert({
+      num_picks: qualifying.length,
+      model_version: modelVersion,
+      fixtures_considered: fixtures.length,
+      model_duration_ms: modelDurationMs,
+      // Written before the per-pick inserts below, so this is the run up to and
+      // including the model call. The whole-pass figure is patched on at the
+      // end; if that patch never lands, the model figure — the one the timeout
+      // actually bounds — is still on the row.
+      duration_ms: Date.now() - startedAt,
+    })
     .select("id")
     .single();
 
@@ -766,6 +841,11 @@ ${briefs.join("\n")}`;
     );
   }
 
+  const durationMs = Date.now() - startedAt;
+  if (run?.id) {
+    await db.from("prediction_runs").update({ duration_ms: durationMs }).eq("id", run.id);
+  }
+
   return {
     generated: written,
     considered: picks.length,
@@ -773,6 +853,12 @@ ${briefs.join("\n")}`;
     rejected,
     configFallbacks: rendered.fallbacks.length,
     warnings: rendered.warnings.length,
+    fixtures: fixtures.length,
+    modelDurationMs,
+    durationMs,
+    // So the Office can show the headroom rather than a bare number nobody can
+    // read. 152s means nothing on its own; 152s of 240s means something.
+    callBudgetMs: ENGINE_CALL_BUDGET_MS,
   };
 }
 

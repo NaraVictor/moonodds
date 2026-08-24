@@ -22,6 +22,7 @@ import {
   validateEngineVariables,
 } from "@/lib/engine/variables";
 import { clearFxFallbackCache, currentFallback } from "@/lib/pricing-server";
+import { MAX_FIXTURES_OVERRIDE } from "@/lib/engine/limits";
 
 /**
  * Next config version.
@@ -58,9 +59,39 @@ function autoShortName(name: string): string {
  */
 
 const Body = z.discriminatedUnion("action", [
-  z.object({ action: z.literal("fetchFixtures"), date: z.string().optional() }),
-  z.object({ action: z.literal("fetchStats") }),
-  z.object({ action: z.literal("generatePicks") }),
+  /*
+   * `maxFixtures` sizes a manual run.
+   *
+   * The scheduled jobs never pass it and take the config's own cap. This is for
+   * the operator standing in front of the Office who wants a five-fixture pass
+   * to check something, or a wider one on a heavy Saturday. Bounded at both
+   * ends here as well as in the pipeline, because a request body is not a place
+   * to learn what MAX_FIXTURES_OVERRIDE is.
+   */
+  z.object({
+    action: z.literal("fetchFixtures"),
+    date: z.string().optional(),
+    maxFixtures: z.number().int().min(1).max(MAX_FIXTURES_OVERRIDE).optional(),
+  }),
+  z.object({
+    action: z.literal("fetchStats"),
+    maxFixtures: z.number().int().min(1).max(MAX_FIXTURES_OVERRIDE).optional(),
+  }),
+  z.object({
+    action: z.literal("generatePicks"),
+    maxFixtures: z.number().int().min(1).max(MAX_FIXTURES_OVERRIDE).optional(),
+  }),
+  z.object({
+    action: z.literal("fetchAndGenerate"),
+    date: z.string().optional(),
+    maxFixtures: z.number().int().min(1).max(MAX_FIXTURES_OVERRIDE).optional(),
+  }),
+  z.object({ action: z.literal("deleteFixture"), fixtureId: z.uuid() }),
+  z.object({
+    action: z.literal("deletePrediction"),
+    predictionId: z.uuid(),
+    reason: z.string().min(3).max(500),
+  }),
   z.object({ action: z.literal("gradeResults") }),
   z.object({ action: z.literal("clvCheck") }),
   z.object({ action: z.literal("recalibrate") }),
@@ -246,14 +277,123 @@ export async function POST(request: Request) {
     switch (body.action) {
       case "fetchFixtures":
         return NextResponse.json(
-          await runFetchFixtures(body.date ?? new Date().toISOString().slice(0, 10)),
+          await runFetchFixtures(body.date ?? new Date().toISOString().slice(0, 10), {
+            withStats: true,
+            maxFixtures: body.maxFixtures,
+          }),
         );
 
       case "fetchStats":
-        return NextResponse.json(await runFetchStats());
+        return NextResponse.json(await runFetchStats({ maxFixtures: body.maxFixtures }));
 
       case "generatePicks":
-        return NextResponse.json(await runDailyPicks());
+        return NextResponse.json(await runDailyPicks({ maxFixtures: body.maxFixtures }));
+
+      /**
+       * The whole board in one call: fixtures, their stats, then the engine.
+       *
+       * Sequential because it has to be — the engine reads the rows the fetch
+       * just wrote. That makes this the longest request the app can issue, so
+       * a pull that returns nothing stops here rather than paying for a model
+       * call over an empty board.
+       */
+      case "fetchAndGenerate": {
+        const fetched = await runFetchFixtures(
+          body.date ?? new Date().toISOString().slice(0, 10),
+          { withStats: true, maxFixtures: body.maxFixtures },
+        );
+
+        if (fetched.upserted === 0) {
+          return NextResponse.json({
+            fetch: fetched,
+            picks: { skipped: "no fixtures came back, nothing to run the engine over" },
+          });
+        }
+
+        return NextResponse.json({
+          fetch: fetched,
+          picks: await runDailyPicks({ maxFixtures: body.maxFixtures }),
+        });
+      }
+
+      /**
+       * Drop a fixture off the board before the engine sees it.
+       *
+       * Nothing here is soft: `fixtures` cascades to its stats, predictions and
+       * odds snapshots, which is the right shape for a row pulled in by mistake
+       * and the wrong shape for one the engine has already published against.
+       * So a fixture carrying predictions is refused — take the prediction out
+       * first, deliberately, and the refusal names the count doing the refusing.
+       */
+      case "deleteFixture": {
+        const { count } = await db
+          .from("predictions")
+          .select("id", { count: "exact", head: true })
+          .eq("fixture_id", body.fixtureId);
+
+        if (count && count > 0) {
+          return NextResponse.json(
+            {
+              error: `This fixture already has ${count} prediction${count === 1 ? "" : "s"} against it. Delete or void ${count === 1 ? "it" : "those"} first, removing the fixture would take ${count === 1 ? "it" : "them"} with it.`,
+            },
+            { status: 409 },
+          );
+        }
+
+        const { error } = await db.from("fixtures").delete().eq("id", body.fixtureId);
+        if (error) throw new Error(error.message);
+        return NextResponse.json({ deleted: true });
+      }
+
+      /**
+       * Remove a prediction outright.
+       *
+       * Two things it must not become. It must not be a way to tidy a losing
+       * record: a settled pick is in the hit rate customers were shown and in
+       * every ROI number computed since, so won/lost are refused and `void`
+       * through the override is the honest retraction. And it must not silently
+       * empty someone's slip, `slip_legs` cascades, so a pick a customer is
+       * holding is refused too. What is left is the actual case: a bad pick,
+       * caught before anyone acted on it.
+       */
+      case "deletePrediction": {
+        const { data: pred } = await db
+          .from("predictions")
+          .select("id, status")
+          .eq("id", body.predictionId)
+          .maybeSingle();
+
+        if (!pred) {
+          return NextResponse.json({ error: "That prediction is already gone." }, { status: 404 });
+        }
+
+        if (pred.status === "won" || pred.status === "lost") {
+          return NextResponse.json(
+            {
+              error: "That pick is settled and counts towards the published record. Void it in Grade instead, which keeps the trail.",
+            },
+            { status: 409 },
+          );
+        }
+
+        const { count: legs } = await db
+          .from("slip_legs")
+          .select("id", { count: "exact", head: true })
+          .eq("prediction_id", body.predictionId);
+
+        if (legs && legs > 0) {
+          return NextResponse.json(
+            {
+              error: `${legs} customer slip${legs === 1 ? " has" : "s have"} this pick on ${legs === 1 ? "it" : "them"}. Void it in Grade instead, deleting would remove it from ${legs === 1 ? "that slip" : "those slips"} with no trace.`,
+            },
+            { status: 409 },
+          );
+        }
+
+        const { error } = await db.from("predictions").delete().eq("id", body.predictionId);
+        if (error) throw new Error(error.message);
+        return NextResponse.json({ deleted: true });
+      }
 
       case "gradeResults":
         return NextResponse.json(await runAutoGrade());
@@ -908,6 +1048,7 @@ function targetTypeOf(action: string): string {
     return "engine_config";
   }
   if (action.includes("Prediction") || action === "gradeFixture") return "prediction";
+  if (action.includes("Fixture")) return "fixture";
   if (action.includes("Report")) return "tuning_report";
   if (action.includes("League") || action.includes("Team")) return "catalog";
   return "other";

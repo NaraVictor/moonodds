@@ -16,7 +16,14 @@ import {
   X,
   Clock,
   AlertTriangle,
+  Trash2,
 } from "@/components/ui/icons";
+import {
+  DEFAULT_MAX_FIXTURES_PER_SESSION,
+  ENGINE_CALL_BUDGET_MS,
+  MAX_FIXTURES_OVERRIDE,
+  sessionCap,
+} from "@/lib/engine/limits";
 import {
   useAdminPredictions,
   useAdminUsers,
@@ -26,12 +33,14 @@ import {
   useOfficeAction,
   usePredictionRuns,
   useTuningReports,
+  useUpcomingFixtures,
   useDashboardMetrics,
   usePredictionReport,
   useUserPicksReport,
   useAllConfigs,
   useFxFallback,
   adminKeys,
+  type BoardFixture,
   type CatalogLeague,
   type CatalogTeam,
 } from "@/lib/admin-queries";
@@ -268,9 +277,17 @@ export function OfficeClient({
 
 /* ------------------------------ pipeline ------------------------------ */
 
+/**
+ * "Fetch stats" used to be its own tile and no longer is.
+ *
+ * On the schedule it stays separate for a reason — fixtures land at 00:30 and
+ * stats at 05:00, so the 36-hour window is centred on the 06:00 engine run.
+ * By hand there is no 05:00 to wait for, and a tile you had to remember to
+ * press second was a tile that got forgotten, leaving the engine reasoning
+ * over team names. The fixture pull now carries the stats pull with it.
+ */
 const STAGES = [
-  { action: "fetchFixtures", label: "Fetch fixtures", hint: "Pull today's matches from the feed" },
-  { action: "fetchStats", label: "Fetch stats", hint: "Form, H2H and season numbers the engine reads" },
+  { action: "fetchFixtures", label: "Fetch fixtures", hint: "Pull today's matches, with the numbers the engine reads" },
   { action: "generatePicks", label: "Generate picks", hint: "Run the engine over today's board" },
   { action: "gradeResults", label: "Grade results", hint: "Settle anything that has finished" },
   { action: "clvCheck", label: "CLV check", hint: "Flag lines that moved against us" },
@@ -309,7 +326,7 @@ function describeStage(stage: string, result: unknown): StageOutcome {
         ? { tone: "pending", headline: "No fixtures found",
             detail: `Checked ${n("leagues")} league(s) for ${String(r.date ?? "today")}. The API returned nothing, which on a quiet day is normal and otherwise means the plan or the league list.` }
         : { tone: "won", headline: `${n("upserted")} fixture(s) saved`,
-            detail: `${n("fixtures")} returned across ${n("leagues")} league(s) for ${String(r.date ?? "today")}.` };
+            detail: `${n("fixtures")} returned across ${n("leagues")} league(s) for ${String(r.date ?? "today")}. ${describeStatsLeg(r.stats)}` };
 
     case "fetchStats":
       return n("fetched") === 0
@@ -321,12 +338,13 @@ function describeStage(stage: string, result: unknown): StageOutcome {
     case "generatePicks":
       return n("generated") === 0
         ? { tone: "pending", headline: "No picks published",
-            detail: `The engine analysed ${n("considered")}, of which ${n("noBetZone")} were no-bet and ${n("rejected")} fell below the confidence floor.` }
+            detail: `The engine analysed ${n("considered")}, of which ${n("noBetZone")} were no-bet and ${n("rejected")} fell below the confidence floor. ${describeTiming(r)}` }
         : { tone: "won", headline: `${n("generated")} pick(s) published`,
             detail: `From ${n("considered")} analysed. ${n("noBetZone")} no-bet, ${n("rejected")} below the floor` +
               (n("configFallbacks") || n("warnings")
                 ? `. ${n("configFallbacks")} config fallback(s), ${n("warnings")} warning(s) — check the Engine tab.`
-                : ".") };
+                : ".") +
+              ` ${describeTiming(r)}` };
 
     case "gradeResults":
       return n("graded") === 0
@@ -349,9 +367,326 @@ function describeStage(stage: string, result: unknown): StageOutcome {
         : { tone: "pending", headline: `${n("proposals")} change(s) proposed`,
             detail: `From ${n("reviewed")} settled pick(s). ${r.autoApplied ? "Applied automatically." : "Waiting for approval in the Reports tab."}` };
 
+    case "fetchAndGenerate": {
+      // A composite is only as good as its worst leg, so each half is described
+      // by the same code that describes it alone and the pair is reported by
+      // whichever one stopped short.
+      const fetched = describeStage("fetchFixtures", r.fetch);
+      const picks = describeStage("generatePicks", r.picks);
+      return {
+        tone: picks.tone === "won" ? fetched.tone : picks.tone,
+        headline: `${fetched.headline}, then ${picks.headline.toLowerCase()}`,
+        detail: [fetched.detail, picks.detail].filter(Boolean).join(" "),
+      };
+    }
+
     default:
       return { tone: "won", headline: "Finished" };
   }
+}
+
+/**
+ * What the run cost in time, against what it had.
+ *
+ * The model call replaced the API call budget as the thing that stops a run,
+ * and nothing in the Office said so — a run either came back or the request
+ * died, with no way to tell a comfortable pass from one that finished with
+ * four seconds to spare. Both readings look identical in a list of pick counts.
+ *
+ * Reported as used-of-budget for exactly that reason: 152s means nothing alone,
+ * 152s of 240s over 7 fixtures is a sentence an operator can act on.
+ */
+function describeTiming(r: Record<string, unknown>): string {
+  const ms = Number(r.modelDurationMs ?? 0);
+  if (!ms) return "";
+
+  const budget = Number(r.callBudgetMs ?? 0);
+  const secs = (ms / 1000).toFixed(0);
+  const fixtures = Number(r.fixtures ?? 0);
+  const over = fixtures ? ` over ${fixtures} fixture${fixtures === 1 ? "" : "s"}` : "";
+
+  if (!budget) return `The engine call took ${secs}s${over}.`;
+
+  const share = Math.round((ms / budget) * 100);
+  const headroom =
+    share >= 75
+      ? " Close enough to the ceiling that a heavier day would abort — cut the fixture count."
+      : "";
+  return `The engine call took ${secs}s${over}, ${share}% of its ${Math.round(budget / 1000)}s budget.${headroom}`;
+}
+
+/**
+ * The stats leg of a fixture pull, in one clause.
+ *
+ * Absent means the pull was asked not to enrich, which is not a failure and
+ * must not read as one. Zero fetched with a budget skip is the one an operator
+ * needs to see, because the engine will run on names and say nothing about it.
+ */
+function describeStatsLeg(stats: unknown): string {
+  if (stats == null) return "";
+  const s = stats as Record<string, unknown>;
+  if (typeof s.skipped === "string") return `No stats pulled: ${s.skipped}.`;
+
+  const upserted = Number(s.upserted ?? 0);
+  if (upserted === 0) return "No stats to pull, nothing kicks off inside the next 36 hours.";
+
+  // An override the API budget quietly overruled looks identical to one that
+  // was honoured, and the operator would go on believing they asked for 30.
+  const throttled =
+    s.boundBy === "budget"
+      ? ` Capped at ${Number(s.limit ?? 0)} by the API budget, not by the run size you set.`
+      : "";
+  return `Stats attached to ${upserted} of them.${throttled}`;
+}
+
+/**
+ * The board, between the fetch and the engine.
+ *
+ * The pull is indiscriminate: it takes every fixture the selected leagues put
+ * on for the day, and some of those are ones nobody wants a pick on — a dead
+ * rubber, a reserve derby, a kickoff the operator knows is in doubt. Before
+ * this, the only way to keep one out of the prompt was to let the engine pay
+ * for it and then delete the pick afterwards, which spends model calls to
+ * produce something you already knew you would throw away.
+ *
+ * So the list is shown in the order `runDailyPicks` reads it, and the cut is
+ * drawn where the session cap falls. Rows below the line are not going to be
+ * analysed no matter what happens here, and saying so is the difference
+ * between pruning the board and rearranging a list.
+ */
+function BoardPanel({ override }: { override?: number }) {
+  const action = useOfficeAction();
+  const { data, isPending } = useUpcomingFixtures();
+  const config = useEngineConfig();
+  const [confirming, setConfirming] = useState<string | null>(null);
+
+  const fixtures = data ?? [];
+  // The same function runDailyPicks calls, not a second copy of the number.
+  // A line drawn here that the engine does not draw is worse than no line.
+  const cap = sessionCap(
+    config.data?.api_budget as { maxFixturesPerSession?: number } | undefined,
+    override,
+  );
+
+  return (
+    <Panel
+      title="Today's board"
+      description={
+        fixtures.length
+          ? `${fixtures.length} fixture${fixtures.length === 1 ? "" : "s"} upcoming. The engine reads the first ${cap} in kickoff order, drop anything you don't want a pick on before you generate.`
+          : "What the engine will read when you generate picks."
+      }
+    >
+      {isPending ? (
+        <Loading />
+      ) : !fixtures.length ? (
+        <Empty>Nothing on the board. Fetch fixtures to fill it.</Empty>
+      ) : (
+        <ul className="max-h-[28rem] divide-y divide-separator overflow-y-auto">
+          {fixtures.map((f, i) => (
+            <BoardRow
+              key={f.id}
+              fixture={f}
+              // The cap counts from the top of this same ordering, so the row
+              // that crosses it is the row the engine stops before.
+              beyondCap={i >= cap}
+              busy={action.isPending}
+              confirming={confirming === f.id}
+              onAsk={() => setConfirming(f.id)}
+              onCancel={() => setConfirming(null)}
+              onDelete={() =>
+                action.mutate(
+                  { action: "deleteFixture", fixtureId: f.id },
+                  { onSuccess: () => setConfirming(null) },
+                )
+              }
+            />
+          ))}
+        </ul>
+      )}
+
+      {action.error && <ActionError message={action.error.message} />}
+    </Panel>
+  );
+}
+
+function BoardRow({
+  fixture: f,
+  beyondCap,
+  busy,
+  confirming,
+  onAsk,
+  onCancel,
+  onDelete,
+}: {
+  fixture: BoardFixture;
+  beyondCap: boolean;
+  busy: boolean;
+  confirming: boolean;
+  onAsk: () => void;
+  onCancel: () => void;
+  onDelete: () => void;
+}) {
+  const label = `${f.home?.name ?? "?"} v ${f.away?.name ?? "?"}`;
+
+  return (
+    <li className="flex items-center gap-3 py-2.5 first:pt-0">
+      <Crest src={f.leagues?.logo} name={f.leagues?.name ?? "?"} />
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-[13px] font-semibold">{label}</p>
+        <p className="truncate text-[11px] text-muted">
+          {f.leagues?.name ?? "Unknown league"} ·{" "}
+          {new Date(f.fixture_date).toLocaleString(undefined, {
+            day: "numeric", month: "short",
+            hour: "numeric", minute: "2-digit", hour12: true,
+          })}
+          {beyondCap && " · past the session cap"}
+        </p>
+      </div>
+
+      {confirming ? (
+        <span className="flex flex-none gap-2">
+          <button
+            type="button"
+            disabled={busy}
+            onClick={onDelete}
+            className="press rounded-full px-3 py-1.5 text-[11px] font-semibold disabled:opacity-40"
+            style={{ background: "var(--lost-wash)", color: "var(--lost-ink)" }}
+          >
+            Really drop
+          </button>
+          <button type="button" onClick={onCancel} className={PILL}>
+            Cancel
+          </button>
+        </span>
+      ) : (
+        <button
+          type="button"
+          onClick={onAsk}
+          aria-label={`Drop ${label} from the board`}
+          className={`${PILL} flex-none`}
+        >
+          <Trash2 className="h-3 w-3" />
+        </button>
+      )}
+    </li>
+  );
+}
+
+/**
+ * One run's model-call time, coloured by how close it came to the ceiling.
+ *
+ * Null for every row written before this was tracked, and null is rendered as
+ * a dash rather than as zero — an untimed run is unknown, not instant, and a
+ * column of 0s would read as the fastest runs in the table.
+ */
+function RunDuration({
+  ms,
+  fixtures,
+}: {
+  ms: number | null | undefined;
+  fixtures: number | null | undefined;
+}) {
+  if (ms == null) {
+    return (
+      <span className="numeral text-[11px] text-muted" title="Not recorded for this run">
+        &ndash;
+      </span>
+    );
+  }
+
+  // Three bands, and the middle one is accent rather than "pending": that wash
+  // is plain white in light mode, so a badge painted with it would vanish into
+  // the panel exactly when it has something to say.
+  const share = ms / ENGINE_CALL_BUDGET_MS;
+  const tone =
+    share >= 0.75
+      ? { background: "var(--lost-wash)", color: "var(--lost-ink)" }
+      : share >= 0.5
+        ? { background: "var(--accent-wash)", color: "var(--accent)" }
+        : { background: "var(--won-wash)", color: "var(--won-ink)" };
+
+  return (
+    <span
+      className="numeral rounded-full px-2 py-1 text-[11px] font-semibold"
+      style={tone}
+      title={`${Math.round(share * 100)}% of the ${Math.round(ENGINE_CALL_BUDGET_MS / 1000)}s call budget${
+        fixtures ? `, over ${fixtures} fixture${fixtures === 1 ? "" : "s"}` : ""
+      }`}
+    >
+      {(ms / 1000).toFixed(0)}s
+    </span>
+  );
+}
+
+/**
+ * How many fixtures this run should work over.
+ *
+ * The engine reads the top N of the board in kickoff order, and N came only
+ * from the active config — a number you can change in the Engine tab, which
+ * writes a new config version, which is a heavy thing to do because you want a
+ * three-fixture pass to check that a prompt edit did what you meant.
+ *
+ * The ceiling is not politeness. The route dies at 300 seconds and the model
+ * client at 240, and an overrun does not return a short answer — it aborts a
+ * call that has already been paid for, mid-write. So the field will not accept
+ * a number above MAX_FIXTURES_OVERRIDE, and it says why rather than clamping
+ * silently, because an operator who typed 60 and got 40 should know which
+ * number ran.
+ */
+function RunSize({
+  value,
+  onChange,
+  valid,
+  effective,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  valid: boolean;
+  effective: number | null;
+}) {
+  return (
+    <div className="mb-4 rounded-2xl bg-surface-secondary p-4">
+      <div className="flex flex-wrap items-center gap-3">
+        <label htmlFor="run-size" className="text-[13px] font-semibold">
+          Fixtures this run
+        </label>
+        <input
+          id="run-size"
+          type="number"
+          inputMode="numeric"
+          min={1}
+          max={MAX_FIXTURES_OVERRIDE}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder="Config default"
+          aria-invalid={!valid}
+          aria-describedby="run-size-hint"
+          className={`${FIELD} w-40`}
+        />
+        {/* Shown whenever the field holds anything, INCLUDING an invalid value.
+            Gating it on `valid` is what made the out-of-range state a dead end:
+            every button greyed out and the one control that clears it hidden. */}
+        {value.trim() !== "" && (
+          <button type="button" onClick={() => onChange("")} className={PILL}>
+            Use config default
+          </button>
+        )}
+      </div>
+
+      <p
+        id="run-size-hint"
+        className="mt-2 text-[12px] leading-relaxed"
+        style={{ color: valid ? "var(--muted)" : "var(--lost-ink)" }}
+      >
+        {!valid
+          ? `Between 1 and ${MAX_FIXTURES_OVERRIDE}. Above that the model call runs past its timeout and the run aborts part-written.`
+          : effective !== null
+            ? `This run only. It won't change the config, and the scheduled jobs keep using the config's own cap.`
+            : `Leave empty to use the active config's cap (${DEFAULT_MAX_FIXTURES_PER_SESSION} where it sets none). Applies to the fixture pull, the stats that come with it, and the engine.`}
+      </p>
+    </div>
+  );
 }
 
 function PipelinePanel() {
@@ -360,10 +695,38 @@ function PipelinePanel() {
   const jobs = useJobQueue();
   const [last, setLast] = useState<{ stage: string; result: unknown } | null>(null);
 
+  /**
+   * Empty means "whatever the config says", not zero.
+   *
+   * Held as the raw string so the field can be cleared back to the default.
+   * A number with no null in it would force the operator to type the config's
+   * own cap back in from memory to undo an override.
+   */
+  const [sizeInput, setSizeInput] = useState("");
+  const parsed = Number(sizeInput);
+  const size =
+    sizeInput.trim() && Number.isFinite(parsed) ? Math.floor(parsed) : undefined;
+  const sizeValid =
+    size === undefined || (size >= 1 && size <= MAX_FIXTURES_OVERRIDE);
+
   async function run(stage: string) {
     setLast(null);
-    const result = await action.mutateAsync({ action: stage });
-    setLast({ stage, result });
+    try {
+      // Only the three stages that read the board take it. Sending it to
+      // grading or CLV would be rejected by the route's own union, which is
+      // the right place for that to be enforced, but there is no reason to
+      // make the request in the first place.
+      const sized = ["fetchFixtures", "generatePicks", "fetchAndGenerate"].includes(stage);
+      const result = await action.mutateAsync({
+        action: stage,
+        ...(sized && size !== undefined ? { maxFixtures: size } : {}),
+      });
+      setLast({ stage, result });
+    } catch {
+      // The mutation already holds the error and ActionError below renders it.
+      // Swallowed here only so a failed stage doesn't surface as an unhandled
+      // rejection in the console on top of the message the operator can see.
+    }
   }
 
   return (
@@ -371,13 +734,41 @@ function PipelinePanel() {
       <Panel
         title="Run a stage"
         description="These are the same functions pg_cron calls on schedule. Running one here does exactly what the scheduled job does."
+        action={
+          <button
+            type="button"
+            disabled={action.isPending || !sizeValid}
+            onClick={() => run("fetchAndGenerate")}
+            className="press flex flex-none items-center gap-2 rounded-full bg-accent px-5 py-2.5 text-[13px] font-semibold text-accent-foreground disabled:opacity-50"
+          >
+            <Zap className="h-3.5 w-3.5" />
+            {action.isPending ? "Working…" : "Fetch & generate"}
+          </button>
+        }
       >
+        {/* The whole day in one press: fixtures, their stats, then the engine.
+            Called out as slow because it is the one action here that can sit
+            for minutes, and a button that looks stuck gets pressed twice. */}
+        <p className="mb-4 text-[13px] leading-relaxed text-muted">
+          <b className="font-semibold text-foreground">Fetch &amp; generate</b> runs
+          the fixture pull and the engine back to back. It takes a few minutes and
+          publishes straight to the board, so use the stages below when you want to
+          look at what came back first.
+        </p>
+
+        <RunSize
+          value={sizeInput}
+          onChange={setSizeInput}
+          valid={sizeValid}
+          effective={size ?? null}
+        />
+
         <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
           {STAGES.map((s) => (
             <button
               key={s.action}
               type="button"
-              disabled={action.isPending}
+              disabled={action.isPending || !sizeValid}
               onClick={() => run(s.action)}
               className="press lift flex items-start gap-3 rounded-2xl border border-border bg-background p-4 text-left disabled:opacity-50"
             >
@@ -429,8 +820,20 @@ function PipelinePanel() {
         })()}
       </Panel>
 
+      <BoardPanel override={size} />
+
       <div className="grid gap-4 lg:grid-cols-2">
-        <Panel title="Recent runs" description="Each engine pass and what it produced.">
+        {/*
+          Duration sits here rather than in a log nobody opens, because this is
+          the list an operator already reads after a run. The session cap is set
+          against a single measured pass — seven fixtures, 152 seconds — and the
+          only way that stops being a guess is if the next twenty runs are
+          visible next to the count they produced.
+        */}
+        <Panel
+          title="Recent runs"
+          description="Each engine pass, what it produced, and how long the model call took."
+        >
           {runs.isPending ? (
             <Loading />
           ) : !runs.data?.length ? (
@@ -448,7 +851,13 @@ function PipelinePanel() {
                     </p>
                     <p className="truncate font-mono text-[11px] text-muted">{r.model_version}</p>
                   </div>
-                  <span className="numeral flex-none text-lg">{r.num_picks}</span>
+                  <div className="flex flex-none items-center gap-3">
+                    <RunDuration
+                      ms={r.model_duration_ms}
+                      fixtures={r.fixtures_considered}
+                    />
+                    <span className="numeral text-lg">{r.num_picks}</span>
+                  </div>
                 </li>
               ))}
             </ul>
@@ -497,12 +906,17 @@ function PipelinePanel() {
 function PredictionsPanel() {
   const [page, setPage] = useState(0);
   const { data, isPending } = useAdminPredictions(page);
+  const action = useOfficeAction();
+  const [deleting, setDeleting] = useState<string | null>(null);
 
   const rows = (data?.rows ?? []) as Pick[];
   const pages = Math.ceil((data?.total ?? 0) / (data?.pageSize ?? 25));
 
   return (
-    <Panel title="All predictions" description={`${data?.total ?? 0} on record.`}>
+    <Panel
+      title="All predictions"
+      description={`${data?.total ?? 0} on record. Deleting is for a pick that should never have been published, a settled one or one already on a customer's slip is refused and voided in Grade instead.`}
+    >
       {isPending ? (
         <Loading rows={6} />
       ) : !rows.length ? (
@@ -511,33 +925,59 @@ function PredictionsPanel() {
         <>
           <ul className="divide-y divide-separator">
             {rows.map((p) => (
-              <li key={p.id} className="flex flex-wrap items-center gap-3 py-3 first:pt-0">
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-[13px] font-semibold">
-                    {teamShort(p.homeTeam)} v {teamShort(p.awayTeam)}
-                  </p>
-                  <p className="truncate text-[11px] text-muted">
-                    {p.league.name} · {formatMarket(p.predictionType, p.predictedValue)}
-                  </p>
+              <li key={p.id} className="py-3 first:pt-0">
+                <div className="flex flex-wrap items-center gap-3">
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-[13px] font-semibold">
+                      {teamShort(p.homeTeam)} v {teamShort(p.awayTeam)}
+                    </p>
+                    <p className="truncate text-[11px] text-muted">
+                      {p.league.name} · {formatMarket(p.predictionType, p.predictedValue)}
+                    </p>
+                  </div>
+                  <span className="numeral w-12 text-right text-sm">
+                    {confidencePercent(p.confidenceScore ?? 0)}%
+                  </span>
+                  <span className="numeral w-8 text-right text-sm text-muted">
+                    {p.stakingUnit ?? 0}u
+                  </span>
+                  <Tag
+                    tone={
+                      p.status === "won" ? "won"
+                        : p.status === "lost" ? "lost"
+                        : p.status === "review_needed" ? "accent" : "pending"
+                    }
+                  >
+                    {p.status.replace("_", " ")}
+                  </Tag>
+                  <button
+                    type="button"
+                    onClick={() => setDeleting(deleting === p.id ? null : p.id)}
+                    aria-label={`Delete the ${formatMarket(p.predictionType, p.predictedValue)} pick`}
+                    aria-expanded={deleting === p.id}
+                    className={`${PILL} flex-none`}
+                  >
+                    <Trash2 className="h-3 w-3" />
+                  </button>
                 </div>
-                <span className="numeral w-12 text-right text-sm">
-                  {confidencePercent(p.confidenceScore ?? 0)}%
-                </span>
-                <span className="numeral w-8 text-right text-sm text-muted">
-                  {p.stakingUnit ?? 0}u
-                </span>
-                <Tag
-                  tone={
-                    p.status === "won" ? "won"
-                      : p.status === "lost" ? "lost"
-                      : p.status === "review_needed" ? "accent" : "pending"
-                  }
-                >
-                  {p.status.replace("_", " ")}
-                </Tag>
+
+                {deleting === p.id && (
+                  <DeletePredictionForm
+                    busy={action.isPending}
+                    onCancel={() => setDeleting(null)}
+                    onSubmit={(reason) =>
+                      action.mutate(
+                        { action: "deletePrediction", predictionId: p.id, reason },
+                        { onSuccess: () => setDeleting(null) },
+                      )
+                    }
+                  />
+                )}
               </li>
             ))}
           </ul>
+
+          {action.error && <ActionError message={action.error.message} />}
 
           {pages > 1 && (
             <div className="mt-5 flex items-center justify-between">
@@ -565,6 +1005,57 @@ function PredictionsPanel() {
         </>
       )}
     </Panel>
+  );
+}
+
+/**
+ * The reason is required, and required in the UI rather than only at the route.
+ *
+ * A delete leaves nothing behind in `predictions` to inspect afterwards — the
+ * row is gone. The audit log is the only record that it happened, and a log
+ * entry that says an admin deleted a pick without saying why answers the easy
+ * half of the question. So the button stays dead until there is a sentence.
+ */
+function DeletePredictionForm({
+  busy,
+  onCancel,
+  onSubmit,
+}: {
+  busy: boolean;
+  onCancel: () => void;
+  onSubmit: (reason: string) => void;
+}) {
+  const [reason, setReason] = useState("");
+  const ready = reason.trim().length >= 3;
+
+  return (
+    <div className="rise mt-3 space-y-3 rounded-2xl bg-surface-secondary p-4">
+      <p className="text-[12px] leading-relaxed text-muted">
+        This removes the pick entirely. There is no undo, and the reason is the
+        only thing the audit log will carry.
+      </p>
+      <div className="flex flex-wrap gap-2">
+        <input
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+          placeholder="Why is this being deleted?"
+          aria-label="Reason for deleting this prediction"
+          className={`${FIELD} min-w-0 flex-1`}
+        />
+        <button
+          type="button"
+          disabled={!ready || busy}
+          onClick={() => onSubmit(reason.trim())}
+          className="press flex-none rounded-full px-4 py-1.5 text-[11px] font-semibold disabled:opacity-40"
+          style={{ background: "var(--lost-wash)", color: "var(--lost-ink)" }}
+        >
+          {busy ? "Deleting…" : "Delete pick"}
+        </button>
+        <button type="button" onClick={onCancel} className={PILL}>
+          Cancel
+        </button>
+      </div>
+    </div>
   );
 }
 

@@ -9,6 +9,7 @@ import { ConfidenceRing } from "./confidence-ring";
 import { TeamCrest } from "./team-crest";
 import { isUnlocked, type Pick } from "@/lib/types";
 import { confidencePercent, formatMarket, teamName } from "@/lib/format";
+import { describeFilters } from "@/lib/engine/filters";
 
 /**
  * The detail page.
@@ -280,44 +281,7 @@ export function PredictionDetail({ id }: { id: string }) {
             )}
           </Section>
 
-          <Section
-            title="Factors considered"
-            description="Screens the model applies before it will publish a call."
-          >
-            {unlocked && pick.filtersApplied?.length ? (
-              <ul className="grid gap-2 sm:grid-cols-2">
-                {/* Only what fired. The model used to return every flag with a
-                    boolean, so this rendered three dozen rows to say that
-                    almost nothing applied. */}
-                {(Array.isArray(pick.filtersApplied)
-                  ? pick.filtersApplied.map((k) => [k, true] as const)
-                  : Object.entries(pick.filtersApplied)
-                ).map(([k, passed]) => (
-                  <li
-                    key={k}
-                    className="flex items-center gap-2.5 rounded-xl bg-surface-secondary px-3 py-2.5"
-                  >
-                    <span
-                      className="flex h-5 w-5 flex-none items-center justify-center rounded-full"
-                      style={{
-                        background: passed ? "var(--won-wash)" : "var(--surface-tertiary)",
-                        color: passed ? "var(--won-ink)" : "var(--muted)",
-                      }}
-                    >
-                      {passed ? <Check className="h-3 w-3" strokeWidth={3} /> : "–"}
-                    </span>
-                    <span className="text-[13px] capitalize">
-                      {k.replace(/([A-Z])/g, " $1").toLowerCase()}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            ) : unlocked ? (
-              <p className="text-[13px] text-muted">No filters recorded for this call.</p>
-            ) : (
-              <LockedNotice>Unlocks with the call.</LockedNotice>
-            )}
-          </Section>
+          <FactorsSection pick={pick} unlocked={unlocked} />
 
           {/*
             Line-ups are not fetched yet. API-Football publishes them roughly
@@ -345,6 +309,112 @@ export function PredictionDetail({ id }: { id: string }) {
 }
 
 /* ------------------------------ components ------------------------------ */
+
+/**
+ * What the engine checked, and what it could not.
+ *
+ * One list before, every string ticked green. That put a tick beside
+ * "skipped_no_personnel_data" — claiming as a completed screen the one thing
+ * the engine explicitly could not do — under a heading promising these are the
+ * screens applied before publishing. The split is the honest shape: a customer
+ * deciding whether to trust a number needs to know what went unchecked at least
+ * as much as what did.
+ *
+ * The unavailable list is not an apology and is not hidden. Most of these are
+ * permanent properties of the feed, not today's outage, and saying so is what
+ * makes the confidence number readable.
+ */
+function FactorsSection({ pick, unlocked }: { pick: Pick; unlocked: boolean }) {
+  const { applied, unavailable } = describeFilters(pick.filtersApplied);
+
+  return (
+    <Section
+      title="Factors considered"
+      description="The screens the engine ran on this fixture, and the ones it had no data for."
+    >
+      {!unlocked ? (
+        <LockedNotice>Unlocks with the call.</LockedNotice>
+      ) : !applied.length && !unavailable.length ? (
+        <p className="text-[13px] text-muted">
+          No screens were recorded for this call.
+        </p>
+      ) : (
+        <div className="space-y-6">
+          {!!applied.length && (
+            <div>
+              <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-muted">
+                Applied
+              </p>
+              <ul className="mt-3 space-y-2">
+                {applied.map((f) => (
+                  <li
+                    key={f.raw}
+                    className="flex items-start gap-3 rounded-xl bg-surface-secondary px-3 py-2.5"
+                  >
+                    <span
+                      className="mt-px flex h-5 w-5 flex-none items-center justify-center rounded-full"
+                      style={{ background: "var(--won-wash)", color: "var(--won-ink)" }}
+                    >
+                      <Check className="h-3 w-3" strokeWidth={3} />
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block text-[13px] font-medium">{f.label}</span>
+                      {f.detail && (
+                        <span className="mt-0.5 block text-[12px] leading-relaxed text-muted">
+                          {f.detail}
+                        </span>
+                      )}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {!!unavailable.length && (
+            <div>
+              <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-muted">
+                No data to check
+              </p>
+              <p className="mt-1.5 text-[12px] leading-relaxed text-muted">
+                These screens need inputs this fixture doesn&rsquo;t carry. The engine
+                skips them rather than guessing, and a skipped screen counts against
+                the confidence score, never for it.
+              </p>
+              <ul className="mt-3 space-y-2">
+                {unavailable.map((f) => (
+                  <li
+                    key={f.raw}
+                    className="flex items-start gap-3 rounded-xl px-3 py-2.5"
+                    style={{ background: "var(--surface-tertiary)" }}
+                  >
+                    <span
+                      className="mt-px flex h-5 w-5 flex-none items-center justify-center rounded-full text-[13px] leading-none text-muted"
+                      style={{ background: "var(--surface-secondary)" }}
+                      aria-hidden
+                    >
+                      &ndash;
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block text-[13px] font-medium text-muted">
+                        {f.label}
+                      </span>
+                      {f.detail && (
+                        <span className="mt-0.5 block text-[12px] leading-relaxed text-muted">
+                          {f.detail}
+                        </span>
+                      )}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      )}
+    </Section>
+  );
+}
 
 function LockedNotice({ children }: { children: React.ReactNode }) {
   return (
