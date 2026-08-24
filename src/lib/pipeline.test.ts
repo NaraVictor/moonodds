@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { gradePrediction, replaceVerdict, slugify, statsBlock } from "./pipeline";
+import {
+  gradePrediction,
+  liveWindow,
+  replaceVerdict,
+  slugify,
+  statsBlock,
+} from "./pipeline";
 import type { Market } from "./types";
 
 /**
@@ -363,5 +369,42 @@ describe("replaceVerdict", () => {
     // compare would make "9.5" < "10" false and silently stop replacing.
     expect(replaceVerdict({ id: "p1", status: "pending", confidence_score: "7.0" }, 7.6, none))
       .toBe("write");
+  });
+});
+
+/**
+ * The window that decides whether the minute-by-minute poller calls the API.
+ *
+ * This is the quota guard. Widen it and a stuck fixture is polled every sixty
+ * seconds indefinitely; invert a bound and the poller either never fires or
+ * fires on fixtures that have not kicked off, which is 1,440 calls a day spent
+ * being told nothing has happened.
+ */
+describe("live polling window", () => {
+  const now = new Date("2026-08-24T20:00:00Z").getTime();
+  const w = liveWindow(now);
+
+  it("ends at this moment, so a fixture kicking off now is included", () => {
+    expect(w.to).toBe("2026-08-24T20:00:00.000Z");
+  });
+
+  it("reaches back four hours and no further", () => {
+    expect(w.from).toBe("2026-08-24T16:00:00.000Z");
+    expect(new Date(w.to).getTime() - new Date(w.from).getTime()).toBe(4 * 3600 * 1000);
+  });
+
+  it("excludes fixtures that have not kicked off", () => {
+    const kickoff = new Date("2026-08-24T20:30:00Z").toISOString();
+    expect(kickoff > w.to).toBe(true);
+  });
+
+  it("includes one that kicked off an hour ago", () => {
+    const kickoff = new Date("2026-08-24T19:00:00Z").toISOString();
+    expect(kickoff > w.from && kickoff <= w.to).toBe(true);
+  });
+
+  it("drops one that kicked off five hours ago, leaving it to the sweep", () => {
+    const kickoff = new Date("2026-08-24T15:00:00Z").toISOString();
+    expect(kickoff > w.from).toBe(false);
   });
 });

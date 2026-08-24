@@ -1155,7 +1155,107 @@ export async function runAutoGrade() {
 
   if (!overdue?.length) return { graded: 0, fixtures: 0 };
 
-  const withIds = overdue.filter((f) => f.external_id != null);
+  return applyResults(db, football, overdue);
+}
+
+/**
+ * How long after kickoff a fixture stops being worth polling every minute.
+ *
+ * Ninety minutes plus stoppage, half time, and generous room for a delayed
+ * start. Past this it is either finished — in which case one more poll settles
+ * it — or it is stuck, and a stuck fixture polled every sixty seconds forever
+ * is a standing charge against the API budget for no new information. The
+ * two-hourly sweep in runAutoGrade is the backstop for those.
+ */
+const LIVE_WINDOW_MS = 4 * 60 * 60 * 1000;
+
+/**
+ * The fixtures worth polling right now, as query bounds.
+ *
+ * Exported and used to BUILD the query rather than re-deciding in JavaScript
+ * what the query already decided — a predicate beside a WHERE clause is two
+ * implementations of one rule, and the one that drifts is always the untested
+ * one.
+ *
+ * Half-open on purpose: `to` is inclusive of a fixture kicking off this very
+ * second, `from` is exclusive so a fixture aging out at exactly four hours
+ * leaves rather than being polled one last time.
+ */
+export function liveWindow(now: number = Date.now()): { from: string; to: string } {
+  return {
+    from: new Date(now - LIVE_WINDOW_MS).toISOString(),
+    to: new Date(now).toISOString(),
+  };
+}
+
+/**
+ * Poll in-play fixtures, once a minute.
+ *
+ * Results used to arrive only from runAutoGrade, on a two-hourly schedule
+ * behind a 2.5-hour cutoff. A match finishing at 20:30 could therefore sit
+ * PENDING until 23:15 — nearly three hours in which the customer who backed it
+ * knows the score and the product does not, and the card still says the game is
+ * yet to start.
+ *
+ * THE API BUDGET IS THE DESIGN CONSTRAINT, so read the cost carefully:
+ *
+ *   - No fixture in the window means NO upstream call at all. This is the whole
+ *     guard. A poller that calls the API to be told nothing is in play would
+ *     spend 1,440 calls a day doing it.
+ *   - When something is in play, every fixture in the window goes into ONE
+ *     request — fetchResults batches twenty ids per call — so the cost is one
+ *     call per minute regardless of how many matches are on.
+ *   - A six-hour evening card therefore costs about 360 calls, inside the 500
+ *     that api_budget.reservedForResults sets aside for exactly this.
+ *
+ * Safe to overlap. pg_net fires and forgets, so a slow run can still be in
+ * flight when the next minute comes round; every write here is an idempotent
+ * update keyed on a fixture id, and grading only ever moves a prediction off
+ * `pending`, so a second pass over the same fixture changes nothing.
+ */
+export async function runLiveResults() {
+  const db = createServiceClient();
+  const { football } = getProviders();
+
+  const window = liveWindow();
+
+  const { data: inPlay } = await db
+    .from("fixtures")
+    .select("id, external_id")
+    .neq("status", "finished")
+    .lte("fixture_date", window.to)
+    .gt("fixture_date", window.from)
+    .not("external_id", "is", null)
+    .order("fixture_date")
+    .limit(40);
+
+  // The quota guard, and the common case: most minutes of most days have
+  // nothing in play. Returning before the provider is touched is the reason
+  // this can run every sixty seconds at all.
+  if (!inPlay?.length) return { polled: 0, skipped: "nothing in play" };
+
+  return { polled: inPlay.length, ...(await applyResults(db, football, inPlay)) };
+}
+
+/**
+ * Fetch results for a set of fixtures, write what came back, grade what ended.
+ *
+ * Shared by the minute-by-minute poller and the two-hourly sweep, which differ
+ * only in which fixtures they hand over. They used to differ in more than that,
+ * because only one of them existed and the other would have been a copy.
+ *
+ * In-play scores are written, not just final ones. The board can show a live
+ * score that way, and — more importantly — a fixture moving to `live` is what
+ * stops the card claiming the match has not kicked off yet.
+ */
+async function applyResults(
+  db: ReturnType<typeof createServiceClient>,
+  football: ReturnType<typeof getProviders>["football"],
+  fixtures: Array<{ id: string; external_id: number | null }>,
+) {
+  const withIds = fixtures.filter((f) => f.external_id != null);
+  if (!withIds.length) return { fixtures: 0, graded: 0, live: 0 };
+
   const results = await football.fetchResults(
     withIds.map((f) => f.external_id as number),
   );
@@ -1163,10 +1263,35 @@ export async function runAutoGrade() {
 
   let graded = 0;
   let finished = 0;
+  let live = 0;
 
   for (const fixture of withIds) {
     const result = byExternal.get(fixture.external_id as number);
-    if (!result || result.status !== "finished") continue;
+    if (!result) continue;
+
+    /*
+     * A match in progress. Scores are written but nothing is graded, because a
+     * scoreline at 70 minutes is not a result — settling on it would pay out a
+     * bet the match can still overturn.
+     */
+    if (result.status !== "finished") {
+      const { error } = await db
+        .from("fixtures")
+        .update({
+          status: result.status,
+          home_goals: result.homeGoals,
+          away_goals: result.awayGoals,
+          ht_home_goals: result.htHomeGoals,
+          ht_away_goals: result.htAwayGoals,
+        })
+        .eq("id", fixture.id);
+      if (!error && result.status === "live") live++;
+      continue;
+    }
+
+    // Finished, but the feed has not published a score yet. Leaving the status
+    // alone keeps it in the poller's window so the next pass picks it up;
+    // marking it finished with null goals would make it ungradeable forever.
     if (result.homeGoals == null || result.awayGoals == null) continue;
 
     await db
@@ -1217,7 +1342,7 @@ export async function runAutoGrade() {
     }
   }
 
-  return { fixtures: finished, graded };
+  return { fixtures: finished, graded, live };
 }
 
 /** Drain the jobs outbox. Called every minute by pg_cron. */

@@ -5,13 +5,13 @@ import { enforceRateLimit } from "@/lib/rate-limit";
 export const dynamic = "force-dynamic";
 
 /**
- * Ten: fetch-fixtures, fetch-stats, daily-picks, auto-grade, clv-check,
- * weekly-recalibration, reconcile-payments, drain-jobs, reap-stalled, and
- * sweep-expired. Asserted as an exact count rather than "more than zero",
- * because the failure this catches is a rename or a partial migration leaving
- * a subset behind. Bump it when a job is added.
+ * Eleven: fetch-fixtures, fetch-stats, daily-picks, auto-grade, poll-live,
+ * clv-check, weekly-recalibration, reconcile-payments, drain-jobs,
+ * reap-stalled, and sweep-expired. Asserted as an exact count rather than
+ * "more than zero", because the failure this catches is a rename or a partial
+ * migration leaving a subset behind. Bump it when a job is added.
  */
-const EXPECTED_CRON_JOBS = 10;
+const EXPECTED_CRON_JOBS = 11;
 
 /**
  * Deployment readiness, as something you can actually look at.
