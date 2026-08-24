@@ -12,7 +12,7 @@ import type {
   VenueSplit,
 } from "./types";
 import { leagueBadgeUrl, teamCrestUrl } from "./types";
-import { ENGINE_CALL_BUDGET_MS } from "@/lib/engine/limits";
+import { ENGINE_CALL_BUDGET_MS, THIN_SEASON_GAMES } from "@/lib/engine/limits";
 import { PICK_SCHEMA } from "@/lib/engine/output";
 
 /* -------------------------------------------------------------------------
@@ -408,6 +408,35 @@ function venueSplit(stats: ApiTeamStats): { home: VenueSplit; away: VenueSplit }
   return { home: side("home"), away: side("away") };
 }
 
+/**
+ * Last season's record, but only when this season is too short to use.
+ *
+ * Returns null in the two cases that are NOT "the season is young": when the
+ * current record already clears the line, and when the current record is
+ * missing entirely. The second is deliberate — a team with no stats at all is a
+ * team we know nothing about, and answering that with last season's numbers
+ * would dress a total gap up as thin data. The prompt treats those differently
+ * and it should keep being able to.
+ *
+ * A promoted side has no record in this league last season. The endpoint
+ * answers with zeros rather than an error, so the games-played check is what
+ * catches it, and the fixture correctly gets no prior line at all.
+ */
+async function priorSeason(
+  cache: Map<string, Record<string, number> | null>,
+  leagueId: number,
+  season: number,
+  teamId: number,
+  current: Record<string, number> | null,
+): Promise<Record<string, number> | null> {
+  if (!current) return null;
+  if ((current.gamesPlayed ?? 0) >= THIN_SEASON_GAMES) return null;
+
+  const prior = await teamSeason(cache, leagueId, season - 1, teamId);
+  if (!prior || !(prior.gamesPlayed ?? 0)) return null;
+  return stripForm(prior);
+}
+
 function stripForm(rec: Record<string, number> | null): Record<string, number> {
   if (!rec) return {};
   const out = { ...rec } as Record<string, unknown>;
@@ -503,6 +532,14 @@ export const liveFootball: FootballProvider = {
         teamSeason(teamStatsCache, leagueId, season, awayId),
       ]);
 
+      // Only for the sides that need it, and through the same cache, so a
+      // matchday where six of seven fixtures are in one league costs one call
+      // per team rather than one per appearance.
+      const [homePrior, awayPrior] = await Promise.all([
+        priorSeason(teamStatsCache, leagueId, season, homeId, homeSeason),
+        priorSeason(teamStatsCache, leagueId, season, awayId, awaySeason),
+      ]);
+
       out.push({
         fixtureExternalId: f.fixture.id,
         // Form comes from the season statistics rather than being derived
@@ -518,6 +555,8 @@ export const liveFootball: FootballProvider = {
         h2hBttsRate: h2h?.bttsRate ?? null,
         homeSeason: stripForm(homeSeason),
         awaySeason: stripForm(awaySeason),
+        homeSeasonPrior: homePrior,
+        awaySeasonPrior: awayPrior,
         // Both of these come out of calls already made above. Step 1D and
         // Step 1E were gated off for want of data we were fetching and
         // throwing away, not for want of a call we could not afford.

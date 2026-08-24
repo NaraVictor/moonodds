@@ -67,3 +67,19 @@ export function sessionCap(
   }
   return budget?.maxFixturesPerSession ?? DEFAULT_MAX_FIXTURES_PER_SESSION;
 }
+
+/**
+ * Below this many games, a season average describes the last fixture rather
+ * than the side.
+ *
+ * One four-goal match moves goals-per-game by 4/N: two goals at matchday 2,
+ * 0.8 at matchday 5, 0.4 at matchday 10. Six is where a single outlier stops
+ * being able to shift the average by more than about two thirds of a goal.
+ *
+ * Read in three places that must agree: the fetch decides whether to spend a
+ * call on last season, and the prompt builder decides both whether to mark the
+ * current line THIN and whether to print the prior one. A fetch that skipped
+ * the call while the renderer still expected the line would print nothing and
+ * look like a feed gap.
+ */
+export const THIN_SEASON_GAMES = 6;

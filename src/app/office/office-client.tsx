@@ -338,9 +338,21 @@ function describeStage(stage: string, result: unknown): StageOutcome {
     case "generatePicks":
       return n("generated") === 0
         ? { tone: "pending", headline: "No picks published",
-            detail: `The engine analysed ${n("considered")}, of which ${n("noBetZone")} were no-bet and ${n("rejected")} fell below the confidence floor. ${describeTiming(r)}` }
+            /*
+             * This used to read "0 fell below the confidence floor" on a run
+             * where every single fixture fell below it. The zero-pick return
+             * carries no `rejected` key at all — nothing was rejected, nothing
+             * qualified in the first place — so the panel read a missing field
+             * as zero and printed the exact opposite of what happened. Someone
+             * reading it would conclude the floor was not the problem.
+             */
+            detail: `${describeShortfall(r)} ${describeTiming(r)}` }
         : { tone: "won", headline: `${n("generated")} pick(s) published`,
-            detail: `From ${n("considered")} analysed. ${n("noBetZone")} no-bet, ${n("rejected")} below the floor` +
+            detail: `From ${n("considered")} analysed. ${n("noBetZone")} no-bet, ${n("rejected")} unusable` +
+              // A rerun over the same board is mostly duplicates, and silence
+              // about them reads as an engine that found nothing new to say.
+              (n("replaced") ? `, ${n("replaced")} replaced a weaker call` : "") +
+              (n("duplicates") ? `, ${n("duplicates")} left alone as already covered` : "") +
               (n("configFallbacks") || n("warnings")
                 ? `. ${n("configFallbacks")} config fallback(s), ${n("warnings")} warning(s) — check the Engine tab.`
                 : ".") +
@@ -383,6 +395,39 @@ function describeStage(stage: string, result: unknown): StageOutcome {
     default:
       return { tone: "won", headline: "Finished" };
   }
+}
+
+/**
+ * Why nothing published, in the terms that decide what to do about it.
+ *
+ * Two different failures land in the same "0 generated" branch and want
+ * opposite responses. Everything scoring below the floor is a calibration
+ * question — how far below decides whether the floor is a shade too high or
+ * the engine found nothing. Selections the grader cannot parse are a bug.
+ */
+function describeShortfall(r: Record<string, unknown>): string {
+  const n = (k: string) => Number(r[k] ?? 0);
+  const considered = n("considered");
+  const noBet = n("noBetZone");
+  const noBetClause = noBet ? ` ${noBet} of them were no-bet fixtures.` : "";
+
+  // The all-rejected path: picks DID clear the floor, but their selections
+  // could not be graded. Nothing to do with calibration.
+  if (n("rejected") > 0 && !r.note) {
+    return `${n("rejected")} of ${considered} cleared the floor but named a selection the grader cannot settle, so none were published.${noBetClause}`;
+  }
+
+  const floor = r.floor == null ? null : Number(r.floor);
+  const best = r.best == null ? null : Number(r.best);
+
+  if (floor === null) return `The engine analysed ${considered} and published none.${noBetClause}`;
+
+  const margin =
+    best === null
+      ? ""
+      : ` The strongest scored ${best.toFixed(1)}, ${(floor - best).toFixed(1)} short.`;
+
+  return `All ${considered} scored below the ${floor} publication floor.${margin}${noBetClause}`;
 }
 
 /**
@@ -950,29 +995,37 @@ function PredictionsPanel() {
                   >
                     {p.status.replace("_", " ")}
                   </Tag>
-                  <button
-                    type="button"
-                    onClick={() => setDeleting(deleting === p.id ? null : p.id)}
-                    aria-label={`Delete the ${formatMarket(p.predictionType, p.predictedValue)} pick`}
-                    aria-expanded={deleting === p.id}
-                    className={`${PILL} flex-none`}
-                  >
-                    <Trash2 className="h-3 w-3" />
-                  </button>
+                  {deleting === p.id ? (
+                    <span className="flex flex-none gap-2">
+                      <button
+                        type="button"
+                        disabled={action.isPending}
+                        onClick={() =>
+                          action.mutate(
+                            { action: "deletePrediction", predictionId: p.id },
+                            { onSuccess: () => setDeleting(null) },
+                          )
+                        }
+                        className="press rounded-full px-3 py-1.5 text-[11px] font-semibold disabled:opacity-40"
+                        style={{ background: "var(--lost-wash)", color: "var(--lost-ink)" }}
+                      >
+                        {action.isPending ? "Deleting…" : "Really delete"}
+                      </button>
+                      <button type="button" onClick={() => setDeleting(null)} className={PILL}>
+                        Cancel
+                      </button>
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setDeleting(p.id)}
+                      aria-label={`Delete the ${formatMarket(p.predictionType, p.predictedValue)} pick`}
+                      className={`${PILL} flex-none`}
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </button>
+                  )}
                 </div>
-
-                {deleting === p.id && (
-                  <DeletePredictionForm
-                    busy={action.isPending}
-                    onCancel={() => setDeleting(null)}
-                    onSubmit={(reason) =>
-                      action.mutate(
-                        { action: "deletePrediction", predictionId: p.id, reason },
-                        { onSuccess: () => setDeleting(null) },
-                      )
-                    }
-                  />
-                )}
               </li>
             ))}
           </ul>
@@ -1005,57 +1058,6 @@ function PredictionsPanel() {
         </>
       )}
     </Panel>
-  );
-}
-
-/**
- * The reason is required, and required in the UI rather than only at the route.
- *
- * A delete leaves nothing behind in `predictions` to inspect afterwards — the
- * row is gone. The audit log is the only record that it happened, and a log
- * entry that says an admin deleted a pick without saying why answers the easy
- * half of the question. So the button stays dead until there is a sentence.
- */
-function DeletePredictionForm({
-  busy,
-  onCancel,
-  onSubmit,
-}: {
-  busy: boolean;
-  onCancel: () => void;
-  onSubmit: (reason: string) => void;
-}) {
-  const [reason, setReason] = useState("");
-  const ready = reason.trim().length >= 3;
-
-  return (
-    <div className="rise mt-3 space-y-3 rounded-2xl bg-surface-secondary p-4">
-      <p className="text-[12px] leading-relaxed text-muted">
-        This removes the pick entirely. There is no undo, and the reason is the
-        only thing the audit log will carry.
-      </p>
-      <div className="flex flex-wrap gap-2">
-        <input
-          value={reason}
-          onChange={(e) => setReason(e.target.value)}
-          placeholder="Why is this being deleted?"
-          aria-label="Reason for deleting this prediction"
-          className={`${FIELD} min-w-0 flex-1`}
-        />
-        <button
-          type="button"
-          disabled={!ready || busy}
-          onClick={() => onSubmit(reason.trim())}
-          className="press flex-none rounded-full px-4 py-1.5 text-[11px] font-semibold disabled:opacity-40"
-          style={{ background: "var(--lost-wash)", color: "var(--lost-ink)" }}
-        >
-          {busy ? "Deleting…" : "Delete pick"}
-        </button>
-        <button type="button" onClick={onCancel} className={PILL}>
-          Cancel
-        </button>
-      </div>
-    </div>
   );
 }
 
@@ -1262,12 +1264,23 @@ const PILL = "press rounded-full border border-border px-3 py-1.5 text-[11px] fo
 function CatalogPanel() {
   return (
     <div className="space-y-4">
+      {/*
+        Coverage, then import, then what you already hold.
+
+        The order follows the job rather than the data model. Coverage decides
+        which leagues the daily fetch even asks about; importing is how a league
+        gets into that list in the first place. Both are things you come to this
+        tab to DO. The league and team tables are what you come to check, and a
+        catalogue that grows past a few hundred rows pushed the import search
+        below a fold nobody scrolled to — so the answer to "this league is
+        missing" sat underneath the list proving it was missing.
+      */}
       <CoveragePanel />
+      <ImportPanel />
       <div className="grid gap-4 lg:grid-cols-2">
         <LeaguesPanel />
         <TeamsPanel />
       </div>
-      <ImportPanel />
     </div>
   );
 }

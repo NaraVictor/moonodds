@@ -87,11 +87,7 @@ const Body = z.discriminatedUnion("action", [
     maxFixtures: z.number().int().min(1).max(MAX_FIXTURES_OVERRIDE).optional(),
   }),
   z.object({ action: z.literal("deleteFixture"), fixtureId: z.uuid() }),
-  z.object({
-    action: z.literal("deletePrediction"),
-    predictionId: z.uuid(),
-    reason: z.string().min(3).max(500),
-  }),
+  z.object({ action: z.literal("deletePrediction"), predictionId: z.uuid() }),
   z.object({ action: z.literal("gradeResults") }),
   z.object({ action: z.literal("clvCheck") }),
   z.object({ action: z.literal("recalibrate") }),

@@ -5,7 +5,7 @@ import type { H2HMeeting, RecentMatch, VenueSplit } from "./providers/types";
 import { renderPrompt } from "./engine/template";
 import { resolveEngineVariables } from "./engine/variables";
 import { blankToNull, normalisePredictedValue } from "./engine/output";
-import { ENGINE_CALL_BUDGET_MS, sessionCap } from "./engine/limits";
+import { ENGINE_CALL_BUDGET_MS, THIN_SEASON_GAMES, sessionCap } from "./engine/limits";
 import { ENGINE_PROMPT_VERSION } from "./engine/prompt";
 import { reportError } from "./report-error";
 
@@ -305,6 +305,11 @@ export async function runFetchStats({ maxFixtures }: { maxFixtures?: number } = 
         h2h_btts_rate: s.h2hBttsRate,
         home_season: s.homeSeason,
         away_season: s.awaySeason,
+        // Null for most of the season. Written on every upsert rather than
+        // conditionally, so a side that crosses the thin-season line has its
+        // stale prior CLEARED rather than left behind to be read as current.
+        home_season_prior: s.homeSeasonPrior,
+        away_season_prior: s.awaySeasonPrior,
         h2h_matches: s.h2hMatches,
         home_split: s.homeSplit ?? {},
         away_split: s.awaySplit ?? {},
@@ -450,8 +455,17 @@ export function statsBlock(
     s.h2h_home_wins == null
       ? "    H2H: none available for this pairing"
       : `    H2H totals: ${s.h2h_home_wins} home wins, ${s.h2h_draws ?? 0} draws, ${s.h2h_away_wins ?? 0} away wins; avg ${s.h2h_avg_goals ?? "?"} goals, both scored ${s.h2h_btts_rate ?? "?"}`,
-    `    Home season: ${home.avgGoalsScored ?? "?"} scored / ${home.avgGoalsConceded ?? "?"} conceded per game, clean sheets ${home.cleanSheetRate ?? "?"}, both scored ${home.bttsRate ?? "?"}`,
-    `    Away season: ${away.avgGoalsScored ?? "?"} scored / ${away.avgGoalsConceded ?? "?"} conceded per game, clean sheets ${away.cleanSheetRate ?? "?"}, both scored ${away.bttsRate ?? "?"}`,
+    /*
+     * Each side's season, with last season directly beneath it where this one
+     * is too short to mean anything.
+     *
+     * Interleaved rather than grouped into a block of priors at the end, so the
+     * model meets the thin number and the record that explains it together. Six
+     * lines apart they read as two unrelated facts, and the whole point is that
+     * one qualifies the other.
+     */
+    ...seasonLines("Home", home, s.home_season_prior),
+    ...seasonLines("Away", away, s.away_season_prior),
   ];
 
   const meetings = (s.h2h_matches ?? []) as H2HMeeting[];
@@ -541,6 +555,54 @@ function formatMeetings(meetings: H2HMeeting[], homeExternalId: number): string 
 }
 
 /** One side's home and away records, or nothing if the split is empty. */
+/**
+ * A season line that says how much season is behind it.
+ *
+ * `gamesPlayed` was fetched, stored and then dropped on the floor here. Without
+ * it "1.50 scored / 2.00 conceded" is unreadable: it is the same sentence
+ * whether it rests on two matches or thirty-eight, and Step 1 treats it as the
+ * primary quantitative signal either way.
+ */
+function seasonLines(
+  label: string,
+  rec: Record<string, number>,
+  rawPrior: unknown,
+): string[] {
+  const played = rec.gamesPlayed;
+  const scope = played == null ? "" : ` (${played} played${played < THIN_SEASON_GAMES ? ", THIN" : ""})`;
+  const lines = [
+    `    ${label} season${scope}: ${rec.avgGoalsScored ?? "?"} scored / ` +
+      `${rec.avgGoalsConceded ?? "?"} conceded per game, clean sheets ` +
+      `${rec.cleanSheetRate ?? "?"}, both scored ${rec.bttsRate ?? "?"}`,
+  ];
+
+  const prior = priorLine(label, rec, (rawPrior ?? null) as Record<string, number> | null);
+  if (prior) lines.push(prior);
+  return lines;
+}
+
+/**
+ * The fallback line, or nothing.
+ *
+ * Suppressed once the current season stands on its own, because a prior record
+ * shown next to a healthy one is an invitation to average two things that
+ * should not be averaged. It is a fallback, not a second opinion.
+ */
+function priorLine(
+  label: string,
+  current: Record<string, number>,
+  prior: Record<string, number> | null,
+): string | null {
+  if (!prior || !prior.gamesPlayed) return null;
+  if ((current.gamesPlayed ?? 0) >= THIN_SEASON_GAMES) return null;
+  return (
+    `    ${label} LAST season (${prior.gamesPlayed} played, use where this ` +
+    `season is too short): ${prior.avgGoalsScored ?? "?"} scored / ` +
+    `${prior.avgGoalsConceded ?? "?"} conceded per game, clean sheets ` +
+    `${prior.cleanSheetRate ?? "?"}, both scored ${prior.bttsRate ?? "?"}`
+  );
+}
+
 function formatSplit(raw: unknown): string | null {
   const split = raw as { home?: VenueSplit; away?: VenueSplit } | null;
   if (!split?.home || !split?.away) return null;
@@ -692,6 +754,31 @@ ${briefs.join("\n")}`;
     // run is a contractual event, not just an empty board. Nothing detected it
     // before: the run returned quietly and passes kept selling for a day that
     // would never have a board.
+    /*
+     * What each fixture actually scored, kept.
+     *
+     * A zero-pick run used to discard the entire analysis: it reported "0
+     * generated of 7 considered" and nothing else, so a board of 6.9s and a
+     * board of 3.1s were indistinguishable afterwards. The first says the floor
+     * is a shade too high, the second says the engine found nothing — opposite
+     * problems, identical row. Reconstructing the difference cost a second
+     * model call over fixtures that had already been paid for once.
+     *
+     * Compact on purpose: the score, the pre-anchoring score, and which anchor
+     * condition capped it. That is the whole of what you need to tell those two
+     * boards apart.
+     */
+    const scores = picks
+      .map((p) => ({
+        fixture: describeFixture(fixtures[p.fixtureIndex]),
+        market: p.predictionType,
+        selection: p.predictedValue,
+        confidence: p.confidenceScore,
+        raw: p.confidenceRaw ?? null,
+        cappedBy: p.anchorCapReason || null,
+      }))
+      .sort((a, b) => b.confidence - a.confidence);
+
     await db.from("jobs").insert({
       kind: "engine_published_nothing",
       payload: {
@@ -704,6 +791,7 @@ ${briefs.join("\n")}`;
         // for it, so this payload is the only place its duration survives.
         modelDurationMs,
         fixtures: fixtures.length,
+        scores,
       },
     });
 
@@ -717,6 +805,11 @@ ${briefs.join("\n")}`;
       noBetZone: picks.length - analysed.length,
       note: "none cleared the floor",
       alerted: true,
+      // The floor travels with the result. Without it the Office could say only
+      // that nothing published, not what the bar was that nothing cleared.
+      floor: minConfidence,
+      best: scores[0]?.confidence ?? null,
+      scores,
       fixtures: fixtures.length,
       modelDurationMs,
       durationMs: Date.now() - startedAt,
@@ -748,8 +841,54 @@ ${briefs.join("\n")}`;
     .select("id")
     .single();
 
+  /*
+   * What each fixture already carries, read once.
+   *
+   * The engine had no idea a fixture already had a pick on it. Every run over
+   * the same board wrote another row, so three runs on a seven-fixture Monday
+   * left three competing calls per match — different markets, different
+   * confidences, all live, all sold. Nothing downstream picks a winner between
+   * them, so the board showed whichever the query happened to order first.
+   *
+   * One pick per fixture, any market, and a better one replaces a worse one.
+   * Read as a batch rather than per pick: a session cap of 20 would otherwise
+   * be 40 extra round trips inside a loop that already holds an open run.
+   */
+  const fixtureIds = fixtures.map((f) => f.id);
+  const { data: existingRows } = await db
+    .from("predictions")
+    .select("id, fixture_id, status, confidence_score, prediction_type")
+    .in("fixture_id", fixtureIds);
+
+  const existing = new Map<string, NonNullable<typeof existingRows>[number]>();
+  for (const row of existingRows ?? []) {
+    // Keep the strongest where a previous run left several, so the incoming
+    // pick has to beat the best of them rather than whichever sorted first.
+    const held = existing.get(row.fixture_id as string);
+    if (!held || Number(row.confidence_score) > Number(held.confidence_score)) {
+      existing.set(row.fixture_id as string, row);
+    }
+  }
+
+  /*
+   * Which of those a customer is holding.
+   *
+   * A pick on a slip is one someone has acted on. Rewriting it in place would
+   * leave them holding a call they never added — the same reason deleting one
+   * is refused. So a slipped pick is left exactly as it is, even when the new
+   * pick scores higher: the better call is not worth changing what somebody
+   * already bought.
+   */
+  const heldIds = [...existing.values()].map((r) => r.id as string);
+  const { data: legs } = heldIds.length
+    ? await db.from("slip_legs").select("prediction_id").in("prediction_id", heldIds)
+    : { data: [] as { prediction_id: string }[] };
+  const slipped = new Set((legs ?? []).map((l) => l.prediction_id as string));
+
   let written = 0;
   let rejected = 0;
+  let replaced = 0;
+  let duplicates = 0;
 
   for (const raw of qualifying) {
     // "" is how the schema expresses "no reason", because a nullable string
@@ -775,7 +914,28 @@ ${briefs.join("\n")}`;
     // it was already filtered out above.
     const confidence = Math.min(Math.max(p.confidenceScore, floor), 9.8);
 
-    const { error } = await db.from("predictions").insert({
+    /*
+     * One pick per fixture, and the better one wins.
+     *
+     * Three ways this ends without a write, and they are different enough to
+     * count separately. A settled or flagged pick is history — the fixture has
+     * been graded or a human has been asked to look, and neither is something
+     * a fresh run should overwrite. A slipped pick belongs to a customer. A
+     * weaker pick is simply not an improvement.
+     */
+    const held = existing.get(fixture.id as string);
+    const verdict = replaceVerdict(held ?? null, confidence, slipped);
+    if (verdict !== "write") {
+      if (verdict === "slipped") {
+        console.warn(
+          `[engine] ${describeFixture(fixture)} already has a pick on a customer slip, leaving it`,
+        );
+      }
+      duplicates++;
+      continue;
+    }
+
+    const row = {
       fixture_id: fixture.id,
       tipster_id: tipster.id,
       prediction_run_id: run?.id ?? null,
@@ -808,8 +968,53 @@ ${briefs.join("\n")}`;
         formLog: p.formLog ?? null,
         penaltyLog: p.penaltyLog ?? null,
       },
-    });
-    if (!error) written++;
+    };
+
+    /*
+     * Updated in place, not deleted and re-inserted.
+     *
+     * The id is the pick's public URL and its OG image, so a replacement that
+     * minted a new one would break every link already shared for this fixture
+     * and leave the old page 404ing. Nothing holds the row — that was checked
+     * above — so there is no reason to move it.
+     */
+    if (held) {
+      const { error } = await db.from("predictions").update(row).eq("id", held.id);
+      if (!error) {
+        replaced++;
+        written++;
+        // So a third run in the same session compares against what this one
+        // wrote, rather than against the row it has already superseded.
+        existing.set(fixture.id as string, {
+          ...held,
+          confidence_score: confidence,
+          prediction_type: p.predictionType,
+        });
+      }
+      continue;
+    }
+
+    const { data: inserted, error } = await db
+      .from("predictions")
+      .insert(row)
+      .select("id")
+      .single();
+
+    if (!error) {
+      written++;
+      // Two picks in one response can name the same fixture index. Recording
+      // the insert means the second is compared against the first rather than
+      // becoming the duplicate this whole block exists to prevent.
+      if (inserted?.id) {
+        existing.set(fixture.id as string, {
+          id: inserted.id,
+          fixture_id: fixture.id as string,
+          status: "pending",
+          confidence_score: confidence,
+          prediction_type: p.predictionType,
+        });
+      }
+    }
   }
 
   // Fan-out goes through the outbox, so a slow mail provider can't fail the run.
@@ -848,6 +1053,10 @@ ${briefs.join("\n")}`;
 
   return {
     generated: written,
+    replaced,
+    // Fixtures that already carried a pick this run did not improve on. Not a
+    // failure — on a second run over the same board it is the expected result.
+    duplicates,
     considered: picks.length,
     noBetZone: picks.length - analysed.length,
     rejected,
@@ -1252,6 +1461,45 @@ function stakingUnit(confidence: number, v: Record<string, number | string>): nu
 }
 
 /** PostgREST returns embedded relations as an array or object depending on shape. */
+/**
+ * Whether an incoming pick may take a fixture that already has one.
+ *
+ * Pulled out of the loop because it is the whole of the rule and none of the
+ * plumbing: four outcomes, no database, no engine. Getting it wrong either
+ * rewrites a call a customer is holding or silently keeps the weaker of two
+ * picks, and neither shows up as an error anywhere.
+ */
+export type ReplaceVerdict = "write" | "settled" | "slipped" | "weaker";
+
+export function replaceVerdict(
+  held: { id: string; status: string; confidence_score: number | string } | null,
+  incoming: number,
+  slipped: ReadonlySet<string>,
+): ReplaceVerdict {
+  // Nothing there. Write it.
+  if (!held) return "write";
+
+  // Graded, voided, or flagged for a human. A fresh run does not overwrite a
+  // fixture someone has already ruled on.
+  if (held.status !== "pending") return "settled";
+
+  // Someone bought this one. The better call is not worth changing what a
+  // customer already added to their slip.
+  if (slipped.has(held.id)) return "slipped";
+
+  // Ties keep the incumbent: an equal score is not an improvement, and
+  // rewriting on a tie would churn the board on every rerun.
+  return incoming > Number(held.confidence_score) ? "write" : "weaker";
+}
+
+/** "Fulham v Chelsea", for a log line a person has to read. */
+function describeFixture(f: { home?: unknown; away?: unknown } | undefined): string {
+  if (!f) return "unknown fixture";
+  const home = (asOne(f.home as never) as { name?: string } | null)?.name ?? "?";
+  const away = (asOne(f.away as never) as { name?: string } | null)?.name ?? "?";
+  return `${home} v ${away}`;
+}
+
 function asOne<T>(v: T | T[] | null): T | null {
   if (Array.isArray(v)) return v[0] ?? null;
   return v ?? null;

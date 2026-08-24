@@ -118,6 +118,23 @@ export type RawFixtureStats = {
   homeSeason: Record<string, number>;
   awaySeason: Record<string, number>;
   /**
+   * Last season's averages, fetched ONLY while this season is too short to
+   * mean anything. Null once the current season carries enough games.
+   *
+   * At matchday 2 an average is two matches wide: one 4-0 moves goals-per-game
+   * by 2.0, and the engine had no way to see that, because the payload printed
+   * "1.50 scored / 2.00 conceded" in exactly the format it prints a settled
+   * 38-game record. Last season is a worse answer to "how good are they NOW"
+   * and a far better one to "what should we expect from them", and at two games
+   * played the second question is the only one with an answer.
+   *
+   * Not a substitution. Both records reach the prompt, each labelled with the
+   * games behind it, because silently swapping in a stale number is the kind of
+   * fabrication the whole [GATED] design exists to prevent.
+   */
+  homeSeasonPrior: Record<string, number> | null;
+  awaySeasonPrior: Record<string, number> | null;
+  /**
    * Individual meetings, newest first. Empty means we have no meeting list,
    * which gates Step 1E off; the aggregate fields above may still be present,
    * and the prompt falls back to using them unweighted.

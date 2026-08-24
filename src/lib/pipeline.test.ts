@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { gradePrediction, slugify } from "./pipeline";
+import { gradePrediction, replaceVerdict, slugify, statsBlock } from "./pipeline";
 import type { Market } from "./types";
 
 /**
@@ -175,5 +175,120 @@ describe("slugify", () => {
   it("strips accents rather than dropping the letters", () => {
     expect(slugify("Atlético Madrid")).toBe("atletico-madrid");
     expect(slugify("Beşiktaş")).toBe("besiktas");
+  });
+});
+
+/**
+ * One pick per fixture.
+ *
+ * Before this, every run over the same board wrote another row: three runs on a
+ * seven-fixture Monday left three live, competing calls per match, and nothing
+ * downstream chose between them. The rule that replaced it can fail two ways
+ * that no error surfaces — rewriting a pick a customer is holding, or keeping
+ * the weaker of two calls — so each branch is pinned.
+ */
+describe("replaceVerdict", () => {
+  const none = new Set<string>();
+  const pending = (confidence: number, id = "p1") => ({
+    id,
+    status: "pending",
+    confidence_score: confidence,
+  });
+
+  it("writes when the fixture has nothing on it", () => {
+    expect(replaceVerdict(null, 7.5, none)).toBe("write");
+  });
+
+  it("replaces a weaker pending pick", () => {
+    expect(replaceVerdict(pending(7.2), 8.1, none)).toBe("write");
+  });
+
+  it("keeps the incumbent when the new pick is weaker", () => {
+    expect(replaceVerdict(pending(8.1), 7.2, none)).toBe("weaker");
+  });
+
+  it("keeps the incumbent on a tie, so a rerun does not churn the board", () => {
+    expect(replaceVerdict(pending(7.5), 7.5, none)).toBe("weaker");
+  });
+
+  it("never rewrites a pick a customer is holding, however much better", () => {
+    expect(replaceVerdict(pending(5, "held"), 9.8, new Set(["held"]))).toBe("slipped");
+  });
+
+  it("never overwrites a pick that has been ruled on", () => {
+    for (const status of ["won", "lost", "void", "review_needed"]) {
+      expect(
+        replaceVerdict({ id: "p1", status, confidence_score: 4 }, 9.9, none),
+        `status ${status} must not be overwritten`,
+      ).toBe("settled");
+    }
+  });
+
+  it("compares numerically, not as text", () => {
+    // confidence_score arrives from PostgREST as a string on a numeric column,
+    // and "9.5" > "10" is true under string comparison.
+    expect(replaceVerdict(pending("9.5" as unknown as number), 10, none)).toBe("write");
+  });
+});
+
+/**
+ * The season block the engine reads.
+ *
+ * Two silent failures live here. An average printed without its sample reads
+ * identically at matchday 2 and matchday 38, and Step 1 calls it the primary
+ * quantitative signal in both cases. And a prior-season line left on show once
+ * the current season stands up invites the model to average a live number with
+ * a stale one.
+ */
+describe("season averages in the prompt", () => {
+  const thin = { gamesPlayed: 2, avgGoalsScored: 1.5, avgGoalsConceded: 2, cleanSheetRate: 0, bttsRate: 1 };
+  const settled = { gamesPlayed: 38, avgGoalsScored: 1.71, avgGoalsConceded: 1.13, cleanSheetRate: 0.316, bttsRate: 0.5 };
+
+  it("states the games behind every season line", () => {
+    const out = statsBlock({ home_season: settled, away_season: settled }, null);
+    expect(out).toContain("Home season (38 played)");
+    expect(out).toContain("Away season (38 played)");
+  });
+
+  it("marks a short season THIN so it cannot be read as settled", () => {
+    const out = statsBlock({ home_season: thin, away_season: settled }, null);
+    expect(out).toContain("Home season (2 played, THIN)");
+    expect(out).not.toContain("Away season (38 played, THIN)");
+  });
+
+  it("prints last season beneath a side whose current season is short", () => {
+    const out = statsBlock(
+      { home_season: thin, away_season: settled, home_season_prior: settled },
+      null,
+    );
+    expect(out).toContain("Home LAST season (38 played");
+    expect(out).toMatch(/Home season \(2 played, THIN\)[\s\S]*Home LAST season/);
+  });
+
+  it("suppresses last season once the current one stands on its own", () => {
+    // The fetch stops asking for it, but a stored row survives the crossover.
+    // Showing it then is an invitation to average a live number with a stale one.
+    const out = statsBlock(
+      { home_season: settled, away_season: settled, home_season_prior: settled },
+      null,
+    );
+    expect(out).not.toContain("LAST season");
+  });
+
+  it("says nothing extra for a thin side with no prior record", () => {
+    // A promoted or newly tracked side. Thin and unknown are different claims,
+    // and inventing a prior line here would collapse them.
+    const out = statsBlock({ home_season: thin, away_season: thin }, null);
+    expect(out).toContain("THIN");
+    expect(out).not.toContain("LAST season");
+  });
+
+  it("still renders when the feed omits gamesPlayed entirely", () => {
+    const out = statsBlock(
+      { home_season: { avgGoalsScored: 1.2 }, away_season: {} },
+      null,
+    );
+    expect(out).toContain("Home season:");
+    expect(out).not.toContain("played");
   });
 });
