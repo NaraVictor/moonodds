@@ -61,21 +61,22 @@ export const MAX_USD_TO_GHS = 60;
 /** Paystack rejects anything under GHS 1 on a cedi transaction. */
 export const PAYSTACK_MIN_PESEWAS = 100;
 
-/**
- * How many games one league unlocks, and how many one $2 group covers.
- *
- * These two are equal on purpose and the customer-facing copy reads them
- * together: "up to 5 games from any league, $2 per group of 5". Raising only
- * the first would keep the group at three and quietly turn a $2 league into a
- * $4 one — more games at double the price, which is not the offer.
- *
- * So they move together. If they ever need to diverge, the copy in
- * picks-home.tsx and checkout-client.tsx has to say so explicitly, because
- * today it presents them as one number.
- */
+/** Games unlocked per league selected. */
 export const EXTRA_PICK_GAMES_PER_LEAGUE = 5;
-export const EXTRA_PICK_GAMES_PER_GROUP = 5;
-export const EXTRA_PICK_PRICE_PER_GROUP_USD = 2;
+
+/**
+ * One flat price for the whole add-on, however much it unlocks.
+ *
+ * It used to be metered — $2 per group of games — so the total moved with how
+ * many leagues someone picked and, because the fixture count per league varies
+ * with the day's card, the same two leagues could cost different amounts on
+ * different days. That is a quote you cannot put in the copy and a number the
+ * customer cannot predict before tapping.
+ *
+ * Flat removes both. The price is $2, the answer to "what will this cost" is
+ * $2, and the only thing selecting more leagues changes is how much you get.
+ */
+export const EXTRA_PICK_PRICE_USD = 2;
 
 /**
  * Convert a USD price to whole pesewas.
@@ -110,13 +111,16 @@ export function usdToPesewas(usd: number, rate: number): number {
   return pesewas;
 }
 
-/** $2 per group of up to 5 games. 1 to 5 games is $2, 6 to 10 is $4. */
+/**
+ * Flat $2 for any non-empty unlock.
+ *
+ * Still takes the game count, and still returns 0 for none: charging for an
+ * empty unlock is the one case that must stay impossible, and the checkout
+ * relies on this to refuse a purchase when a league has no fixtures left today.
+ */
 export function extraPicksPriceUsd(numGames: number): number {
   if (!Number.isFinite(numGames) || numGames <= 0) return 0;
-  return (
-    Math.ceil(numGames / EXTRA_PICK_GAMES_PER_GROUP) *
-    EXTRA_PICK_PRICE_PER_GROUP_USD
-  );
+  return EXTRA_PICK_PRICE_USD;
 }
 
 /**

@@ -32,8 +32,7 @@ import type { Market, Pick, UnlockedPick } from "@/lib/types";
 import {
   PASS_PRICE_USD,
   EXTRA_PICK_GAMES_PER_LEAGUE,
-  EXTRA_PICK_PRICE_PER_GROUP_USD,
-  EXTRA_PICK_GAMES_PER_GROUP,
+  EXTRA_PICK_PRICE_USD,
 } from "@/lib/pricing";
 
 /**
@@ -383,9 +382,8 @@ export function PicksHome() {
                 </div>
               ) : (
                 <div className="rounded-[1.5rem] border border-border bg-surface p-10 text-center text-sm text-muted">
-                  Pick up to {EXTRA_PICK_GAMES_PER_LEAGUE} games from any league we
-                  cover, ${EXTRA_PICK_PRICE_PER_GROUP_USD} per group of{" "}
-                  {EXTRA_PICK_GAMES_PER_GROUP}.
+                  ${EXTRA_PICK_PRICE_USD} unlocks up to {EXTRA_PICK_GAMES_PER_LEAGUE} games
+                  in every league you pick. One price, however many you choose.
                 </div>
               )}
             </section>

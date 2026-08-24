@@ -5,7 +5,7 @@ import {
   usdToPesewas,
   PAYSTACK_MIN_PESEWAS,
   EXTRA_PICK_GAMES_PER_LEAGUE,
-  EXTRA_PICK_PRICE_PER_GROUP_USD,
+  EXTRA_PICK_PRICE_USD,
 } from "./pricing";
 
 /**
@@ -67,21 +67,14 @@ describe("usdToPesewas", () => {
 });
 
 describe("extraPicksPriceUsd", () => {
-  it("charges per group of five, rounding the group up", () => {
-    expect(extraPicksPriceUsd(1)).toBe(2);
-    expect(extraPicksPriceUsd(5)).toBe(2);
-    expect(extraPicksPriceUsd(6)).toBe(4);
-    expect(extraPicksPriceUsd(10)).toBe(4);
-    expect(extraPicksPriceUsd(11)).toBe(6);
-  });
-
-  it("prices one league at one group, which is what the copy promises", () => {
-    // "Pick up to 5 games from any league, $2 per group of 5" is only true
-    // while these two constants agree. If the per-league count ever exceeds
-    // the group size, a single league silently costs two groups.
-    expect(extraPicksPriceUsd(EXTRA_PICK_GAMES_PER_LEAGUE)).toBe(
-      EXTRA_PICK_PRICE_PER_GROUP_USD,
-    );
+  it("is one flat price, whatever the unlock covers", () => {
+    // The copy promises "$2 unlocks up to 5 games in every league you pick".
+    // That is only true while the price is independent of the count, so the
+    // count is varied across the whole plausible range and the price must not
+    // move. Six leagues of five games is the largest order the schema allows.
+    for (const games of [1, EXTRA_PICK_GAMES_PER_LEAGUE, 6, 10, 11, 30]) {
+      expect(extraPicksPriceUsd(games)).toBe(EXTRA_PICK_PRICE_USD);
+    }
   });
 
   it("charges nothing for nothing", () => {
@@ -126,17 +119,13 @@ describe("paymentAmountMatches", () => {
  * of losing either one is visible here rather than on a customer's statement.
  */
 describe("extra picks, duplicate leagues", () => {
-  it("charges per distinct game, not per request entry", () => {
+  it("cannot be overcharged by duplicating a league, at any count", () => {
+    // A flat price removes the money from this bug, but not the bug: duplicate
+    // ids still write duplicate fixture_ids and a wrong num_games onto the
+    // order, so the dedupe in the route stays load-bearing for the RECORD even
+    // though the charge no longer moves.
     const distinct = EXTRA_PICK_GAMES_PER_LEAGUE;
-    const duplicatedSixTimes = distinct * 6;
-
-    expect(extraPicksPriceUsd(distinct)).toBe(EXTRA_PICK_PRICE_PER_GROUP_USD);
-    // Stated as an inequality rather than an exact multiple: group rounding
-    // absorbs some of it, and the point is that duplicates cost MORE, not that
-    // they cost exactly six times more.
-    expect(extraPicksPriceUsd(duplicatedSixTimes)).toBeGreaterThan(
-      extraPicksPriceUsd(distinct),
-    );
+    expect(extraPicksPriceUsd(distinct * 6)).toBe(extraPicksPriceUsd(distinct));
   });
 
   it("deduplicating ids collapses the charge back to the real one", () => {

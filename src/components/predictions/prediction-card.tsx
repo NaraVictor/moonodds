@@ -52,11 +52,41 @@ function StatusPill({ status }: { status: Status }) {
   );
 }
 
-function timing(pick: Pick): string {
+/**
+ * How long after kickoff a match is certainly over.
+ *
+ * Ninety minutes plus stoppage, half time and the walk to the tunnel. The same
+ * figure runAutoGrade uses to decide a fixture is overdue for a result, and it
+ * should stay the same figure: this is the label for the window between "the
+ * grader would now be interested" and "the grader has actually run".
+ */
+const CERTAINLY_FINISHED_MS = 2.5 * 60 * 60 * 1000;
+
+/**
+ * The clock, not the feed.
+ *
+ * This read `fixture.status` and nothing else, so it inherited every staleness
+ * in the upstream feed. A fixture whose status never moved off `scheduled` —
+ * because nothing fetched the result — kept rendering "Starts 6:45 pm" three
+ * hours after 6:45 pm, in the future tense, next to a PENDING badge. The card
+ * was not merely out of date, it was making a claim about the future that the
+ * reader could see was false by glancing at their own clock.
+ *
+ * Kickoff time is known locally and needs no feed. So the status is trusted
+ * where it is informative and the clock is used where it is not: a kickoff in
+ * the past is never "Starts", whatever the row says.
+ */
+export function timing(pick: Pick, now: number = Date.now()): string {
   const d = new Date(pick.fixture.date);
   const start = d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit", hour12: true });
+
   if (pick.fixture.status === "finished") return "Full time";
   if (pick.fixture.status === "live") return `Kicked off ${start}`;
+
+  const since = now - d.getTime();
+  if (since >= CERTAINLY_FINISHED_MS) return "Awaiting result";
+  if (since > 0) return `Kicked off ${start}`;
+
   return `Starts ${start}`;
 }
 

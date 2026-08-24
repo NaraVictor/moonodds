@@ -12,8 +12,6 @@ import { Check, ShieldCheck, Sparkles } from "@/components/ui/icons";
 import { useAccessState, useLeagueOptions } from "@/lib/queries";
 import { LinkButton } from "@/components/ui/link-button";
 import { extraPicksPriceUsd ,
-  EXTRA_PICK_PRICE_PER_GROUP_USD,
-  EXTRA_PICK_GAMES_PER_GROUP,
 } from "@/lib/pricing";
 import { openPaystack } from "@/lib/paystack-popup";
 
@@ -221,8 +219,7 @@ export function CheckoutClient({ kind }: { kind: Kind }) {
               <p className="display text-4xl">${priceUsd}</p>
               {kind === "extra-picks" && (
                 <p className="text-xs text-muted">
-                  {games} games · ${EXTRA_PICK_PRICE_PER_GROUP_USD} per group of{" "}
-                  {EXTRA_PICK_GAMES_PER_GROUP}
+                  {games} game{games === 1 ? "" : "s"} unlocked · one flat price
                 </p>
               )}
             </div>
