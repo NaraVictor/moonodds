@@ -114,6 +114,8 @@ export async function GET(request: Request) {
       cronSecretIsLocal?: boolean;
       cronJobsScheduled?: number;
       cronJobsActive?: number;
+      /** The role the job counts were taken as. See the migration for why. */
+      countedAs?: string;
     };
 
     const baseLooksLocal =
@@ -188,15 +190,32 @@ export async function GET(request: Request) {
      * on an already-deployed database came within one migration of unscheduling
      * every one of them and creating none.
      */
+    /*
+     * A zero here used to be unreadable.
+     *
+     * pg_cron puts RLS on cron.job keyed on `username = current_user`, and
+     * get_deploy_settings is SECURITY DEFINER — so a function owned by the
+     * wrong role sees no rows and reports zero jobs on a database with a
+     * perfectly good schedule. This check said "NO scheduled jobs — nothing
+     * runs" for hours while all eleven were active.
+     *
+     * The counting role now comes back with the counts, so the two zeros can be
+     * told apart: one means the schedule is empty, the other means the check
+     * cannot see it. They call for opposite responses and must never again read
+     * the same.
+     */
     const scheduled = Number(s.cronJobsScheduled ?? 0);
     const active = Number(s.cronJobsActive ?? 0);
+    const countedAs = s.countedAs ?? "unknown";
     add(
       "db:cron_jobs",
       scheduled === EXPECTED_CRON_JOBS && active === EXPECTED_CRON_JOBS,
       "blocking",
       scheduled === 0
-        ? "NO scheduled jobs — nothing runs: no fixtures, no picks, no grading"
-        : `${active} active of ${scheduled} scheduled, expected ${EXPECTED_CRON_JOBS}`,
+        ? `no kicka_* jobs visible to '${countedAs}'. Either nothing is scheduled, or ` +
+          `cron.job's row-level security is hiding them from that role — check with ` +
+          `"select jobname from cron.job" in the SQL editor before assuming the first.`
+        : `${active} active of ${scheduled} scheduled, expected ${EXPECTED_CRON_JOBS} (counted as '${countedAs}')`,
     );
 
     /*

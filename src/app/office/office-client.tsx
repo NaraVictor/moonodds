@@ -2410,6 +2410,100 @@ const GROUP_ORDER: VariableGroup[] = [
  * search through source rather than a visit to this page. The badge says which
  * is which.
  */
+/**
+ * The publish floor, editable in place.
+ *
+ * Goes through the same `updateVariables` action the Overlay panel uses, so it
+ * is validated by the same server-side rules and written to the same audit log.
+ * This is a second door onto one control, not a second control.
+ *
+ * Deliberately unsaved until pressed. Typing "6" through a live-binding input
+ * would pass through 0.6 and 0 on the way if someone cleared it first, and each
+ * of those is a publishable floor that would ship a board of noise.
+ */
+function PublishFloor({
+  config,
+}: {
+  config: Record<string, unknown> & { id: string };
+}) {
+  const action = useOfficeAction();
+  const live = Number(
+    (config.confidence_thresholds as Record<string, number> | undefined)
+      ?.primarySlipFloor ?? 7,
+  );
+  const [draft, setDraft] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const value = draft ?? String(live);
+  const parsed = Number(value);
+  const valid = value.trim() !== "" && Number.isFinite(parsed) && parsed >= 0 && parsed <= 10;
+  const dirty = valid && parsed !== live;
+
+  async function save() {
+    setError(null);
+    try {
+      await action.mutateAsync({
+        action: "updateVariables",
+        configId: config.id,
+        values: { primarySlipFloor: parsed },
+      });
+      setDraft(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not save.");
+    }
+  }
+
+  return (
+    <div className="rounded-2xl bg-surface-secondary p-4">
+      <label htmlFor="publish-floor" className="label">
+        Primary floor
+      </label>
+      <div className="mt-1.5 flex items-center gap-2">
+        <input
+          id="publish-floor"
+          type="number"
+          step="0.1"
+          min="0"
+          max="10"
+          value={value}
+          onChange={(e) => {
+            setError(null);
+            setDraft(e.target.value);
+          }}
+          aria-invalid={!valid}
+          className={`${FIELD} numeral w-20 text-xl`}
+        />
+        {dirty && (
+          <button
+            type="button"
+            disabled={action.isPending}
+            onClick={save}
+            className="press rounded-full bg-accent px-3 py-1.5 text-[11px] font-semibold text-accent-foreground disabled:opacity-40"
+          >
+            {action.isPending ? "Saving…" : "Save"}
+          </button>
+        )}
+        {dirty && (
+          <button type="button" onClick={() => setDraft(null)} className={PILL}>
+            Cancel
+          </button>
+        )}
+      </div>
+      <p
+        className="mt-2 text-[11px] leading-relaxed"
+        style={{ color: valid ? "var(--muted)" : "var(--lost-ink)" }}
+      >
+        {!valid
+          ? "Between 0 and 10."
+          : dirty
+            ? `Picks scoring under ${parsed} will not publish. Currently ${live}.`
+            : "Below this, the engine's call is not published."}
+      </p>
+      {error && <ActionError message={error} />}
+    </div>
+  );
+}
+
 function OverlayVariables({
   config,
   prompt,
@@ -2649,9 +2743,23 @@ function EnginePanel() {
         title={`${config.name} · v${config.version}`}
         description={`Last updated ${new Date(config.last_updated_at).toLocaleString()}${config.approved_by ? ` by ${config.approved_by}` : ""}.`}
       >
+        {/*
+          The publish floor is edited HERE, where it is read.
+          
+          It was already editable — as one row among a hundred in Overlay
+          thresholds, sorted into "staking", indistinguishable from
+          refFoulHeavyBoostPct. But it is not one tunable among a hundred: it
+          alone decides whether a day has a board at all, and a run where
+          nothing clears it is a contractual event under the Terms. Meanwhile
+          this card displayed the number in the place anyone would look for it,
+          styled exactly like something you could click, and did nothing.
+          
+          The other two stay read-only. Absolute min is a clamp the floor
+          already dominates, and batch size belongs to self-tuning.
+        */}
         <div className="grid gap-3 sm:grid-cols-3">
+          <PublishFloor config={config} />
           {[
-            ["Primary floor", config.confidence_thresholds?.primarySlipFloor],
             ["Absolute min", config.confidence_thresholds?.absoluteMinimumFloor],
             ["Batch size", config.self_tuning?.batchSize],
           ].map(([k, v]) => (
