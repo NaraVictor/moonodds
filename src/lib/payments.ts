@@ -1,4 +1,5 @@
 import { createServiceClient } from "./supabase/server";
+import { reportError } from "./report-error";
 import { getProviders } from "./providers";
 import { paymentAmountMatches } from "./pricing";
 
@@ -251,6 +252,30 @@ export async function refundPayment(
     };
   }
 
+  /*
+   * Claim it before the provider is called.
+   *
+   * The read above is advisory: two admins pressing refund together both saw
+   * 'succeeded' and both called Paystack. This is the conditional write that
+   * only one can win, and it is deliberately NOT the status — the status must
+   * not say refunded until the money is actually back, which is a different
+   * moment and was already reasoned about correctly.
+   */
+  const { data: claimed, error: claimErr } = await db.rpc("claim_payment_refund", {
+    p_reference: reference,
+  });
+  if (claimErr) {
+    reportError(claimErr, { scope: "payments/claim-refund", detail: { reference } });
+    return { ok: false, reason: "Could not start the refund.", status: 500 };
+  }
+  if (!claimed?.id) {
+    return {
+      ok: false,
+      reason: "That payment is already being refunded. Check again in a moment.",
+      status: 409,
+    };
+  }
+
   const { payments } = getProviders();
 
   let providerRef: string | null = null;
@@ -261,10 +286,14 @@ export async function refundPayment(
       reason: opts.reason,
     });
     if (!result.refunded) {
+      await db.rpc("release_payment_refund", { p_reference: reference });
       return { ok: false, reason: "The provider declined the refund.", status: 502 };
     }
     providerRef = result.providerRef;
   } catch (err) {
+    // Released so a transient failure can be retried rather than parking the
+    // payment behind a claim nobody will ever finish.
+    await db.rpc("release_payment_refund", { p_reference: reference });
     console.error(`[payments] refund failed for ${reference}:`, err);
     return {
       ok: false,
@@ -273,32 +302,38 @@ export async function refundPayment(
     };
   }
 
-  // Only after the money is actually back. Marking first and failing second
-  // would show a refund in our reporting that never left the account.
-  await db
-    .from("payments")
-    .update({
-      status: "refunded",
-      metadata: {
-        ...(payment.metadata as Record<string, unknown>),
-        refundedAt: new Date().toISOString(),
-        refundReason: opts.reason ?? null,
-        refundedBy: opts.actor ?? null,
-        providerRefundRef: providerRef,
-      },
-    })
-    .eq("id", payment.id);
+  /*
+   * The money is gone. From here a failure is the worst state this system can
+   * be in — refunded at the provider, 'succeeded' in our records, access still
+   * live — and it used to be UNREACHABLE INFORMATION: three updates in a row
+   * whose errors were never destructured, then `return { ok: true }`.
+   *
+   * One call now, which marks the payment and revokes what it bought together,
+   * and its failure is reported and returned rather than swallowed.
+   */
+  const { data: finished, error: finishErr } = await db.rpc("finish_payment_refund", {
+    p_reference: reference,
+    p_reason: opts.reason ?? null,
+    p_actor: opts.actor ?? null,
+    p_provider_ref: providerRef,
+  });
 
-  if (payment.purpose === "daily_pass") {
-    await db
-      .from("daily_passes")
-      .update({ status: "refunded" })
-      .eq("payment_id", payment.id);
-  } else if (payment.purpose === "extra_picks") {
-    await db
-      .from("extra_pick_orders")
-      .update({ status: "refunded" })
-      .eq("payment_id", payment.id);
+  if (finishErr || finished !== true) {
+    reportError(finishErr ?? new Error("finish_payment_refund did not apply"), {
+      scope: "payments/finish-refund",
+      level: "fatal",
+      detail: { reference, providerRef },
+    });
+    console.error(
+      `[payments] REFUNDED AT PROVIDER BUT NOT RECORDED: ${reference} (provider ref ${providerRef}). ` +
+        `The customer has their money and may still have access. Fix by hand.`,
+    );
+    return {
+      ok: false,
+      reason:
+        "The money was refunded but our records could not be updated. This has been logged; do not retry, and check the payment by hand.",
+      status: 500,
+    };
   }
 
   return { ok: true, alreadyActive: false, purpose: payment.purpose };

@@ -148,24 +148,39 @@ export async function PATCH(request: Request) {
   const email = guard.user.email;
   const db = createServiceClient();
 
-  const { data: token } = await db
+  /*
+   * Burn the code by CLAIMING it, not by reading it and then writing.
+   *
+   * The read-then-update version admitted two simultaneous requests: both
+   * selected the same unused row, both passed the check, and both went on to
+   * apply a different prompt. One code, two prompt changes, and only the second
+   * survives — with the audit log showing both as legitimate.
+   *
+   * `update ... where used = false ... returning` is a single statement, so
+   * exactly one caller can win the row. Losing looks identical to a wrong code,
+   * which is the correct thing to tell a caller either way.
+   *
+   * Expiry is part of the same predicate rather than a check afterwards: a
+   * separate check leaves a window where an expired code is still marked used,
+   * which is harmless but makes the log read as though it worked.
+   */
+  const { data: claimed } = await db
     .from("otp_tokens")
-    .select("*")
+    .update({ used: true })
     .eq("email", email!)
     .eq("purpose", PURPOSE)
     .eq("code", parsed.data.code)
     .eq("used", false)
+    .gt("expires_at", new Date().toISOString())
+    .select("id")
     .maybeSingle();
 
-  if (!token || new Date(token.expires_at) < new Date()) {
+  if (!claimed) {
     return NextResponse.json(
       { error: "That code is wrong or has expired. Request a new one." },
       { status: 403 },
     );
   }
-
-  // Burn the code before doing the work, so it can't be replayed.
-  await db.from("otp_tokens").update({ used: true }).eq("id", token.id);
 
   const { error } = await db
     .from("ai_engine_config")

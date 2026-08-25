@@ -89,13 +89,39 @@ export async function DELETE(request: Request) {
     );
   }
 
-  // Payments are kept: they are financial records with their own retention
-  // obligations, and they are unlinked from the person rather than destroyed.
-  // Everything else cascades from the auth user.
-  await db
+  /*
+   * Payments are kept, and now actually are.
+   *
+   * This comment used to describe unlinking. Nothing unlinked: the update below
+   * touched metadata, and then payments.user_id CASCADED from profiles, which
+   * cascades from auth.users, so deleteUser took every payment row with it. The
+   * comment stated the intent and the schema quietly did the opposite, which is
+   * the worst arrangement of the two — an auditor reads the sentence and stops.
+   *
+   * The foreign key is ON DELETE SET NULL now, so the row survives with its
+   * reference, amount, currency and timestamps and loses only the person. That
+   * is both what retention needs and what erasure means. owner_erased_at
+   * records when, so a null owner is distinguishable from a payment that never
+   * had one.
+   *
+   * The write below no longer REPLACES metadata either. It merged nothing
+   * before, so a refunded payment lost its providerRefundRef, its rate and its
+   * dateKey — the refund audit trail, deleted by the erasure routine.
+   */
+  const { error: retainErr } = await db
     .from("payments")
-    .update({ metadata: { erased: true, erasedAt: new Date().toISOString() } })
+    .update({ owner_erased_at: new Date().toISOString() })
     .eq("user_id", user.id);
+
+  if (retainErr) {
+    // Refusing is the right direction: deleting the account anyway would take
+    // the payment records with it, and that is not recoverable.
+    console.error("[account] could not mark payments before deletion:", retainErr);
+    return NextResponse.json(
+      { error: "Could not delete the account right now. Try again shortly." },
+      { status: 500 },
+    );
+  }
 
   const { error } = await db.auth.admin.deleteUser(user.id);
   if (error) {

@@ -162,28 +162,73 @@ export async function POST(request: Request) {
   const rate = await getUsdToGhsRateForServer();
   const amountMinor = usdToPesewas(priceUsd, rate);
   const today = new Date().toISOString().slice(0, 10);
-  const reference = `extra-${today}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 
-  const { error: payErr } = await db.from("payments").insert({
-    user_id: user.id,
-    reference,
-    purpose: "extra_picks",
-    amount_minor: amountMinor,
-    currency: "GHS",
-    amount_usd: priceUsd,
-    status: "pending",
-    metadata: { rate, leagueIds: parsed.data.leagueIds, fixtureIds: fresh },
-  });
+  /*
+   * A stable name for exactly this selection.
+   *
+   * Sorted, so the same games chosen in a different order are the same order.
+   * It is what the partial unique index keys on, which is why it identifies the
+   * SELECTION rather than the day: two pending day passes are always a mistake,
+   * but a second extra-picks checkout for different leagues is a legitimate
+   * second purchase and must not be blocked.
+   */
+  const fixtureKey = [...fresh].sort().join(",");
 
-  if (payErr) {
-    console.error("[checkout/extra-picks]", payErr);
-    return NextResponse.json({ error: "Could not start checkout." }, { status: 500 });
+  const pendingSame = () =>
+    db
+      .from("payments")
+      .select("reference, amount_minor")
+      .eq("user_id", user.id)
+      .eq("purpose", "extra_picks")
+      .eq("status", "pending")
+      .eq("metadata->>fixtureKey", fixtureKey)
+      .maybeSingle();
+
+  const { data: inFlight } = await pendingSame();
+
+  let reference =
+    inFlight?.reference ??
+    `extra-${today}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+  // Settlement compares the settled amount against the stored one, so a reused
+  // reference must be charged what its row says, not a freshly quoted rate.
+  let chargeMinor = inFlight?.amount_minor ?? amountMinor;
+
+  if (!inFlight) {
+    const { error: payErr } = await db.from("payments").insert({
+      user_id: user.id,
+      reference,
+      purpose: "extra_picks",
+      amount_minor: amountMinor,
+      currency: "GHS",
+      amount_usd: priceUsd,
+      status: "pending",
+      metadata: {
+        rate,
+        dateKey: today,
+        leagueIds: parsed.data.leagueIds,
+        fixtureIds: fresh,
+        fixtureKey,
+      },
+    });
+
+    if (payErr) {
+      if (payErr.code !== "23505") {
+        console.error("[checkout/extra-picks]", payErr);
+        return NextResponse.json({ error: "Could not start checkout." }, { status: 500 });
+      }
+      const { data: winner } = await pendingSame();
+      if (!winner?.reference) {
+        return NextResponse.json({ error: "Could not start checkout." }, { status: 500 });
+      }
+      reference = winner.reference;
+      chargeMinor = winner.amount_minor;
+    }
   }
 
   const { payments } = getProviders();
   const init = await payments.initialize({
     email: user.email ?? `customer-${user.id}@kicka.app`,
-    amountMinor,
+    amountMinor: chargeMinor,
     currency: "GHS",
     reference,
     // Where Paystack returns someone who completed on the hosted page instead

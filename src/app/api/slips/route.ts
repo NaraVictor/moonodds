@@ -6,7 +6,11 @@ import { createClient, createServiceClient } from "@/lib/supabase/server";
 const Body = z.object({
   slipType: z.enum(["single", "accumulator"]),
   legs: z
-    .array(z.object({ predictionId: z.uuid(), odds: z.number().positive() }))
+    // `odds` is accepted for backward compatibility with clients that still
+    // send it, and ignored: create_slip derives the real price server-side.
+    // Bounded anyway, so a NaN or an absurd value fails at the door rather
+    // than travelling to a function that will throw it away.
+    .array(z.object({ predictionId: z.uuid(), odds: z.number().positive().max(1000) }))
     .min(1)
     .max(12),
 });
@@ -74,6 +78,20 @@ export async function POST(request: Request) {
     );
   }
 
+  /*
+   * The client's odds are no longer used for anything.
+   *
+   * They were validated as `z.number().positive()` — no ceiling, no comparison
+   * against any server figure — then stored on the leg and multiplied into
+   * combined_odds. A crafted request could save a slip at any price it liked,
+   * and those figures reach get_user_picks_report, which aggregates ACROSS
+   * users for the Office.
+   *
+   * create_slip prices every leg from app.pick_odds now, the same function
+   * pick_json uses, so the slip and the card can no longer disagree about what
+   * a pick was priced at. This value is sent for the signature's sake and is
+   * recomputed server-side and discarded.
+   */
   const combinedOdds = legs.reduce((acc, l) => acc * l.odds, 1);
 
   const { data, error } = await db.rpc("create_slip", {

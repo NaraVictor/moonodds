@@ -81,32 +81,80 @@ export async function POST(request: Request) {
 
   const rate = await getUsdToGhsRateForServer();
   const amountMinor = usdToPesewas(PASS_PRICE_USD, rate);
-  const reference = `pass-${today}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 
-  // Bind reference -> buyer BEFORE the provider ever sees it.
-  const { error: payErr } = await db.from("payments").insert({
-    user_id: user.id,
-    reference,
-    purpose: "daily_pass",
-    amount_minor: amountMinor,
-    currency: "GHS",
-    amount_usd: PASS_PRICE_USD,
-    status: "pending",
-    metadata: { rate, dateKey: today },
-  });
+  /*
+   * Reuse a checkout already in flight rather than opening a second one.
+   *
+   * The active-pass check above only sees a pass that has SETTLED. Two requests
+   * arriving together both passed it, both wrote a payment row, and both opened
+   * a Paystack transaction — so a customer who completed both was charged twice
+   * for a day the unique index on daily_passes gave them exactly once.
+   *
+   * Paystack keys a transaction on its reference, so handing back the pending
+   * one turns a double-tap into a single charge. The partial unique index added
+   * in 20260825020000 is the backstop for the narrower race where both requests
+   * read before either wrote; this is what stops that race being reached at all.
+   */
+  const pendingToday = () =>
+    db
+      .from("payments")
+      .select("reference, amount_minor")
+      .eq("user_id", user.id)
+      .eq("purpose", "daily_pass")
+      .eq("status", "pending")
+      .eq("metadata->>dateKey", today)
+      .maybeSingle();
 
-  if (payErr) {
-    console.error("[checkout/day-pass] payment row:", payErr);
-    return NextResponse.json(
-      { error: "Could not start checkout." },
-      { status: 500 },
-    );
+  const { data: inFlight } = await pendingToday();
+
+  let reference =
+    inFlight?.reference ??
+    `pass-${today}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+  // The stored amount wins for a reused reference: settlement compares what
+  // Paystack reports against payments.amount_minor, so re-quoting a fresh FX
+  // rate onto an existing row would fail that check and strand the payment.
+  let chargeMinor = inFlight?.amount_minor ?? amountMinor;
+
+  if (!inFlight) {
+    // Bind reference -> buyer BEFORE the provider ever sees it.
+    const { error: payErr } = await db.from("payments").insert({
+      user_id: user.id,
+      reference,
+      purpose: "daily_pass",
+      amount_minor: amountMinor,
+      currency: "GHS",
+      amount_usd: PASS_PRICE_USD,
+      status: "pending",
+      metadata: { rate, dateKey: today },
+    });
+
+    if (payErr) {
+      // 23505 is the partial unique index doing its job: a concurrent request
+      // wrote first. Its reference is as good as ours, so fall in behind it.
+      if (payErr.code !== "23505") {
+        console.error("[checkout/day-pass] payment row:", payErr);
+        return NextResponse.json(
+          { error: "Could not start checkout." },
+          { status: 500 },
+        );
+      }
+
+      const { data: winner } = await pendingToday();
+      if (!winner?.reference) {
+        return NextResponse.json(
+          { error: "Could not start checkout." },
+          { status: 500 },
+        );
+      }
+      reference = winner.reference;
+      chargeMinor = winner.amount_minor;
+    }
   }
 
   const { payments } = getProviders();
   const init = await payments.initialize({
     email: user.email ?? `customer-${user.id}@kicka.app`,
-    amountMinor,
+    amountMinor: chargeMinor,
     currency: "GHS",
     reference,
     // Where Paystack returns someone who completed on the hosted page instead
