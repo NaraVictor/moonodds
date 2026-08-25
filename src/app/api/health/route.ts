@@ -131,6 +131,47 @@ export async function GET(request: Request) {
         : "points at a deployed host",
     );
 
+    /*
+     * Does app_base_url point at the host actually serving this request?
+     *
+     * "Points at a deployed host" was not a high enough bar. app_base_url was
+     * https://kicka.app while the site is served from https://www.kicka.app,
+     * and the apex issues a 308 to the www host. PG_NET DOES NOT FOLLOW
+     * REDIRECTS — it records the 308 and stops — so every scheduled job fired
+     * on time, reached a redirect, and did nothing. No error, no log, no failed
+     * request anywhere: the check above passed, the URL was plainly a deployed
+     * host, and the whole pipeline was inert.
+     *
+     * The health route is the one place that knows both halves: the configured
+     * URL, and the host it is being served from right now. If they disagree,
+     * every cron call is landing somewhere other than here.
+     *
+     * Compared on host only. Scheme is fixed by upgrade-insecure-requests and a
+     * path is not part of a base URL, so a mismatch that matters is a mismatch
+     * of host — apex versus www, or a stale preview domain.
+     */
+    const servedHost =
+      request.headers.get("x-forwarded-host") ?? request.headers.get("host") ?? "";
+    let configuredHost = "";
+    try {
+      configuredHost = s.appBaseUrl ? new URL(s.appBaseUrl).host : "";
+    } catch {
+      configuredHost = "";
+    }
+
+    if (isProd && servedHost && configuredHost) {
+      add(
+        "db:base_url_matches_host",
+        configuredHost === servedHost,
+        "blocking",
+        configuredHost === servedHost
+          ? `cron posts to ${configuredHost}, which is this host`
+          : `cron posts to ${configuredHost} but this app is served from ${servedHost}. ` +
+            `If that is a redirect, pg_net does not follow it and every scheduled job silently does nothing. ` +
+            `Set app_base_url to https://${servedHost} (or check this endpoint on the canonical host).`,
+      );
+    }
+
     add(
       "db:cron_secret",
       !isProd || !s.cronSecretIsLocal,
