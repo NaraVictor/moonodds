@@ -1189,7 +1189,7 @@ export function liveWindow(now: number = Date.now()): { from: string; to: string
 }
 
 /**
- * Poll in-play fixtures, once a minute.
+ * Poll in-play fixtures, every fifteen seconds.
  *
  * Results used to arrive only from runAutoGrade, on a two-hourly schedule
  * behind a 2.5-hour cutoff. A match finishing at 20:30 could therefore sit
@@ -1200,16 +1200,18 @@ export function liveWindow(now: number = Date.now()): { from: string; to: string
  * THE API BUDGET IS THE DESIGN CONSTRAINT, so read the cost carefully:
  *
  *   - No fixture in the window means NO upstream call at all. This is the whole
- *     guard. A poller that calls the API to be told nothing is in play would
- *     spend 1,440 calls a day doing it.
+ *     guard, and it is what makes a 15-second tick affordable: a poller that
+ *     called the API just to be told nothing is in play would spend 5,760 a day
+ *     doing it, which is most of the plan.
  *   - When something is in play, every fixture in the window goes into ONE
- *     request — fetchResults batches twenty ids per call — so the cost is one
- *     call per minute regardless of how many matches are on.
- *   - A six-hour evening card therefore costs about 360 calls, inside the 500
- *     that api_budget.reservedForResults sets aside for exactly this.
+ *     request — fetchResults batches twenty ids per call — so the cost is four
+ *     calls a minute regardless of how many matches are on.
+ *   - The heaviest realistic day, a Saturday card running 11:30 to 22:00, keeps
+ *     the window open about fourteen hours and costs roughly 3,500 calls
+ *     against a 7,500 plan. A weekday evening is nearer 1,700.
  *
  * Safe to overlap. pg_net fires and forgets, so a slow run can still be in
- * flight when the next minute comes round; every write here is an idempotent
+ * flight when the next tick comes round; every write here is an idempotent
  * update keyed on a fixture id, and grading only ever moves a prediction off
  * `pending`, so a second pass over the same fixture changes nothing.
  */
