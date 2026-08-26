@@ -14,8 +14,11 @@ import { BottomNav } from "@/components/layout/bottom-nav";
  */
 export const metadata: Metadata = {
   alternates: { canonical: "/" },
+  // Names the inputs rather than the technique. "AI" is a claim anyone can
+  // make; "form, head-to-head and season numbers" is one a reader can check
+  // against the page they land on, which is the whole argument of the product.
   description:
-    "Today's football predictions with the reasoning behind every call. Two free picks daily, every settled result public, and a track record you can check.",
+    "Today's football predictions, scored on form, head-to-head and season numbers rather than guesswork. Two free picks every day, and free to sign up.",
 };
 
 

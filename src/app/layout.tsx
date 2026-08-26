@@ -56,8 +56,31 @@ const body = Plus_Jakarta_Sans({
  */
 const TAGLINE = "AI Sports Predictions";
 
+/**
+ * The search result, and the first thing most people read about the product.
+ *
+ * Google was ignoring the previous one and pulling the FOOTER instead —
+ * "provides analysis, not guarantees, and does not take bets or hold funds" —
+ * which is a legal disclaimer doing a shop window's job. It is accurate and it
+ * is the worst possible pitch: three sentences about what Kicka is not.
+ *
+ * Search substitutes its own text when the description does not obviously
+ * answer what the searcher asked, so this one answers it in order: what it is,
+ * why it beats a hunch, and what it costs to try. The free picks come last
+ * because they are the call to action, and first in the reader's mind because
+ * they are the only part that asks nothing of them.
+ *
+ * Every claim is checkable, which matters more than usual for a product whose
+ * argument is that it publishes its misses. "Two free picks daily" is
+ * app.access_state()'s free_pick_limit, granted alike to signed-out visitors
+ * and to account holders without a pass — so signing up genuinely costs
+ * nothing and genuinely loses nothing.
+ *
+ * Under 160 characters, which is roughly where search truncates. A call to
+ * action cut off mid-sentence is not a call to action.
+ */
 const DESCRIPTION =
-  "AI sports predictions with confidence scores and the reasoning behind every call. Every settled prediction stays public, wins and misses alike.";
+  "Football predictions from a model that reads the numbers, not a hunch. Every call carries a confidence score and its reasoning. Two free picks daily.";
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
