@@ -1,10 +1,12 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Button } from "@heroui/react/button";
 import { Alert } from "@/components/ui/alert";
 import { PendingButton } from "@/components/ui/pending-button";
-import { requestCode, verifyCode, signInWithGoogle } from "@/lib/auth-actions";
+import { OtpCodeInput } from "@/components/auth/otp-code-input";
+import { signInWithGoogle } from "@/lib/auth-actions";
+import { useOtpAuth } from "@/lib/otp-auth";
 
 /**
  * Both fields centre their content, including the placeholder.
@@ -33,47 +35,61 @@ const FIELD =
  * page, which is the only screen where it appears.
  */
 export function SignInForm() {
-  const [identifier, setIdentifier] = useState("");
+  const router = useRouter();
 
-  const [sendState, send, sending] = useActionState(requestCode, undefined);
-  const [verifyState, verify, verifying] = useActionState(verifyCode, undefined);
+  /*
+   * The flow lives in useOtpAuth now; this file is the screen for it.
+   *
+   * Only the plumbing changed. The two steps, the single field, the copy and
+   * the spacing are as they were — what moved is that the state machine is no
+   * longer trapped in this component, so the payment page can run the same one
+   * without sending anyone here first.
+   *
+   * verifyCodeInline does not redirect, so this does. router.replace rather
+   * than push, because a signed-in visitor pressing Back should not land on the
+   * sign-in page they just cleared; refresh, because the layout above renders
+   * signed-in state on the server.
+   */
+  const auth = useOtpAuth({
+    onVerified: () => {
+      router.replace("/");
+      router.refresh();
+    },
+  });
 
-  const codeSent = sendState && "sent" in sendState;
-
-  if (codeSent) {
+  if (auth.step === "code") {
     return (
-      <form action={verify} className="space-y-4">
-        <input type="hidden" name="channel" value="email" />
-        <input type="hidden" name="identifier" value={identifier} />
-
+      <form
+        className="space-y-4"
+        onSubmit={(e) => {
+          e.preventDefault();
+          auth.verify();
+        }}
+      >
         <div className="rounded-xl border border-border bg-surface-secondary px-3.5 py-3 text-[13px]">
           We sent a code to{" "}
-          <strong className="font-semibold">{identifier}</strong>. It expires
+          <strong className="font-semibold">{auth.email}</strong>. It expires
           shortly, so use it now.
         </div>
 
-        {verifyState && "error" in verifyState && (
-          <Alert status="danger">{verifyState.error}</Alert>
-        )}
+        {auth.error && <Alert status="danger">{auth.error}</Alert>}
 
         <div className="space-y-1.5">
-          <label htmlFor="code" className="text-sm font-medium">
-            Your code
-          </label>
-          <input
-            id="code"
-            name="code"
-            inputMode="numeric"
-            autoComplete="one-time-code"
-            required
-            maxLength={10}
-            placeholder="Enter your code"
-            className={`${FIELD} numeral text-center text-lg tracking-[0.3em]`}
-          />
+          <span className="text-sm font-medium">Your code</span>
+          <div className="flex justify-center pt-1">
+            <OtpCodeInput
+              value={auth.code}
+              onChange={auth.setCode}
+              onComplete={auth.verify}
+              disabled={auth.pending}
+              invalid={Boolean(auth.error)}
+              autoFocus
+            />
+          </div>
         </div>
 
         <PendingButton
-          isPending={verifying}
+          isPending={auth.pending}
           pendingLabel="Checking…"
           className="h-[3.3rem] w-full text-[15px]"
         >
@@ -84,7 +100,7 @@ export function SignInForm() {
           Didn&rsquo;t arrive?{" "}
           <button
             type="button"
-            onClick={() => window.location.reload()}
+            onClick={auth.restart}
             className="font-medium underline underline-offset-2"
           >
             Start again
@@ -109,12 +125,14 @@ export function SignInForm() {
         <span className="h-px flex-1 bg-border" />
       </div>
 
-      <form action={send} className="space-y-4">
-        <input type="hidden" name="channel" value="email" />
-
-        {sendState && "error" in sendState && (
-          <Alert status="danger">{sendState.error}</Alert>
-        )}
+      <form
+        className="space-y-4"
+        onSubmit={(e) => {
+          e.preventDefault();
+          auth.send();
+        }}
+      >
+        {auth.error && <Alert status="danger">{auth.error}</Alert>}
 
         <div className="space-y-1.5">
           <label htmlFor="identifier" className="text-sm font-medium">
@@ -128,15 +146,15 @@ export function SignInForm() {
             autoComplete="email"
             required
             autoFocus
-            value={identifier}
-            onChange={(e) => setIdentifier(e.target.value)}
+            value={auth.email}
+            onChange={(e) => auth.setEmail(e.target.value)}
             placeholder="you@example.com"
             className={FIELD}
           />
         </div>
 
         <PendingButton
-          isPending={sending}
+          isPending={auth.pending}
           pendingLabel="Sending…"
           className="h-[3.3rem] w-full text-[15px]"
         >

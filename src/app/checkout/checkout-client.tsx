@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { Card } from "@heroui/react/card";
@@ -14,9 +14,18 @@ import { LinkButton } from "@/components/ui/link-button";
 import { extraPicksPriceUsd ,
 } from "@/lib/pricing";
 import { openPaystack } from "@/lib/paystack-popup";
+import { OtpCodeInput } from "@/components/auth/otp-code-input";
+import { useOtpAuth } from "@/lib/otp-auth";
 
 type Kind = "day-pass" | "extra-picks";
-type Stage = "idle" | "initialising" | "paying" | "verifying" | "done";
+/**
+ * "auth" is a step in the payment, not a departure from it.
+ *
+ * An unauthenticated visitor used to be sent to /auth/sign-in and left to find
+ * their own way back. The journey back is where people give up: they arrived
+ * holding a card and left holding a sign-in page.
+ */
+type Stage = "idle" | "auth" | "initialising" | "paying" | "verifying" | "done";
 
 /**
  * Checkout.
@@ -49,7 +58,7 @@ export function CheckoutClient({ kind }: { kind: Kind }) {
   const endpoint =
     kind === "day-pass" ? "/api/checkout/day-pass" : "/api/checkout/extra-picks";
 
-  async function pay() {
+  const pay = useCallback(async () => {
     setError(null);
     setStage("initialising");
 
@@ -63,6 +72,18 @@ export function CheckoutClient({ kind }: { kind: Kind }) {
             : undefined,
       });
       const init = await initRes.json();
+
+      /*
+       * Not signed in. That is a step, not a failure.
+       *
+       * The route is the authority on this rather than a client-side guess at
+       * whether a session exists: it already refuses, and refusing is the only
+       * reliable signal that the cookie is missing or expired.
+       */
+      if (initRes.status === 401) {
+        setStage("auth");
+        return;
+      }
 
       if (!initRes.ok) throw new Error(init.error ?? "Could not start checkout.");
       if (init.alreadyActive) {
@@ -101,7 +122,17 @@ export function CheckoutClient({ kind }: { kind: Kind }) {
       setError(e instanceof Error ? e.message : "Something went wrong.");
       setStage("idle");
     }
-  }
+  }, [endpoint, kind, selected, qc]);
+
+  /*
+   * Verified, then straight into Paystack. No second button.
+   *
+   * The brief for this was "under ninety seconds and never leaves the page",
+   * and the part that makes it one motion rather than two is right here: the
+   * code resolving IS the press of Pay. Anything else puts a button between
+   * somebody and the thing they already decided to do.
+   */
+  const auth = useOtpAuth({ onVerified: pay });
 
   if (stage === "done") {
     return (
@@ -230,6 +261,9 @@ export function CheckoutClient({ kind }: { kind: Kind }) {
             )}
           </div>
 
+          {stage === "auth" ? (
+            <InlineAuth auth={auth} />
+          ) : (
           <Button
             fullWidth
             size="lg"
@@ -250,12 +284,12 @@ export function CheckoutClient({ kind }: { kind: Kind }) {
                   ? "Confirming…"
                   : `Pay $${priceUsd}`}
           </Button>
+          )}
 
           <div className="flex items-start gap-2 text-[11px] leading-relaxed text-muted">
             <ShieldCheck className="mt-0.5 h-3.5 w-3.5 flex-none" />
             <p>
-              Charged in GHS at the live exchange rate. Card details go straight
-              to Paystack and never touch our servers.
+              Card details go straight to Paystack and never touch our servers.
             </p>
           </div>
         </Card.Content>
@@ -268,5 +302,108 @@ export function CheckoutClient({ kind }: { kind: Kind }) {
         </LinkButton>
       </div>
     </main>
+  );
+}
+
+/**
+ * Sign in without leaving the payment.
+ *
+ * Two fields, one at a time, no headings and no card of its own — it takes the
+ * place the Pay button occupied and hands it straight back. The chrome is
+ * deliberately thin: this is a step inside a purchase, and dressing it up as a
+ * sign-in screen would make it feel like the detour it replaced.
+ *
+ * There is no sign-up/sign-in choice because there is no difference.
+ * requestCode sets shouldCreateUser, so an address we have never seen and one
+ * we have both end at the same place: a code, then a card.
+ */
+function InlineAuth({ auth }: { auth: ReturnType<typeof useOtpAuth> }) {
+  if (auth.step === "code") {
+    return (
+      <form
+        className="space-y-3"
+        onSubmit={(e) => {
+          e.preventDefault();
+          auth.verify();
+        }}
+      >
+        <p className="text-[13px] leading-relaxed">
+          Code sent to <strong className="font-semibold">{auth.email}</strong>.
+        </p>
+
+        {auth.error && <Alert status="danger">{auth.error}</Alert>}
+
+        <div className="flex justify-center">
+          <OtpCodeInput
+            value={auth.code}
+            onChange={auth.setCode}
+            // The last digit IS the press of Pay. A button here would put a
+            // step between somebody and the thing they already decided to do.
+            onComplete={auth.verify}
+            disabled={auth.pending}
+            invalid={Boolean(auth.error)}
+            autoFocus
+          />
+        </div>
+
+        <Button
+          fullWidth
+          size="lg"
+          variant="primary"
+          type="submit"
+          isDisabled={auth.pending}
+        >
+          {auth.pending ? "Checking…" : "Confirm and pay"}
+        </Button>
+
+        <button
+          type="button"
+          onClick={auth.restart}
+          className="w-full text-center text-[12px] text-muted underline underline-offset-2"
+        >
+          Use a different email
+        </button>
+      </form>
+    );
+  }
+
+  return (
+    <form
+      className="space-y-3"
+      onSubmit={(e) => {
+        e.preventDefault();
+        auth.send();
+      }}
+    >
+      <p className="text-[13px] leading-relaxed">
+        Enter your email to continue. We&rsquo;ll send a code — no password, and
+        you stay on this page.
+      </p>
+
+      {auth.error && <Alert status="danger">{auth.error}</Alert>}
+
+      <input
+        type="email"
+        inputMode="email"
+        autoComplete="email"
+        required
+        autoFocus
+        value={auth.email}
+        onChange={(e) => auth.setEmail(e.target.value)}
+        placeholder="you@example.com"
+        aria-label="Email address"
+        className="w-full rounded-xl border border-field-border bg-field px-3.5 py-3 text-center text-sm text-field-foreground outline-none placeholder:text-field-placeholder focus-visible:ring-2 focus-visible:ring-focus"
+      />
+
+      <Button
+        fullWidth
+        size="lg"
+        variant="primary"
+        type="submit"
+        isDisabled={auth.pending}
+      >
+        {auth.pending ? "Sending…" : "Send code"}
+      </Button>
+    </form>
   );
 }

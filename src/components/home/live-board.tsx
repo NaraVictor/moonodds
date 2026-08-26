@@ -122,9 +122,25 @@ export function LiveBoard({ picks }: { picks: Pick[] }) {
         new Date(b.fixture.date).getTime() - new Date(a.fixture.date).getTime(),
     );
 
+  /*
+   * Nothing in play, on a phone, is nothing at all.
+   *
+   * NoLiveGames is a designed empty state and it earns its place on a wide
+   * screen, where the panel sits beside the slider and the space is already
+   * committed. On a phone the columns stack, so for most of the day it is
+   * 22rem of "no live games" between the header and the picks — the thing the
+   * visitor came for, pushed below the fold by a panel reporting an absence.
+   *
+   * So it is removed from the layout below lg rather than hidden inside it:
+   * `hidden` and not `invisible`, because the point is the height.
+   */
+  const empty = rows.length === 0;
+
   return (
     <section
-      className="flex h-full min-h-[22rem] flex-col rounded-[1.5rem] border border-border bg-surface p-4"
+      className={`h-full min-h-[22rem] flex-col rounded-[1.5rem] border border-border bg-surface p-4 ${
+        empty ? "hidden lg:flex" : "flex"
+      }`}
       aria-label="Live board"
     >
       <div className="mb-1 flex flex-none items-baseline justify-between gap-3 px-2">
@@ -136,7 +152,7 @@ export function LiveBoard({ picks }: { picks: Pick[] }) {
         )}
       </div>
 
-      {rows.length === 0 ? (
+      {empty ? (
         <NoLiveGames />
       ) : (
         // min-h-0 is load-bearing: without it a flex child refuses to shrink

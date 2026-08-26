@@ -141,10 +141,18 @@ export async function requestCode(
  * Step two: prove you received it
  * ------------------------------------------------------------------ */
 
-export async function verifyCode(
-  _prev: AuthResult,
-  formData: FormData,
-): Promise<AuthResult> {
+/**
+ * Verify a code and open the session. Shared by both entry points.
+ *
+ * Split out because the two callers differ in exactly one thing: where the
+ * person goes next. The sign-in page sends them to the board; the payment page
+ * must not go anywhere at all, because leaving it is the problem being solved.
+ *
+ * `redirect()` throws to unwind the request, so a caller that wants to stay put
+ * cannot simply ignore its return value — the navigation has to be absent
+ * rather than discarded, which is why this returns and the wrappers decide.
+ */
+async function verifyCodeCore(formData: FormData): Promise<AuthResult | { ok: true }> {
   const channel = String(formData.get("channel") ?? "email") === "sms" ? "sms" : "email";
   const identifier = String(formData.get("identifier") ?? "").trim();
   // Digits only, and whatever length the project issues.
@@ -183,10 +191,38 @@ export async function verifyCode(
   if (error) return { error: "That code is wrong or has expired." };
 
   revalidatePath("/", "layout");
-  // Straight to the board. There is no details step: a code proved the address
-  // and everything else about the account is optional, so there is nothing
-  // left to ask before someone can use what they came for.
+  return { ok: true };
+}
+
+/**
+ * Sign-in page: verify, then straight to the board.
+ *
+ * There is no details step. A code proved the address and everything else about
+ * the account is optional, so there is nothing left to ask before someone can
+ * use what they came for.
+ */
+export async function verifyCode(
+  _prev: AuthResult,
+  formData: FormData,
+): Promise<AuthResult> {
+  const result = await verifyCodeCore(formData);
+  if (result && "error" in result) return result;
   redirect("/");
+}
+
+/**
+ * Payment page: verify and stay exactly where you are.
+ *
+ * The session cookie is set on this response either way; only the navigation
+ * differs. The caller opens Paystack the moment this resolves, which is the
+ * whole point — the code and the card are one motion rather than two, with a
+ * sign-in page and a journey back in between.
+ */
+export async function verifyCodeInline(
+  _prev: AuthResult,
+  formData: FormData,
+): Promise<AuthResult | { ok: true }> {
+  return verifyCodeCore(formData);
 }
 
 /* ------------------------------------------------------------------ *
