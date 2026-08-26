@@ -168,10 +168,23 @@ function whileLive(data: GatedPicks | undefined): number | false {
  */
 const LIVE_REFETCH_MS = 10_000;
 
-export function useTodaysPicks() {
+/**
+ * `enabled` exists because the board mounts BOTH pick hooks and reads one.
+ *
+ * picks-home picks a source with `filters.status === "all" ? today : byStatus`,
+ * and until now the other one fetched anyway — the same fixtures, from a
+ * different RPC, on the same ten-second interval once anything went live. Two
+ * requests, one of them discarded, every ten seconds, for every visitor
+ * watching a match.
+ *
+ * It cost nothing before this week because neither refetched at all. Adding a
+ * live interval turned a harmless duplicate into a doubled one.
+ */
+export function useTodaysPicks(options: { enabled?: boolean } = {}) {
   const { startISO, endISO } = utcDayWindow();
 
   return useQuery({
+    enabled: options.enabled ?? true,
     queryKey: keys.todaysPicks(startISO),
     queryFn: async (): Promise<GatedPicks> => {
       const supabase = createClient();
@@ -189,8 +202,12 @@ export function useTodaysPicks() {
   });
 }
 
-export function usePicksByStatus(filter: StatusFilter) {
+export function usePicksByStatus(
+  filter: StatusFilter,
+  options: { enabled?: boolean } = {},
+) {
   return useQuery({
+    enabled: options.enabled ?? true,
     queryKey: keys.picksByStatus(filter),
     queryFn: async (): Promise<GatedPicks> => {
       const supabase = createClient();

@@ -200,6 +200,17 @@ export async function runFetchFixtures(
         away_goals: f.awayGoals,
         ht_home_goals: f.htHomeGoals,
         ht_away_goals: f.htAwayGoals,
+        // The clock too, from the same response that carries the status.
+        //
+        // This is the second writer of these columns and it was writing only
+        // some of them: on the 00:30 schedule that is invisible, because
+        // nothing has kicked off. Run by hand from the Office mid-afternoon —
+        // which "Fetch & generate" does — it overwrote a live fixture's status
+        // and score while leaving the minute at whatever the poller last set,
+        // so a card could show a fresh score against a stale clock.
+        elapsed_minutes: f.elapsed,
+        elapsed_extra: f.elapsedExtra,
+        status_short: f.statusShort,
       },
       { onConflict: "external_id" },
     );
@@ -1202,11 +1213,40 @@ ${briefs.join("\n")}`;
 }
 
 /** Find overdue fixtures, fetch their results, grade the predictions. */
+/**
+ * How long after kickoff a fixture belongs to the live poller.
+ *
+ * Ninety minutes plus stoppage, half time, and generous room for a delayed
+ * start. Past this it is either finished — in which case one more poll settles
+ * it — or it is stuck, and a stuck fixture polled every ten seconds forever is
+ * a standing charge against the API budget for no new information.
+ *
+ * It is also the handover line: runAutoGrade starts exactly where this ends, so
+ * no fixture is ever fetched by both.
+ */
+const LIVE_WINDOW_MS = 4 * 60 * 60 * 1000;
+
 export async function runAutoGrade() {
   const db = createServiceClient();
   const { football } = getProviders();
 
-  const cutoff = new Date(Date.now() - 2.5 * 60 * 60 * 1000).toISOString();
+  /*
+   * Starts where the live poller gives up, so the two never fetch the same
+   * fixture.
+   *
+   * This used to cut at 2.5 hours while the poller holds its window open for 4,
+   * which left a 90-minute band where both were asking the upstream about the
+   * same match — one every ten seconds and one every two hours. Harmless to the
+   * data, since both write the same idempotent update, but it is a second
+   * caller for records that already have one, and the sweep's whole job is to
+   * catch what the poller could NOT.
+   *
+   * Disjoint now: the poller owns a fixture for four hours, and anything still
+   * unfinished after that is stuck and belongs here. The cost is that a fixture
+   * the poller misses waits until 4h rather than 2.5h — which only happens when
+   * the poller is down, and is the correct trade for a backstop.
+   */
+  const cutoff = new Date(Date.now() - LIVE_WINDOW_MS).toISOString();
 
   const { data: overdue } = await db
     .from("fixtures")
@@ -1219,17 +1259,6 @@ export async function runAutoGrade() {
 
   return applyResults(db, football, overdue);
 }
-
-/**
- * How long after kickoff a fixture stops being worth polling every minute.
- *
- * Ninety minutes plus stoppage, half time, and generous room for a delayed
- * start. Past this it is either finished — in which case one more poll settles
- * it — or it is stuck, and a stuck fixture polled every sixty seconds forever
- * is a standing charge against the API budget for no new information. The
- * two-hourly sweep in runAutoGrade is the backstop for those.
- */
-const LIVE_WINDOW_MS = 4 * 60 * 60 * 1000;
 
 /**
  * The fixtures worth polling right now, as query bounds.

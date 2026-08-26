@@ -71,12 +71,16 @@ export function PicksHome() {
   const { data: access } = useAccessState();
   const { data: stats } = useEngineStats();
   const { data: counts } = useStatusCounts();
-  const today = useTodaysPicks();
-  const byStatus = usePicksByStatus(filters.status);
+  // Exactly one of these runs. Both were mounted and only one was ever read,
+  // which was free while neither refetched and became a doubled request every
+  // ten seconds the moment they started polling live fixtures.
+  const showingAll = filters.status === "all";
+  const today = useTodaysPicks({ enabled: showingAll });
+  const byStatus = usePicksByStatus(filters.status, { enabled: !showingAll });
   const extra = useExtraPicks(access?.hasFullAccess === true);
 
-  const source = filters.status === "all" ? today.data : byStatus.data;
-  const isPending = filters.status === "all" ? today.isPending : byStatus.isPending;
+  const source = showingAll ? today.data : byStatus.data;
+  const isPending = showingAll ? today.isPending : byStatus.isPending;
   const all = useMemo(() => source?.picks ?? [], [source]);
 
   // Facet counts come from the status-filtered set, not the fully filtered one:
