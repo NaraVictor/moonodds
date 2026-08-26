@@ -93,8 +93,21 @@ export function SiteHeader({ signedIn }: { signedIn: boolean }) {
               </Button>
             </form>
           ) : (
+            /*
+              "Sign in", not "Get started".
+
+              It occupies the slot "Sign out" occupies when signed in, and it
+              goes to the sign-in page. "Get started" named a feeling rather
+              than the action, and it read as onboarding — which made it look
+              wrong to a returning customer, who is most of the people who see
+              it.
+
+              It is also no longer where paying begins. The checkout signs
+              people in where they stand, so this button's only job is the door
+              for someone who came here to sign in on purpose.
+            */
             <LinkButton size="md" href="/auth/sign-in" variant="primary">
-              Get started
+              Sign in
             </LinkButton>
           )}
         </div>
