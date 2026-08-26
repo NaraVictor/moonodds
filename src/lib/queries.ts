@@ -110,6 +110,12 @@ export function usePredictionDetail(id: string) {
       if (error) throw error;
       return (data as PredictionDetail | null) ?? null;
     },
+    // The detail page shows the same score and the same match clock as the
+    // card that linked to it, so it has to move at the same rate. It did not
+    // move at all.
+    staleTime: LIVE_REFETCH_MS,
+    refetchInterval: (query) =>
+      query.state.data?.pick?.fixture?.status === "live" ? LIVE_REFETCH_MS : false,
   });
 }
 
@@ -130,6 +136,38 @@ export function useAccessState() {
  * Today's picks. The server decides how many come back, the client never
  * receives a pick it may not display, so there is nothing to slice here.
  */
+/**
+ * Refetch only while something is actually in play.
+ *
+ * The server has polled live fixtures every fifteen seconds since the live
+ * poller shipped, and the board never asked again — useTodaysPicks had no
+ * refetchInterval at all, so a score arrived in the database within seconds and
+ * sat there until the visitor reloaded the page. The half that was broken was
+ * the half nobody was watching.
+ *
+ * Driven by the data rather than by a constant, because a fixed interval polls
+ * all night for a board that finished at eleven. React Query re-evaluates this
+ * after every fetch, so the moment the last fixture goes to `finished` the
+ * polling stops by itself.
+ *
+ * `refetchIntervalInBackground` is left at its default of false: a hidden tab
+ * has nobody looking at it, and the cost of pretending otherwise is paid on
+ * every abandoned tab in the world.
+ */
+function whileLive(data: GatedPicks | undefined): number | false {
+  const live = data?.picks?.some((p) => p.fixture?.status === "live");
+  return live ? LIVE_REFETCH_MS : false;
+}
+
+/**
+ * Matched to the server's own cadence.
+ *
+ * The poller writes every ten seconds, so asking more often than that returns
+ * the same row and asking much less often makes the board lag the database by
+ * more than the database lags the match.
+ */
+const LIVE_REFETCH_MS = 10_000;
+
 export function useTodaysPicks() {
   const { startISO, endISO } = utcDayWindow();
 
@@ -144,6 +182,10 @@ export function useTodaysPicks() {
       if (error) throw error;
       return (data as GatedPicks) ?? EMPTY_GATED;
     },
+    // This one feeds both the board and the Live Board, and had no refetch of
+    // any kind — the single reason scores looked frozen.
+    staleTime: LIVE_REFETCH_MS,
+    refetchInterval: (query) => whileLive(query.state.data),
   });
 }
 
@@ -158,9 +200,16 @@ export function usePicksByStatus(filter: StatusFilter) {
       if (error) throw error;
       return (data as GatedPicks) ?? EMPTY_GATED;
     },
-    // Live fixtures move; keep this one fresher than the rest.
-    staleTime: filter === "live" ? 20_000 : 60_000,
-    refetchInterval: filter === "live" ? 30_000 : false,
+    /*
+     * Fresher than the rest, and now keyed on the DATA rather than the filter.
+     *
+     * The "live" tab polled every 30s while the server wrote every 15, so the
+     * tab explicitly named after live fixtures was the one showing the stalest
+     * score. And every other tab polled never — which is right until an
+     * "upcoming" fixture kicks off while somebody is looking at it.
+     */
+    staleTime: filter === "live" ? LIVE_REFETCH_MS : 60_000,
+    refetchInterval: (query) => whileLive(query.state.data),
   });
 }
 

@@ -6,20 +6,21 @@ import { runLiveResults } from "@/lib/pipeline";
 export const dynamic = "force-dynamic";
 
 /**
- * Every fifteen seconds, so very short.
+ * Every ten seconds, so very short.
  *
  * The other cron routes allow the platform's full 300 seconds because they do
- * genuinely long work. This one runs 240 times more often and does at most one
+ * genuinely long work. This one runs 360 times more often and does at most one
  * upstream call, which is itself capped at 15s by API_FOOTBALL_TIMEOUT_MS. A
  * long ceiling here would only let a wedged run stay wedged while hundreds
  * queued behind it.
  *
- * 30 gives the upstream its full 15 seconds plus the database round trips
- * either side, and still dies inside two ticks. Overlap is harmless anyway —
- * every write is an idempotent update keyed on a fixture id — so this bounds
- * pile-up rather than preventing a race.
+ * 20 leaves the upstream its full timeout plus the database round trips either
+ * side, and dies inside two ticks. Tightened from 30 along with the interval:
+ * at a ten-second tick a thirty-second ceiling allows three runs in flight at
+ * once, and while overlap is harmless to the DATA — every write is an
+ * idempotent update keyed on a fixture id — each one still spends a call.
  */
-export const maxDuration = 30;
+export const maxDuration = 20;
 
 export async function POST(request: Request) {
   const denied = assertCronRequest(request);

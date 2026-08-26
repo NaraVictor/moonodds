@@ -1251,7 +1251,7 @@ export function liveWindow(now: number = Date.now()): { from: string; to: string
 }
 
 /**
- * Poll in-play fixtures, every fifteen seconds.
+ * Poll in-play fixtures, every ten seconds.
  *
  * Results used to arrive only from runAutoGrade, on a two-hourly schedule
  * behind a 2.5-hour cutoff. A match finishing at 20:30 could therefore sit
@@ -1262,15 +1262,19 @@ export function liveWindow(now: number = Date.now()): { from: string; to: string
  * THE API BUDGET IS THE DESIGN CONSTRAINT, so read the cost carefully:
  *
  *   - No fixture in the window means NO upstream call at all. This is the whole
- *     guard, and it is what makes a 15-second tick affordable: a poller that
- *     called the API just to be told nothing is in play would spend 5,760 a day
- *     doing it, which is most of the plan.
+ *     guard, and it is what makes a ten-second tick affordable: a poller that
+ *     called the API just to be told nothing is in play would spend 8,640 a day
+ *     doing it, which is more than the entire plan.
  *   - When something is in play, every fixture in the window goes into ONE
- *     request — fetchResults batches twenty ids per call — so the cost is four
+ *     request — fetchResults batches twenty ids per call — so the cost is six
  *     calls a minute regardless of how many matches are on.
  *   - The heaviest realistic day, a Saturday card running 11:30 to 22:00, keeps
- *     the window open about fourteen hours and costs roughly 3,500 calls
- *     against a 7,500 plan. A weekday evening is nearer 1,700.
+ *     the window open about twelve hours and costs roughly 4,650 calls against
+ *     a 7,500 plan. A weekday evening is nearer 1,950.
+ *
+ * Five seconds was considered and rejected: it lands at 9,150 on that same
+ * Saturday, which is over the plan, and it would fail by being refused
+ * mid-evening rather than by refusing to deploy.
  *
  * Safe to overlap. pg_net fires and forgets, so a slow run can still be in
  * flight when the next tick comes round; every write here is an idempotent
