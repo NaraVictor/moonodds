@@ -81,6 +81,12 @@ function shortName(name: string): string {
   return name.slice(0, 3).toUpperCase();
 }
 
+type ApiInjury = {
+  player: { name: string; type: string | null; reason: string | null };
+  team: { id: number };
+  fixture: { id: number };
+};
+
 type ApiLineup = {
   team: { id: number };
   formation: string | null;
@@ -633,6 +639,29 @@ export const liveFootball: FootballProvider = {
     }
 
     return out;
+  },
+
+  async fetchInjuries(leagueExternalId, season, date) {
+    try {
+      const rows = await apiFootball<ApiInjury>(
+        `/injuries?league=${leagueExternalId}&season=${season}&date=${date}`,
+      );
+      return rows
+        .filter((r) => r.fixture?.id && r.team?.id && r.player?.name)
+        .map((r) => ({
+          fixtureExternalId: r.fixture.id,
+          teamExternalId: r.team.id,
+          playerName: r.player.name,
+          kind: r.player.type ?? null,
+          reason: r.player.reason ?? null,
+        }));
+    } catch (err) {
+      // One league failing must not lose the leagues already collected, and an
+      // absent list is handled correctly downstream — it gates STEP 6 off
+      // rather than reporting a fit squad.
+      console.error(`[football] injuries for league ${leagueExternalId}:`, err);
+      return [];
+    }
   },
 
   async fetchResults(externalIds) {

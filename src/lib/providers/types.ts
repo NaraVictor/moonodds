@@ -42,6 +42,23 @@ export type RawFixture = {
   away: RawFixtureTeam;
 };
 
+/**
+ * A player reported unavailable for a fixture.
+ *
+ * `reason` is the feed's own wording — "Knee Injury", "Red Card", "Inactive" —
+ * and is passed through rather than categorised, because the engine reads it as
+ * prose and a taxonomy invented here would be one more thing to keep in step
+ * with a vocabulary we do not control.
+ */
+export type RawInjury = {
+  fixtureExternalId: number;
+  teamExternalId: number;
+  playerName: string;
+  /** "Missing Fixture" or "Questionable" in practice. */
+  kind: string | null;
+  reason: string | null;
+};
+
 /** One side's team sheet for a fixture. */
 export type RawLineup = {
   fixtureExternalId: number;
@@ -208,6 +225,19 @@ export interface FootballProvider {
   fetchStats(externalIds: number[]): Promise<RawFixtureStats[]>;
   /** Team sheets for fixtures near kickoff. Empty until the clubs publish. */
   fetchLineups(externalIds: number[]): Promise<RawLineup[]>;
+  /**
+   * Reported absences for a league's fixtures on one date.
+   *
+   * By league and date rather than by fixture: the upstream answers either way,
+   * and one call covers every fixture that league plays that day instead of one
+   * call per fixture. On a seven-fixture evening across four leagues that is
+   * four calls rather than seven.
+   */
+  fetchInjuries(
+    leagueExternalId: number,
+    season: number,
+    date: string,
+  ): Promise<RawInjury[]>;
   /** Catalogue lookup by name, for adding a league we don't track yet. */
   searchLeagues(query: string): Promise<RawLeague[]>;
   /** Catalogue lookup by name, for adding a team we don't track yet. */

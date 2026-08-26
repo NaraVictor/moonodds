@@ -408,3 +408,68 @@ describe("live polling window", () => {
     expect(kickoff > w.from).toBe(false);
   });
 });
+
+/**
+ * The absence guard.
+ *
+ * This is the one place where getting "empty" wrong is expensive rather than
+ * merely untidy. The upstream returns nothing both for a fully fit squad and
+ * for a fixture it has not published yet, and printing "no absences" would
+ * resolve that ambiguity in the dangerous direction: STEP 6 satisfied, every
+ * personnel flag cleared, and the anchoring condition "no Tier 1 or Tier 2
+ * absence" met — a higher ceiling awarded on the strength of a feed that had
+ * not loaded.
+ */
+describe("absences in the prompt", () => {
+  const season = { gamesPlayed: 38, avgGoalsScored: 1.7, avgGoalsConceded: 1.1, cleanSheetRate: 0.3, bttsRate: 0.5 };
+  const base = { home_season: season, away_season: season };
+
+  it("prints the names and reasons when there are some", () => {
+    const out = statsBlock(
+      {
+        ...base,
+        home_absences: [
+          { name: "T. Cairney", reason: "Knee Injury" },
+          { name: "J. Andersen", reason: "Red Card" },
+        ],
+      },
+      null,
+    );
+    expect(out).toContain("Home absences: 2 reported out");
+    expect(out).toContain("T. Cairney (Knee Injury)");
+    // A suspension reaches the engine through the same line as an injury.
+    expect(out).toContain("J. Andersen (Red Card)");
+  });
+
+  it("says NOTHING for an empty list rather than 'no absences'", () => {
+    const out = statsBlock({ ...base, home_absences: [], away_absences: [] }, null);
+    expect(out).not.toContain("absences");
+  });
+
+  it("says nothing when the feed was never asked", () => {
+    const out = statsBlock(base, null);
+    expect(out).not.toContain("absences");
+  });
+
+  it("does not let a fetched-but-empty row read as a fit squad", () => {
+    // absences_fetched_at proves the question was asked. It still must not
+    // produce a line, because "asked and told nothing" is not "nobody is out".
+    const out = statsBlock(
+      { ...base, home_absences: [], away_absences: [], absences_fetched_at: "2026-08-25T05:30:00Z" },
+      null,
+    );
+    expect(out).not.toContain("absences");
+  });
+
+  it("caps a long list rather than filling the prompt with names", () => {
+    const many = Array.from({ length: 12 }, (_, i) => ({ name: `Player ${i}`, reason: "Injury" }));
+    const out = statsBlock({ ...base, home_absences: many }, null);
+    expect(out).toContain("12 reported out");
+    expect(out).toContain("and 4 more");
+  });
+
+  it("ignores malformed entries instead of printing blanks", () => {
+    const out = statsBlock({ ...base, home_absences: [{ reason: "Injury" }, {}] }, null);
+    expect(out).not.toContain("Home absences");
+  });
+});

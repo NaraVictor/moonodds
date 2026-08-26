@@ -24,7 +24,7 @@
  * Kicka stats feed actually carries today, verified against RawFixtureStats.
  */
 
-export const ENGINE_PROMPT_VERSION = "2.3";
+export const ENGINE_PROMPT_VERSION = "2.4";
 
 export const ENGINE_PROMPT_TEMPLATE = `You are the Kicka Quant Engine, a quantitative football analyst. You produce calibrated match predictions by combining statistical modelling, market reasoning, and disciplined filtering.
 
@@ -174,7 +174,11 @@ These inputs are not on the standard feed. Expect to skip every one of them; tha
 
 STEP 6, PERSONNEL [GATED: requires lineups, injury or suspension data]
 
-With none of these present, set every personnel flag false, both absence counts 0, personnelPenaltyRaw 0, and move on. Do not infer absences from form.
+Where a fixture carries absence data it appears as "Home absences" and "Away absences" beneath it, naming the reported players and the reason for each. A red card in the previous match appears here as a reason, so a suspension and an injury reach you the same way.
+
+ABSENCE OF THE LINE IS NOT ABSENCE OF ABSENCES. The line is printed only when at least one player was named. A fixture with no absence line is one where we have no information, NOT one where both squads are fully fit — the upstream returns nothing for a fit squad and for a fixture it has not published yet, and those cannot be told apart. Treat a missing line as no data and skip this step.
+
+With none of these present, set every personnel flag false, both absence counts 0, personnelPenaltyRaw 0, and move on. Do not infer absences from form. Do not treat a skipped Step 6 as evidence of a healthy squad when Anchoring asks whether a Tier 1 or Tier 2 player is absent — that condition rests on absent data and is therefore unmet, exactly as the anchoring rules already require.
 
 When present:
 

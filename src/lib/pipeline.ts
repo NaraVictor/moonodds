@@ -489,6 +489,31 @@ export function statsBlock(
     if (line) lines.push(`    ${label} recent schedule: ${line}`);
   }
 
+  /*
+   * Absences, and ONLY when there are some.
+   *
+   * This is the guard, and it is deliberately asymmetric. An empty list is not
+   * printed as "no absences", and not printed at all — because the feed returns
+   * nothing both for a squad with a clean bill of health and for a fixture it
+   * has not populated yet, and there is no way to tell those apart from here.
+   *
+   * Printing "no absences" would resolve that ambiguity in the dangerous
+   * direction: it would satisfy STEP 6, clear the personnel flags, and satisfy
+   * the anchoring condition "no Tier 1 or Tier 2 absence" — handing a fixture a
+   * higher ceiling on the strength of a feed that had not loaded. A side with
+   * three defenders out would score as clean.
+   *
+   * So silence means absent, the [GATED] step skips exactly as it does today,
+   * and the only thing that can move a number is a name.
+   */
+  for (const [label, raw] of [
+    ["Home", s.home_absences],
+    ["Away", s.away_absences],
+  ] as const) {
+    const line = formatAbsences(raw);
+    if (line) lines.push(`    ${label} absences: ${line}`);
+  }
+
   return lines.join("\n");
 }
 
@@ -504,6 +529,11 @@ export function batchAbsentFeeds(rows: Array<Record<string, unknown>>): string {
   const has = (test: (r: Record<string, unknown>) => boolean) => rows.some(test);
 
   const conditional: Array<[string, boolean]> = [
+    // Present only where a NAME came back. A fetch that returned nothing counts
+    // as absent here for the same reason statsBlock prints nothing for it: an
+    // empty list cannot be told from an unloaded one, and declaring the feed
+    // present would invite the model to read silence as a fit squad.
+    ["injuries and suspensions", has((r) => ((r.home_absences ?? []) as unknown[]).length > 0 || ((r.away_absences ?? []) as unknown[]).length > 0)],
     ["individual head-to-head meetings", has((r) => ((r.h2h_matches ?? []) as unknown[]).length > 0)],
     ["venue-separated form", has((r) => Object.keys((r.home_split ?? {}) as object).length > 0)],
     [
@@ -515,8 +545,10 @@ export function batchAbsentFeeds(rows: Array<Record<string, unknown>>): string {
   // Nothing in this build fetches these. They are named so the engine knows
   // they are absent by design rather than missing by accident.
   const never = [
+    // Line-ups stay here permanently, and not for want of a feed: they are
+    // fetched now, but they publish about forty minutes before kickoff and
+    // daily-picks runs at 06:00. Twelve hours too late to inform a prediction.
     "lineups",
-    "injuries and suspensions",
     "odds and market movement",
     "league standings",
     "weather",
@@ -625,6 +657,36 @@ function priorLine(
     `${prior.avgGoalsConceded ?? "?"} conceded per game, clean sheets ` +
     `${prior.cleanSheetRate ?? "?"}, both scored ${prior.bttsRate ?? "?"}`
   );
+}
+
+/**
+ * The absence list, or nothing at all.
+ *
+ * Returns null for null, for a non-array, and for an empty array — all three
+ * are "we have no information", and none of them is "everybody is fit". The
+ * caller prints nothing on null, which leaves STEP 6 gated.
+ *
+ * Capped at eight names per side. Beyond that the list stops being a personnel
+ * note and starts being most of the prompt, and the step it feeds cares about
+ * tiers and totals rather than about the ninth name.
+ */
+function formatAbsences(raw: unknown): string | null {
+  if (!Array.isArray(raw) || raw.length === 0) return null;
+
+  const named = raw
+    .map((r) => {
+      const p = r as { name?: string; reason?: string | null; kind?: string | null };
+      if (!p?.name) return null;
+      const why = p.reason || p.kind;
+      return why ? `${p.name} (${why})` : p.name;
+    })
+    .filter((v): v is string => Boolean(v));
+
+  if (!named.length) return null;
+
+  const shown = named.slice(0, 8);
+  const rest = named.length - shown.length;
+  return `${named.length} reported out — ${shown.join(", ")}${rest > 0 ? `, and ${rest} more` : ""}`;
 }
 
 function formatSplit(raw: unknown): string | null {
@@ -1356,6 +1418,114 @@ async function applyResults(
   }
 
   return { fixtures: finished, graded, live };
+}
+
+/**
+ * Fetch reported absences for the fixtures the engine is about to reason over.
+ *
+ * Runs at 05:30, half an hour before daily-picks. That ordering is the entire
+ * reason this feed exists rather than line-ups: STEP 6 has been gated off since
+ * the prompt was written because the only personnel data anybody had arrived
+ * forty minutes before kickoff, twelve hours after the prediction was made.
+ *
+ * Asked by league and date rather than per fixture, so a seven-fixture evening
+ * across four leagues costs four calls rather than seven.
+ *
+ * WHAT THIS DOES NOT DO is treat an empty answer as good news. The feed returns
+ * nothing both for a fully fit squad and for a fixture it has not populated
+ * yet, and those are opposite claims. Everything here records what came back
+ * and lets statsBlock decide what it means — which it does by refusing to read
+ * an empty list as anything at all.
+ */
+export async function runFetchInjuries() {
+  const db = createServiceClient();
+  const { football } = getProviders();
+
+  const now = new Date();
+  const horizon = new Date(now.getTime() + 36 * 3600 * 1000);
+
+  const { data: fixtures } = await db
+    .from("fixtures")
+    .select("id, external_id, fixture_date, home_team_id, away_team_id, leagues(external_id, season)")
+    .eq("status", "scheduled")
+    .gte("fixture_date", now.toISOString())
+    .lt("fixture_date", horizon.toISOString())
+    .not("external_id", "is", null)
+    .order("fixture_date")
+    .limit(40);
+
+  if (!fixtures?.length) return { checked: 0, skipped: "no upcoming fixtures" };
+
+  // One request per (league, date) pair rather than per fixture.
+  const pairs = new Map<string, { league: number; season: number; date: string }>();
+  for (const f of fixtures) {
+    const league = asOne(f.leagues) as { external_id: number; season: number } | null;
+    if (!league?.external_id) continue;
+    const date = String(f.fixture_date).slice(0, 10);
+    pairs.set(`${league.external_id}:${date}`, {
+      league: league.external_id,
+      season: league.season,
+      date,
+    });
+  }
+
+  const all: Awaited<ReturnType<typeof football.fetchInjuries>> = [];
+  for (const { league, season, date } of pairs.values()) {
+    all.push(...(await football.fetchInjuries(league, season, date)));
+  }
+
+  // Index by fixture and side.
+  const teamIds = [
+    ...new Set(fixtures.flatMap((f) => [f.home_team_id as string, f.away_team_id as string])),
+  ];
+  const { data: teams } = await db.from("teams").select("id, external_id").in("id", teamIds);
+  const externalByTeam = new Map(
+    (teams ?? []).map((t) => [t.id as string, t.external_id as number]),
+  );
+
+  const byFixture = new Map<number, typeof all>();
+  for (const inj of all) {
+    const list = byFixture.get(inj.fixtureExternalId) ?? [];
+    list.push(inj);
+    byFixture.set(inj.fixtureExternalId, list);
+  }
+
+  const fetchedAt = new Date().toISOString();
+  let upserted = 0;
+
+  for (const f of fixtures) {
+    const forFixture = byFixture.get(f.external_id as number) ?? [];
+    const homeExternal = externalByTeam.get(f.home_team_id as string);
+    const awayExternal = externalByTeam.get(f.away_team_id as string);
+
+    const pick = (side: number | undefined) =>
+      forFixture
+        .filter((i) => side != null && i.teamExternalId === side)
+        .map((i) => ({ name: i.playerName, kind: i.kind, reason: i.reason }));
+
+    const { error } = await db.from("fixture_stats").upsert(
+      {
+        fixture_id: f.id,
+        fixture_external_id: f.external_id,
+        home_absences: pick(homeExternal),
+        away_absences: pick(awayExternal),
+        // Written even when both lists are empty. It is the record that the
+        // question was asked, which is the only thing that separates "nobody is
+        // out" from "we do not know" — and neither of those is a reason to
+        // penalise a side, which is why statsBlock still gates on the CONTENT.
+        absences_fetched_at: fetchedAt,
+      },
+      { onConflict: "fixture_id" },
+    );
+    if (!error) upserted++;
+  }
+
+  return {
+    fixtures: fixtures.length,
+    calls: pairs.size,
+    absences: all.length,
+    upserted,
+  };
 }
 
 /**
