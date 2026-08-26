@@ -1,4 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { leagueBadgeUrl, teamCrestUrl } from "./types";
 import type {
   AiProvider,
   EnginePick,
@@ -8,10 +9,11 @@ import type {
   PaymentProvider,
   RawFixture,
   RawFixtureStats,
+  RawLineup,
+  RawLineupPlayer,
   RawTeam,
   VenueSplit,
 } from "./types";
-import { leagueBadgeUrl, teamCrestUrl } from "./types";
 import { ENGINE_CALL_BUDGET_MS, THIN_SEASON_GAMES } from "@/lib/engine/limits";
 import { PICK_SCHEMA } from "@/lib/engine/output";
 
@@ -25,7 +27,7 @@ type ApiFixture = {
     referee: string | null;
     date: string;
     venue: { name: string | null };
-    status: { short: string };
+    status: { short: string; elapsed: number | null; extra: number | null };
   };
   league: {
     id: number;
@@ -79,6 +81,30 @@ function shortName(name: string): string {
   return name.slice(0, 3).toUpperCase();
 }
 
+type ApiLineup = {
+  team: { id: number };
+  formation: string | null;
+  coach: { name: string | null } | null;
+  startXI: Array<{ player: ApiLineupPlayer }> | null;
+  substitutes: Array<{ player: ApiLineupPlayer }> | null;
+};
+
+type ApiLineupPlayer = {
+  id: number | null;
+  name: string;
+  number: number | null;
+  pos: string | null;
+};
+
+function toLineupPlayer(entry: { player: ApiLineupPlayer }): RawLineupPlayer {
+  return {
+    externalId: entry.player.id ?? null,
+    name: entry.player.name,
+    number: entry.player.number ?? null,
+    position: entry.player.pos ?? null,
+  };
+}
+
 function toRawTeam(t: ApiTeam): RawTeam {
   return {
     externalId: t.team.id,
@@ -103,6 +129,9 @@ function toRaw(f: ApiFixture): RawFixture {
     venue: f.fixture.venue?.name ?? null,
     referee: f.fixture.referee ?? null,
     status: mapStatus(f.fixture.status.short),
+    elapsed: f.fixture.status.elapsed ?? null,
+    elapsedExtra: f.fixture.status.extra ?? null,
+    statusShort: f.fixture.status.short ?? null,
     homeGoals: f.goals.home,
     awayGoals: f.goals.away,
     htHomeGoals: f.score?.halftime?.home ?? null,
@@ -564,6 +593,43 @@ export const liveFootball: FootballProvider = {
         homeSplit: splitOf(homeSeason),
         awaySplit: splitOf(awaySeason),
       });
+    }
+
+    return out;
+  },
+
+  /**
+   * Team sheets, one fixture per call.
+   *
+   * /fixtures/lineups takes a single fixture id — there is no batch form — so
+   * this is the one feed whose cost scales with the number of fixtures rather
+   * than staying flat. The caller is what keeps that bounded: it only asks
+   * about fixtures inside the publication window, and each fixture is answered
+   * once because a published sheet does not change.
+   *
+   * An empty response is the normal case before publication and is NOT an
+   * error: the clubs simply have not named the side yet.
+   */
+  async fetchLineups(externalIds) {
+    const out: RawLineup[] = [];
+
+    for (const id of externalIds) {
+      try {
+        const rows = await apiFootball<ApiLineup>(`/fixtures/lineups?fixture=${id}`);
+        for (const row of rows) {
+          out.push({
+            fixtureExternalId: id,
+            teamExternalId: row.team.id,
+            formation: row.formation || null,
+            coach: row.coach?.name || null,
+            startXI: (row.startXI ?? []).map(toLineupPlayer),
+            substitutes: (row.substitutes ?? []).map(toLineupPlayer),
+          });
+        }
+      } catch (err) {
+        // One fixture failing must not lose the sheets already collected.
+        console.error(`[football] lineups for fixture ${id}:`, err);
+      }
     }
 
     return out;

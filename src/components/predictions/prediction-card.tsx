@@ -6,7 +6,7 @@ import { useBetSlip } from "@/lib/bet-slip";
 import { ConfidenceRing } from "./confidence-ring";
 import { TeamCrest } from "./team-crest";
 import { isUnlocked, type Pick, type UnlockedPick } from "@/lib/types";
-import { formatMarket, teamName } from "@/lib/format";
+import { formatMarket, matchClock, teamName } from "@/lib/format";
 
 /**
  * The prediction card.
@@ -103,6 +103,9 @@ export function PredictionCard({
 }) {
   const status = resolveStatus(pick);
   const s = STATE[status];
+  // Only for a fixture the feed says is in progress. matchClock returns null
+  // where there is no minute to show, and the kickoff line takes over.
+  const clock = pick.fixture.status === "live" ? matchClock(pick.fixture) : null;
   const settled = status !== "pending";
   const live = pick.fixture.status === "live";
   const unlocked = isUnlocked(pick);
@@ -186,9 +189,28 @@ export function PredictionCard({
               vs
             </span>
           )}
-          <span className="whitespace-nowrap text-[10px] font-medium" style={{ color: subtleInk }}>
-            {timing(pick)}
-          </span>
+          {/*
+            A live fixture shows the minute, and shows it LOUDLY.
+
+            The kickoff time is the one fact a viewer watching a match already
+            has; the minute is the one they want, and at 10px in muted grey it
+            would read as the same incidental metadata it replaced. So it takes
+            the live treatment — larger, bold, and in the live red the pulsing
+            dot already uses, so the two read as one indicator.
+          */}
+          {clock ? (
+            <span
+              className="numeral whitespace-nowrap text-[15px] font-bold leading-none"
+              style={{ color: "var(--lost-ink)" }}
+              aria-label={`Live, ${clock.replace("'", " minutes")}`}
+            >
+              {clock}
+            </span>
+          ) : (
+            <span className="whitespace-nowrap text-[10px] font-medium" style={{ color: subtleInk }}>
+              {timing(pick)}
+            </span>
+          )}
         </div>
       </div>
 

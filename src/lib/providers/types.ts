@@ -18,12 +18,46 @@ export type RawFixture = {
   venue: string | null;
   referee: string | null;
   status: "scheduled" | "live" | "finished";
+  /**
+   * The match clock, straight from the feed.
+   *
+   * Never derived from kickoff time. An elapsed minute computed client-side
+   * drifts the moment anything interrupts play: it keeps counting through half
+   * time, ignores stoppage, and has no way to represent a suspended match. The
+   * feed knows all three and reports them.
+   *
+   * `statusShort` is API-Football's own code (1H, HT, 2H, ET, BT, P, FT…) and
+   * is carried unmapped alongside our three-state `status`, because "HT" and
+   * "in the 67th minute" are both `live` to us and must not render the same.
+   */
+  elapsed: number | null;
+  /** Stoppage minutes, so 45 + 2 renders as 45+2'. Null outside stoppage. */
+  elapsedExtra: number | null;
+  statusShort: string | null;
   homeGoals: number | null;
   awayGoals: number | null;
   htHomeGoals: number | null;
   htAwayGoals: number | null;
   home: RawFixtureTeam;
   away: RawFixtureTeam;
+};
+
+/** One side's team sheet for a fixture. */
+export type RawLineup = {
+  fixtureExternalId: number;
+  teamExternalId: number;
+  formation: string | null;
+  coach: string | null;
+  startXI: RawLineupPlayer[];
+  substitutes: RawLineupPlayer[];
+};
+
+export type RawLineupPlayer = {
+  externalId: number | null;
+  name: string;
+  number: number | null;
+  /** G, D, M, F — null where the feed does not say. */
+  position: string | null;
 };
 
 export type RawFixtureTeam = {
@@ -172,6 +206,8 @@ export interface FootballProvider {
   fetchResults(externalIds: number[]): Promise<RawFixture[]>;
   /** Form, head-to-head and season averages for upcoming fixtures. */
   fetchStats(externalIds: number[]): Promise<RawFixtureStats[]>;
+  /** Team sheets for fixtures near kickoff. Empty until the clubs publish. */
+  fetchLineups(externalIds: number[]): Promise<RawLineup[]>;
   /** Catalogue lookup by name, for adding a league we don't track yet. */
   searchLeagues(query: string): Promise<RawLeague[]>;
   /** Catalogue lookup by name, for adding a team we don't track yet. */

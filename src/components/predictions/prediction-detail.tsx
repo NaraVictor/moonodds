@@ -3,7 +3,13 @@
 import Link from "next/link";
 import { ArrowLeft, Check, Lock, MapPin, Plus, Users } from "@/components/ui/icons";
 import { MeterRoot, MeterTrack, MeterFill } from "@heroui/react";
-import { usePredictionDetail, type FixtureStats } from "@/lib/queries";
+import {
+  usePredictionDetail,
+  type FixtureLineups,
+  type FixtureStats,
+  type LineupPlayer,
+  type TeamLineup,
+} from "@/lib/queries";
 import { useBetSlip } from "@/lib/bet-slip";
 import { ConfidenceRing } from "./confidence-ring";
 import { TeamCrest } from "./team-crest";
@@ -30,14 +36,17 @@ function Section({
   title,
   description,
   children,
+  className = "",
 }: {
   title: string;
   description?: string;
   children: React.ReactNode;
+  /** For ordering within the column. See the main column's comment. */
+  className?: string;
 }) {
   return (
     <section
-      className="overflow-hidden rounded-[1.5rem] border border-border bg-surface"
+      className={`overflow-hidden rounded-[1.5rem] border border-border bg-surface ${className}`}
     >
       <div className="px-6 pt-6">
         <h2 className="text-[15px] font-semibold">{title}</h2>
@@ -183,7 +192,21 @@ export function PredictionDetail({ id }: { id: string }) {
       */}
       <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_22rem] lg:items-start">
         {/* ---------------------- analysis column ---------------------- */}
-        <div className="order-2 space-y-4 lg:order-none">
+        {/*
+          flex rather than space-y, so one child can be reordered on mobile.
+
+          The reading order was built for a wide screen: evidence first, our
+          interpretation second, so someone can reach their own view before
+          being told ours. That is the right order when the rail sits alongside
+          and the whole page is in view at once.
+
+          On a phone it stacks, and "form, head-to-head, season" becomes three
+          screens of scrolling before the call is explained — so the thing the
+          reader came for is the last thing they reach. Only "Why this
+          prediction" moves, and only below lg; the evidence still follows it,
+          which keeps it checkable rather than hidden.
+        */}
+        <div className="order-2 flex flex-col gap-4 lg:order-none">
           <Section
             title="Recent form"
             description="Each side's last five, oldest first."
@@ -249,6 +272,7 @@ export function PredictionDetail({ id }: { id: string }) {
 
           {/* Reasoning is ours, so it follows the evidence and is gated. */}
           <Section
+            className="order-first lg:order-none"
             title="Why this prediction"
             description={
               unlocked
@@ -283,20 +307,11 @@ export function PredictionDetail({ id }: { id: string }) {
 
           <FactorsSection pick={pick} unlocked={unlocked} />
 
-          {/*
-            Line-ups are not fetched yet. API-Football publishes them roughly
-            20-40 minutes before kickoff, so a slot that says so beats a section
-            that silently renders nothing.
-          */}
-          <Section title="Line-ups">
-            <div className="flex items-center gap-3 rounded-2xl bg-surface-secondary px-4 py-5">
-              <Users className="h-4 w-4 flex-none text-muted" />
-              <p className="text-[13px] leading-relaxed text-muted">
-                Confirmed line-ups are published about 40 minutes before kickoff.
-                They&rsquo;ll appear here once the teams are announced.
-              </p>
-            </div>
-          </Section>
+          <LineupsSection
+            lineups={data.lineups ?? null}
+            homeName={teamName(pick.homeTeam)}
+            awayName={teamName(pick.awayTeam)}
+          />
         </div>
 
         {/* ---------------------- decision rail ---------------------- */}
@@ -413,6 +428,124 @@ function FactorsSection({ pick, unlocked }: { pick: Pick; unlocked: boolean }) {
         </div>
       )}
     </Section>
+  );
+}
+
+/**
+ * The team sheets, once the clubs name them.
+ *
+ * This section was a hard-coded paragraph for the whole life of the page, and
+ * it could never have become anything else: `lineups` sat in the pipeline's
+ * list of feeds nothing fetched, so the promise that they would "appear here"
+ * was one nothing in the codebase could keep.
+ *
+ * The paragraph survives, as the state it always described rather than as the
+ * only state. Each side is rendered independently — one club naming its XI does
+ * not oblige the other, and waiting for both would blank the section through
+ * the twenty minutes between them.
+ */
+function LineupsSection({
+  lineups,
+  homeName,
+  awayName,
+}: {
+  lineups: FixtureLineups | null;
+  homeName: string;
+  awayName: string;
+}) {
+  const home = lineups?.home ?? null;
+  const away = lineups?.away ?? null;
+
+  if (!home && !away) {
+    return (
+      <Section title="Line-ups">
+        <div className="flex items-center gap-3 rounded-2xl bg-surface-secondary px-4 py-5">
+          <Users className="h-4 w-4 flex-none text-muted" />
+          <p className="text-[13px] leading-relaxed text-muted">
+            Confirmed line-ups are published about 40 minutes before kickoff.
+            They&rsquo;ll appear here once the teams are announced.
+          </p>
+        </div>
+      </Section>
+    );
+  }
+
+  return (
+    <Section
+      title="Line-ups"
+      description="As named by the clubs. Substitutions during the match are not reflected."
+    >
+      <div className="grid gap-6 sm:grid-cols-2">
+        <TeamSheet name={homeName} sheet={home} />
+        <TeamSheet name={awayName} sheet={away} />
+      </div>
+    </Section>
+  );
+}
+
+function TeamSheet({ name, sheet }: { name: string; sheet: TeamLineup | null }) {
+  if (!sheet) {
+    return (
+      <div>
+        <p className="text-[13px] font-semibold">{name}</p>
+        <p className="mt-2 text-[12px] leading-relaxed text-muted">
+          Not named yet.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <div className="flex items-baseline justify-between gap-2">
+        <p className="truncate text-[13px] font-semibold">{name}</p>
+        {sheet.formation && (
+          <span className="numeral flex-none text-[12px] text-muted">{sheet.formation}</span>
+        )}
+      </div>
+      {sheet.coach && (
+        <p className="mt-0.5 text-[11px] text-muted">Coach: {sheet.coach}</p>
+      )}
+
+      <ul className="mt-3 space-y-1.5">
+        {sheet.startXI.map((p, i) => (
+          <PlayerRow key={p.externalId ?? `xi-${i}`} player={p} />
+        ))}
+      </ul>
+
+      {!!sheet.substitutes.length && (
+        <>
+          <p className="mt-4 text-[11px] font-bold uppercase tracking-[0.08em] text-muted">
+            Bench
+          </p>
+          <ul className="mt-2 space-y-1.5">
+            {sheet.substitutes.map((p, i) => (
+              <PlayerRow key={p.externalId ?? `sub-${i}`} player={p} muted />
+            ))}
+          </ul>
+        </>
+      )}
+    </div>
+  );
+}
+
+function PlayerRow({ player, muted = false }: { player: LineupPlayer; muted?: boolean }) {
+  return (
+    <li className="flex items-baseline gap-2.5">
+      {/* Fixed width so the names line up into a column rather than stepping
+          in and out with the width of each shirt number. */}
+      <span className="numeral w-5 flex-none text-right text-[11px] text-muted">
+        {player.number ?? "\u2013"}
+      </span>
+      <span className={`min-w-0 flex-1 truncate text-[12.5px] ${muted ? "text-muted" : ""}`}>
+        {player.name}
+      </span>
+      {player.position && (
+        <span className="flex-none text-[10px] font-semibold uppercase tracking-[0.06em] text-muted">
+          {player.position}
+        </span>
+      )}
+    </li>
   );
 }
 

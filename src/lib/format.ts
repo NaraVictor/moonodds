@@ -180,3 +180,34 @@ export function formatSigned(value: number, digits = 1): string {
 function cap(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
+
+
+/**
+ * The match clock, as a broadcaster would show it.
+ *
+ * Reads the feed's own figures and nothing else. Deriving a minute from kickoff
+ * looks correct for forty-five minutes and then drifts for the rest of the
+ * match: it counts through half time, cannot represent stoppage, and shows a
+ * suspended game ticking merrily on.
+ *
+ * Returns null when there is no clock to show — not in progress, or in progress
+ * but the poller has not reached it yet. Callers fall back to the kickoff time,
+ * because an empty space where a minute should be reads as a broken card.
+ */
+export function matchClock(fixture: Pick["fixture"]): string | null {
+  const short = fixture.statusShort?.toUpperCase() ?? null;
+
+  // Breaks have no running minute, and showing the minute they paused at
+  // claims the game is live when it is not.
+  if (short === "HT") return "HT";
+  if (short === "BT") return "BT";
+  if (short === "P" || short === "PEN") return "PENS";
+  if (short === "SUSP") return "SUSP";
+  if (short === "INT") return "INT";
+
+  const elapsed = fixture.elapsed;
+  if (elapsed == null) return null;
+
+  const extra = fixture.elapsedExtra;
+  return extra && extra > 0 ? `${elapsed}+${extra}'` : `${elapsed}'`;
+}

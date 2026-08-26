@@ -1285,6 +1285,11 @@ async function applyResults(
           away_goals: result.awayGoals,
           ht_home_goals: result.htHomeGoals,
           ht_away_goals: result.htAwayGoals,
+          // The clock. Written on every pass because it is the field that
+          // changes between passes; the scores often do not.
+          elapsed_minutes: result.elapsed,
+          elapsed_extra: result.elapsedExtra,
+          status_short: result.statusShort,
         })
         .eq("id", fixture.id);
       if (!error && result.status === "live") live++;
@@ -1305,6 +1310,12 @@ async function applyResults(
         ht_home_goals: result.htHomeGoals,
         ht_away_goals: result.htAwayGoals,
         ended_at: new Date().toISOString(),
+        // Cleared, not frozen at 90. A finished match has no running clock, and
+        // a card that reads "90'" beside a full-time score is claiming the game
+        // is still on.
+        elapsed_minutes: null,
+        elapsed_extra: null,
+        status_short: result.statusShort,
       })
       .eq("id", fixture.id);
     finished++;
@@ -1345,6 +1356,100 @@ async function applyResults(
   }
 
   return { fixtures: finished, graded, live };
+}
+
+/**
+ * How far ahead of kickoff a team sheet is worth asking for.
+ *
+ * Clubs publish roughly an hour to twenty minutes out, and the window opens
+ * wider than that on purpose: asking early costs one call that returns empty,
+ * while asking late means the page shows a placeholder for a sheet that has
+ * been public for half an hour.
+ */
+const LINEUP_WINDOW_MS = 75 * 60 * 1000;
+
+/**
+ * Fetch team sheets for fixtures approaching kickoff.
+ *
+ * /fixtures/lineups takes one fixture id per call — there is no batch form — so
+ * unlike every other feed here the cost scales with the number of fixtures.
+ * Two things keep it bounded:
+ *
+ *   - Only fixtures inside the publication window are asked about, and no
+ *     fixture in the window means no upstream call at all.
+ *   - A fixture already holding a sheet is never asked again. A published XI
+ *     does not change; substitutions are a different feed and are not this.
+ *
+ * A seven-fixture evening therefore costs at most seven calls in total, spread
+ * across the five-minute schedule, not seven per run.
+ */
+export async function runFetchLineups() {
+  const db = createServiceClient();
+  const { football } = getProviders();
+
+  const now = Date.now();
+
+  const { data: upcoming } = await db
+    .from("fixtures")
+    .select("id, external_id, home_team_id, away_team_id")
+    .eq("status", "scheduled")
+    .gte("fixture_date", new Date(now).toISOString())
+    .lt("fixture_date", new Date(now + LINEUP_WINDOW_MS).toISOString())
+    .not("external_id", "is", null)
+    .order("fixture_date")
+    .limit(20);
+
+  if (!upcoming?.length) return { checked: 0, skipped: "nothing near kickoff" };
+
+  // Whoever already has a sheet drops out before a single call is made.
+  const { data: have } = await db
+    .from("fixture_lineups")
+    .select("fixture_id")
+    .in("fixture_id", upcoming.map((f) => f.id));
+  const held = new Set((have ?? []).map((r) => r.fixture_id as string));
+
+  const wanted = upcoming.filter((f) => !held.has(f.id as string));
+  if (!wanted.length) return { checked: upcoming.length, fetched: 0, upserted: 0 };
+
+  const byExternal = new Map(wanted.map((f) => [f.external_id as number, f]));
+  const lineups = await football.fetchLineups([...byExternal.keys()]);
+
+  // The feed answers by API team id; our rows are keyed on ours.
+  const teamIds = [
+    ...new Set(wanted.flatMap((f) => [f.home_team_id as string, f.away_team_id as string])),
+  ];
+  const { data: teams } = await db
+    .from("teams")
+    .select("id, external_id")
+    .in("id", teamIds);
+  const teamByExternal = new Map(
+    (teams ?? []).map((t) => [t.external_id as number, t.id as string]),
+  );
+
+  let upserted = 0;
+  for (const l of lineups) {
+    const fixture = byExternal.get(l.fixtureExternalId);
+    const teamId = teamByExternal.get(l.teamExternalId);
+    // A side we do not hold in the catalogue. Skipping beats writing a sheet
+    // against the wrong team.
+    if (!fixture || !teamId) continue;
+
+    const { error } = await db.from("fixture_lineups").upsert(
+      {
+        fixture_id: fixture.id,
+        team_id: teamId,
+        formation: l.formation,
+        coach: l.coach,
+        start_xi: l.startXI,
+        substitutes: l.substitutes,
+        fetched_at: new Date().toISOString(),
+      },
+      { onConflict: "fixture_id,team_id" },
+    );
+    if (!error) upserted++;
+  }
+
+  return { checked: upcoming.length, asked: wanted.length, fetched: lineups.length, upserted };
 }
 
 /** Drain the jobs outbox. Called every minute by pg_cron. */

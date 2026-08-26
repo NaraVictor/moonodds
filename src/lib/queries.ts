@@ -48,6 +48,32 @@ export const keys = {
 };
 
 /** Match statistics behind the detail page. Public, these aren't ours. */
+/**
+ * Both team sheets, or nulls until the clubs publish.
+ *
+ * Each side is independently null: one club naming its XI does not oblige the
+ * other, and a page that waited for both would show nothing for the twenty
+ * minutes between them.
+ */
+export type FixtureLineups = {
+  home: TeamLineup | null;
+  away: TeamLineup | null;
+};
+
+export type TeamLineup = {
+  formation: string | null;
+  coach: string | null;
+  startXI: LineupPlayer[];
+  substitutes: LineupPlayer[];
+};
+
+export type LineupPlayer = {
+  externalId: number | null;
+  name: string;
+  number: number | null;
+  position: string | null;
+};
+
 export type FixtureStats = {
   homeForm: string | null;
   awayForm: string | null;
@@ -66,6 +92,7 @@ export type FixtureStats = {
 export type PredictionDetail = {
   pick: Pick;
   stats: FixtureStats | null;
+  lineups: FixtureLineups | null;
   hasFullAccess: boolean;
   isFirstDay: boolean;
 };

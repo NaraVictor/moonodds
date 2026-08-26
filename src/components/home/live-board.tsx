@@ -4,7 +4,7 @@ import Link from "next/link";
 import { Radio, ArrowRight } from "@/components/ui/icons";
 import { TeamCrest } from "@/components/predictions/team-crest";
 import type { Pick } from "@/lib/types";
-import { teamShort, formatMarketShort } from "@/lib/format";
+import { formatMarketShort, matchClock, teamShort } from "@/lib/format";
 
 /**
  * The Live Board.
@@ -56,7 +56,11 @@ function LiveRow({ pick }: { pick: Pick }) {
             }}
           >
             <span className="ping-soft relative inline-block h-1 w-1 rounded-full bg-current" />
-            Live
+            {/* The minute where the feed has one, the word where it does not.
+                Same pill, same red, same pulsing dot — the badge already means
+                "in progress", so the minute belongs inside it rather than
+                competing with it from somewhere else on the row. */}
+            {matchClock(pick.fixture) ?? "Live"}
           </span>
         </span>
       </Link>

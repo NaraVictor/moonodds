@@ -90,6 +90,17 @@ export type Pick = {
     round: string | null;
     homeGoals: number | null;
     awayGoals: number | null;
+    /**
+     * The match clock, from the feed rather than the browser's.
+     *
+     * Absent on every fixture that is not in progress, and absent on a live one
+     * the poller has not reached yet — so the card must degrade to a kickoff
+     * time rather than assume a minute exists.
+     */
+    elapsed?: number | null;
+    elapsedExtra?: number | null;
+    /** API-Football's own code: 1H, HT, 2H, ET, BT, P, FT. */
+    statusShort?: string | null;
   };
   homeTeam: TeamRef;
   awayTeam: TeamRef;
