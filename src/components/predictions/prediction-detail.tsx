@@ -605,7 +605,14 @@ function MatchHeader({ pick }: { pick: Pick }) {
 
   return (
     <header
-      className="overflow-hidden rounded-[1.5rem] px-6 py-8 text-feature-foreground"
+      /*
+        Tighter gutters on a phone, because this row has three columns and a
+        fixed-width crest in two of them. At 375px the old px-6 plus gap-4 left
+        the middle column about 125px, and "7:00 pm" at 2rem needs more than
+        that — so the kickoff time wrapped mid-value, onto two lines, which then
+        pushed the date out of line with the crests beside it.
+      */
+      className="overflow-hidden rounded-[1.5rem] px-4 py-6 text-feature-foreground sm:px-6 sm:py-8"
       style={
         {
           boxShadow: "var(--shadow-lift)",
@@ -641,17 +648,79 @@ function MatchHeader({ pick }: { pick: Pick }) {
         )}
       </div>
 
-      <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-4">
+      {/*
+        minmax(0,1fr), not 1fr.
+
+        A grid track sized `1fr` carries an implicit `min-width: auto`, which is
+        min-content — so a column holding an unbreakable word wider than its
+        share does not shrink, it pushes the whole grid past its container's
+        padding. That is why a long single-word team name reached the card edge
+        even after the text itself was allowed to wrap: the wrapping was fine,
+        the TRACK was the thing refusing to give ground.
+
+        minmax(0,1fr) lets the track shrink to whatever is left, and break-words
+        below then does the wrapping inside it.
+      */}
+      <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-start gap-2 sm:gap-4">
         {[pick.homeTeam, pick.awayTeam].map((team, i) => (
           <div key={i} className={`flex flex-col items-center gap-3 text-center ${i === 1 ? "order-3" : ""}`}>
             <TeamCrest name={teamName(team)} logo={team?.logo} size={72} onFeature />
-            <span className="text-[15px] font-semibold">{teamName(team)}</span>
+            {/*
+              A fixed two-line box, whatever the name does inside it.
+
+              "Barcelona" fits on one line and "Athletic Club" did not, so the
+              two columns were different heights — and with items-center on the
+              grid, a taller column recentres itself and drags its crest out of
+              line with the other one. Reserving the second line keeps both
+              crests level whether a name wraps or not, and a name long enough
+              to need a third still only pushes its own column.
+
+              A block, not a flex row. As a flex container the text becomes an
+              anonymous flex item, which will not shrink below its min-content
+              width — so break-words had nothing to act on and a single long
+              word like "Wolverhampton" ran past the card's padding. In normal
+              block flow the wrapping rules apply to the text directly, and a
+              one-line name still sits at the top of the reserved box without
+              needing items-start to put it there.
+
+              w-full because the column is `flex flex-col items-center`, and a
+              block child of a centred flex column sizes to MAX-CONTENT, not to
+              the column. Without it "Mönchengladbach" laid itself out 118px
+              wide inside a 100px track and spilled evenly out of both sides,
+              which put it under the kickoff time. Taking the full track width
+              is what gives break-words something to wrap against.
+
+              hyphens-auto so the rare forced break reads as a hyphenation
+              rather than as a bug. It needs a lang on the document, which the
+              root layout sets. Only the longest names in European football
+              reach this — "Mönchengladbach" does not fit a 100px column at any
+              weight — and breaking one is still better than letting it run past
+              the card.
+            */}
+            <span className="block w-full min-h-[2.5em] hyphens-auto text-balance break-words text-[13px] font-semibold leading-tight sm:text-[15px]">
+              {teamName(team)}
+            </span>
           </div>
         ))}
 
-        <div className="order-2 flex flex-col items-center gap-1.5">
+        {/*
+          items-start above, and a crest-height box here.
+
+          With items-center, a column whose name wrapped to three lines —
+          "Borussia Mönchengladbach" does at this width — became taller than the
+          other and recentred itself, dragging its crest out of line. Top-
+          aligning the tracks pins every crest to the same y whatever the names
+          below them do.
+
+          The kickoff then has to be centred against the crests rather than
+          against the row, which is what this fixed 72px box does: it matches
+          the crest and centres its contents inside it. Reserving two lines for
+          the name is still worth it, because it keeps the common one-line and
+          two-line cases from shifting relative to each other.
+        */}
+        <div className="order-2 flex h-[72px] flex-col items-center justify-center gap-1.5">
           {settled || live ? (
-            <span className="numeral text-[3rem] leading-none">
+            <span className="numeral whitespace-nowrap text-[2.25rem] leading-none sm:text-[3rem]">
               {pick.fixture.homeGoals ?? 0}
               <span style={{ color: "var(--feature-muted)" }} className="mx-2 font-normal">
                 :
@@ -659,11 +728,14 @@ function MatchHeader({ pick }: { pick: Pick }) {
               {pick.fixture.awayGoals ?? 0}
             </span>
           ) : (
-            <span className="numeral text-[2rem] leading-none">
+            // nowrap is the load-bearing part. A kickoff time is one value and
+            // must never break across lines; the smaller mobile size is what
+            // makes keeping it on one line affordable in the space left.
+            <span className="numeral whitespace-nowrap text-[1.5rem] leading-none sm:text-[2rem]">
               {kickoff.toLocaleTimeString([], { hour: "numeric", minute: "2-digit", hour12: true })}
             </span>
           )}
-          <span className="text-[11px]" style={{ color: "var(--feature-muted)" }}>
+          <span className="whitespace-nowrap text-[11px]" style={{ color: "var(--feature-muted)" }}>
             {kickoff.toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" })}
           </span>
         </div>
