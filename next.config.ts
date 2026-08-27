@@ -60,6 +60,31 @@ const csp = [
 const nextConfig: NextConfig = {
   poweredByHeader: false,
 
+  // PostHog reverse proxy. Routes /ingest/* through Next.js so the analytics
+  // requests originate from the same host and are not blocked by ad blockers.
+  // Both /static/* and /array/* must point at the assets origin; /ingest/* is
+  // the ingestion endpoint. skipTrailingSlashRedirect is required because
+  // PostHog sends requests with trailing slashes that must not be redirected.
+  async rewrites() {
+    return [
+      {
+        source: "/ingest/static/:path*",
+        destination: "https://us-assets.i.posthog.com/static/:path*",
+      },
+      {
+        source: "/ingest/array/:path*",
+        destination: "https://us-assets.i.posthog.com/array/:path*",
+      },
+      {
+        source: "/ingest/:path*",
+        destination: "https://us.i.posthog.com/:path*",
+      },
+    ];
+  },
+
+  // Required to support PostHog trailing-slash API requests.
+  skipTrailingSlashRedirect: true,
+
   async headers() {
     return [
       {

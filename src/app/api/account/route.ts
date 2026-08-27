@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { enforceRateLimit } from "@/lib/rate-limit";
+import { captureServerEvent } from "@/lib/posthog-server";
 
 export const dynamic = "force-dynamic";
 
@@ -131,6 +132,25 @@ export async function DELETE(request: Request) {
       { status: 500 },
     );
   }
+
+  /*
+   * Counted, not identified.
+   *
+   * The wizard attached this to the user's own id, which would have sent the
+   * identifier of somebody who had just asked to be erased to a third-party
+   * analytics service — and created or updated a person profile for them there,
+   * seconds after this route deleted their account and unlinked their payments.
+   * The deletion would have been undone, in a system nobody would think to
+   * check, by the line recording that it happened.
+   *
+   * The metric worth having is how many accounts are deleted, and that survives
+   * without naming anyone. A per-day bucket keeps it aggregate: it cannot be
+   * traced back to a person, and PostHog is not handed a profile to hold.
+   */
+  await captureServerEvent({
+    distinctId: `deleted-account-${new Date().toISOString().slice(0, 10)}`,
+    event: "account_deleted",
+  });
 
   return NextResponse.json({ deleted: true });
 }

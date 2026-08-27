@@ -1,0 +1,47 @@
+[
+  {
+    "event_name": "sign_in_code_sent",
+    "event_description": "User successfully submits their email and receives an OTP sign-in code.",
+    "file": "src/app/auth/sign-in/sign-in-form.tsx"
+  },
+  {
+    "event_name": "sign_in_completed",
+    "event_description": "User successfully verifies their OTP code and authenticates.",
+    "file": "src/lib/otp-auth.ts"
+  },
+  {
+    "event_name": "checkout_started",
+    "event_description": "User initiates a payment by pressing the Pay button on the checkout page.",
+    "file": "src/app/checkout/checkout-client.tsx"
+  },
+  {
+    "event_name": "checkout_completed",
+    "event_description": "User's payment is successfully verified and their access is activated.",
+    "file": "src/app/checkout/checkout-client.tsx"
+  },
+  {
+    "event_name": "checkout_cancelled",
+    "event_description": "User dismissed the Paystack payment popup without completing payment.",
+    "file": "src/app/checkout/checkout-client.tsx"
+  },
+  {
+    "event_name": "slip_saved",
+    "event_description": "User saves a bet slip with one or more prediction selections.",
+    "file": "src/components/slip/bet-slip.tsx"
+  },
+  {
+    "event_name": "day_pass_purchased",
+    "event_description": "Paystack webhook confirms a successful day pass payment server-side.",
+    "file": "src/app/api/webhooks/paystack/route.ts"
+  },
+  {
+    "event_name": "checkout_initiated",
+    "event_description": "Server-side: a checkout payment row is created and the Paystack transaction is opened.",
+    "file": "src/app/api/checkout/day-pass/route.ts"
+  },
+  {
+    "event_name": "account_deleted",
+    "event_description": "User successfully deletes their own account.",
+    "file": "src/app/api/account/route.ts"
+  }
+]

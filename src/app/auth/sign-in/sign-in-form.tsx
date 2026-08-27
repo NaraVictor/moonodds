@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import posthog from "posthog-js";
 import { Button } from "@heroui/react/button";
 import { Alert } from "@/components/ui/alert";
 import { PendingButton } from "@/components/ui/pending-button";
@@ -52,6 +53,7 @@ export function SignInForm() {
    */
   const auth = useOtpAuth({
     onVerified: () => {
+      posthog.capture("sign_in_completed", { method: "email" });
       router.replace("/");
       router.refresh();
     },
@@ -129,6 +131,7 @@ export function SignInForm() {
         className="space-y-4"
         onSubmit={(e) => {
           e.preventDefault();
+          posthog.capture("sign_in_code_sent");
           auth.send();
         }}
       >

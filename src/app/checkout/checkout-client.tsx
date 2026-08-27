@@ -13,6 +13,7 @@ import { useAccessState, useLeagueOptions } from "@/lib/queries";
 import { LinkButton } from "@/components/ui/link-button";
 import { extraPicksPriceUsd ,
 } from "@/lib/pricing";
+import posthog from "posthog-js";
 import { openPaystack } from "@/lib/paystack-popup";
 import { OtpCodeInput } from "@/components/auth/otp-code-input";
 import { useOtpAuth } from "@/lib/otp-auth";
@@ -61,6 +62,7 @@ export function CheckoutClient({ kind }: { kind: Kind }) {
   const pay = useCallback(async () => {
     setError(null);
     setStage("initialising");
+    posthog.capture("checkout_started", { kind, price_usd: priceUsd });
 
     try {
       const initRes = await fetch(endpoint, {
@@ -91,6 +93,7 @@ export function CheckoutClient({ kind }: { kind: Kind }) {
         return;
       }
 
+
       setStage("paying");
 
       // Paystack's own window. Nothing is charged until the customer completes
@@ -101,6 +104,7 @@ export function CheckoutClient({ kind }: { kind: Kind }) {
         if (outcome.status === "cancelled") {
           // Not an error. The payment row stays pending and the reconcile sweep
           // will leave it alone, because nothing was ever charged.
+          posthog.capture("checkout_cancelled", { kind, price_usd: priceUsd });
           setStage("idle");
           return;
         }
@@ -117,12 +121,13 @@ export function CheckoutClient({ kind }: { kind: Kind }) {
       if (!verifyRes.ok) throw new Error(verify.error ?? "Verification failed.");
 
       await qc.invalidateQueries();
+      posthog.capture("checkout_completed", { kind, price_usd: priceUsd });
       setStage("done");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Something went wrong.");
       setStage("idle");
     }
-  }, [endpoint, kind, selected, qc]);
+  }, [endpoint, kind, selected, qc, priceUsd]);
 
   /*
    * Verified, then straight into Paystack. No second button.

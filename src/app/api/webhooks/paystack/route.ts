@@ -2,6 +2,7 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
 import { reportError } from "@/lib/report-error";
 import { settlePayment } from "@/lib/payments";
+import { captureServerEvent } from "@/lib/posthog-server";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -67,6 +68,30 @@ export async function POST(request: Request) {
         { status: retryable ? 500 : 200 },
       );
     }
+
+    /*
+     * A server-side record of each confirmed payment, so the count does not
+     * depend on the browser surviving the payment redirect.
+     *
+     * distinctId is the BUYER, not the literal string "webhook". Sending every
+     * customer's purchase under one id would build a single fabricated person
+     * holding every payment the product has ever taken, and leave every real
+     * person's profile showing no purchases at all — which is the opposite of
+     * what this event exists to answer.
+     *
+     * Swallowed on failure: this sits inside the handler's try block, and a
+     * throw here would return 500 and make Paystack retry a payment that has
+     * already settled.
+     */
+    await captureServerEvent({
+      distinctId: result.userId ?? reference,
+      event: "day_pass_purchased",
+      properties: {
+        purpose: result.purpose,
+        already_active: result.alreadyActive,
+        reference,
+      },
+    });
 
     return NextResponse.json({
       ok: true,

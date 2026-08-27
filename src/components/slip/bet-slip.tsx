@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
+import posthog from "posthog-js";
 import { Receipt, X, Trash2, Check, Info } from "@/components/ui/icons";
 import { useBetSlip } from "@/lib/bet-slip";
 import { Alert } from "@/components/ui/alert";
@@ -98,9 +99,15 @@ function SlipSheetBody() {
   }, [setOpen]);
 
   async function save() {
+    const slipType = entries.length === 1 ? "single" : "accumulator";
     await confirm.mutateAsync({
-      slipType: entries.length === 1 ? "single" : "accumulator",
+      slipType,
       legs: entries.map((e) => ({ predictionId: e.pick.id, odds: e.odds })),
+    });
+    posthog.capture("slip_saved", {
+      slip_type: slipType,
+      leg_count: entries.length,
+      combined_odds: parseFloat(combinedOdds.toFixed(2)),
     });
     clear();
     setDone(true);

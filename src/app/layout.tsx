@@ -10,6 +10,7 @@ import { SITE_URL } from "@/lib/site-url";
 import { BetSlipFab, BetSlipSheet } from "@/components/slip/bet-slip";
 import { Analytics } from "@vercel/analytics/next";
 import { GA_MEASUREMENT_ID, analyticsEnabled } from "@/lib/analytics";
+import { PostHogIdentifier } from "@/components/analytics/posthog-identifier";
 import "./globals.css";
 
 /**
@@ -193,6 +194,8 @@ export default function RootLayout({
         {/* Slip lives at the root so it survives navigation, it has to follow
             you from the board to a detail page and back. */}
         <Providers>
+          {/* Identifies the authenticated user in PostHog and resets on sign-out. */}
+          <PostHogIdentifier />
           {children}
           <BetSlipFab />
           <BetSlipSheet />

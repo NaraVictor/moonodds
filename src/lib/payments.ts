@@ -18,7 +18,10 @@ import { paymentAmountMatches } from "./pricing";
  */
 
 export type SettleResult =
-  | { ok: true; alreadyActive: boolean; purpose: string }
+  // userId travels with the result so callers that have no session of their
+  // own — the webhook — can attribute what happened to the person it happened
+  // to, rather than to the channel it arrived on.
+  | { ok: true; alreadyActive: boolean; purpose: string; userId: string | null }
   | { ok: false; reason: string; status: number };
 
 /**
@@ -58,7 +61,7 @@ export async function settlePayment(
   // webhook it did not get a 200 for, and the sweep runs on a schedule, so a
   // second arrival for the same reference is expected traffic, not an error.
   if (payment.status === "succeeded") {
-    return { ok: true, alreadyActive: true, purpose: payment.purpose };
+    return { ok: true, alreadyActive: true, purpose: payment.purpose, userId: payment.user_id };
   }
 
   const { payments, mocked } = getProviders();
@@ -99,7 +102,7 @@ export async function settlePayment(
       return { ok: false, reason: "Could not activate the pass.", status: 500 };
     }
     await queueReceipt(db, payment);
-    return { ok: true, alreadyActive: false, purpose: payment.purpose };
+    return { ok: true, alreadyActive: false, purpose: payment.purpose, userId: payment.user_id };
   }
 
   if (payment.purpose === "extra_picks") {
@@ -118,7 +121,7 @@ export async function settlePayment(
       return { ok: false, reason: "Could not unlock the picks.", status: 500 };
     }
     await queueReceipt(db, payment);
-    return { ok: true, alreadyActive: false, purpose: payment.purpose };
+    return { ok: true, alreadyActive: false, purpose: payment.purpose, userId: payment.user_id };
   }
 
   return { ok: false, reason: `Unknown purpose: ${payment.purpose}`, status: 500 };
@@ -242,7 +245,7 @@ export async function refundPayment(
     return { ok: false, reason: "No payment matches that reference.", status: 404 };
   }
   if (payment.status === "refunded") {
-    return { ok: true, alreadyActive: true, purpose: payment.purpose };
+    return { ok: true, alreadyActive: true, purpose: payment.purpose, userId: payment.user_id };
   }
   if (payment.status !== "succeeded") {
     return {
@@ -336,5 +339,5 @@ export async function refundPayment(
     };
   }
 
-  return { ok: true, alreadyActive: false, purpose: payment.purpose };
+  return { ok: true, alreadyActive: false, purpose: payment.purpose, userId: payment.user_id };
 }

@@ -8,6 +8,7 @@ import { getUsdToGhsRateForServer } from "@/lib/pricing-server";
 import { settlePayment } from "@/lib/payments";
 import { requireVerifiedContact } from "@/lib/require-verified";
 import { SITE_URL } from "@/lib/site-url";
+import { captureServerEvent } from "@/lib/posthog-server";
 
 /**
  * Day pass checkout.
@@ -162,6 +163,22 @@ export async function POST(request: Request) {
     // and never reach the verify call.
     callbackUrl: `${SITE_URL}/checkout/day-pass`,
     metadata: { purpose: "daily_pass", dateKey: today, priceUsd: PASS_PRICE_USD },
+  });
+
+  // Server-side checkout-initiated event. The browser also captures
+  // checkout_started, but this gives us a server-authoritative count that
+  // isn't affected by ad blockers.
+  // Swallowed on failure. By this point a payment row exists and Paystack has
+  // been initialised, so a throw would 500 a checkout that has already taken
+  // the two steps that matter and strand the reference behind it.
+  await captureServerEvent({
+    distinctId: user.id,
+    event: "checkout_initiated",
+    properties: {
+      kind: "day-pass",
+      price_usd: PASS_PRICE_USD,
+      is_reused_reference: !!inFlight,
+    },
   });
 
   return NextResponse.json(init);
