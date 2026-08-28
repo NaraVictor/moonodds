@@ -16,16 +16,33 @@ Four jobs, once each, and **the order is load-bearing**.
 | Job | Time (UTC) | Objective | Football API |
 |---|---|---|---|
 | `kicka_fetch_fixtures` | 00:30 | Pull the day's fixtures for the selected leagues; upsert leagues, teams and fixtures | ~11–22 · one per league, twice where the first season guess misses |
-| `kicka_fetch_stats` | 05:00 | Form, head-to-head, season averages and the last-season fallback — the feed the engine reasons over | ~80–120 · ≈4 per fixture, capped at `maxFixturesPerSession` |
-| `kicka_fetch_injuries` | 05:30 | Reported absences and suspensions | ~4–6 · one per league+date |
-| `kicka_daily_picks` | 06:00 | Run the engine over the board and publish | 0 football · **1 Anthropic**, ~150s |
+| `kicka_fetch_stats` | 03:30 | Form, head-to-head, season averages and the last-season fallback — the feed the engine reasons over | ~80–120 · ≈4 per fixture, capped at `maxFixturesPerSession` |
+| `kicka_fetch_injuries` | 04:15 | Reported absences and suspensions | ~4–6 · one per league+date |
+| `kicka_daily_picks` | 05:00 | Run the engine over the board and publish | 0 football · **1 Anthropic**, ~150s |
 
-**Why these times.** Stats at 05:00 centres their 36-hour window on the day
-being predicted. Injuries at 05:30 is the entire reason `STEP 6, PERSONNEL` can
-fire at all: line-ups publish ~40 minutes before kickoff, twelve hours after the
-engine has already run, which is why line-ups feed the reader and injuries feed
-the model. Moving `daily_picks` earlier than 06:00 means predicting on data
-that has not arrived.
+**Why these times.** `daily_picks` reads what the three before it wrote, so the
+only hard rule is that it runs last. `fetch_fixtures` needs to be after UTC
+midnight so "today" resolves to the right date, and nothing else constrains it.
+Injuries are the entire reason `STEP 6, PERSONNEL` can fire at all: line-ups
+publish ~40 minutes before kickoff, hours after the engine has run, which is why
+line-ups feed the reader and injuries feed the model.
+
+**Moving the publish time means moving all four.** `daily_picks` alone cannot
+move earlier: the previous stats run is a full day back, and at that point
+today's fixtures were not yet in the database for it to enrich — so
+`fixture_stats` would hold nothing for the board and `statsBlock` would hand the
+engine *"no stats for this fixture, reason from league and venue only"* for
+every fixture. Against a floor of 7, and anchoring rules that count conditions
+resting on absent data as unmet, that publishes nothing at all, every day.
+
+The migration that sets these times asserts the ordering, so an edit that moves
+one job past another fails at deploy rather than silently once a day.
+
+**Notifications ride the publish.** `daily_picks_ready` is enqueued by the run
+and drained within the minute, so the "Today's picks are ready" email and SMS go
+out at the publish time. Anything earlier than about 05:00 sends a text message
+in the middle of the night — the deciding constraint on how early the board can
+reasonably go.
 
 ---
 
