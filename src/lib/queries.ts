@@ -18,7 +18,7 @@ import type {
  * The data layer that replaces Convex's reactive useQuery.
  *
  * Convex subscribed every read by default. This app is a daily-batch product,
- * picks are generated once at 06:00 UTC and graded every two hours, so
+ * picks are generated once at 05:00 UTC and graded continuously, so
  * polling-free TanStack Query with sensible staleness is the right default.
  * Liveness is added deliberately where it earns its keep (live fixtures), not
  * everywhere by reflex.

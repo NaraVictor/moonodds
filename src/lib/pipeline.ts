@@ -116,7 +116,7 @@ export function gradePrediction(
  * `withStats` chains the stats pull onto the same pass. It is off by default
  * and ON from the Office, and the asymmetry is deliberate: the scheduled jobs
  * stage these apart on purpose, fixtures at 00:30 and stats at 05:00, so the
- * 36-hour stats window is centred on the day the engine runs at 06:00. An
+ * 36-hour stats window is centred on the day the engine runs at 05:00. An
  * operator pulling fixtures by hand has no second job coming to enrich them,
  * so for them a fixture pull that leaves the engine with nothing but team
  * names is a pull that did half a job.
@@ -558,7 +558,7 @@ export function batchAbsentFeeds(rows: Array<Record<string, unknown>>): string {
   const never = [
     // Line-ups stay here permanently, and not for want of a feed: they are
     // fetched now, but they publish about forty minutes before kickoff and
-    // daily-picks runs at 06:00. Twelve hours too late to inform a prediction.
+    // daily-picks runs at 05:00. Thirteen hours too late to inform a prediction.
     "lineups",
     "odds and market movement",
     "league standings",

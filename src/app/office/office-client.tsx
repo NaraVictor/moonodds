@@ -281,7 +281,7 @@ export function OfficeClient({
  * "Fetch stats" used to be its own tile and no longer is.
  *
  * On the schedule it stays separate for a reason — fixtures land at 00:30 and
- * stats at 05:00, so the 36-hour window is centred on the 06:00 engine run.
+ * stats at 03:30, so the 36-hour window is centred on the 05:00 engine run.
  * By hand there is no 05:00 to wait for, and a tile you had to remember to
  * press second was a tile that got forgotten, leaving the engine reasoning
  * over team names. The fixture pull now carries the stats pull with it.
