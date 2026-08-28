@@ -139,6 +139,19 @@ export type GatedPicks = {
   hasFullAccess: boolean;
   isFirstDay: boolean;
   freePickLimit: number;
+  /**
+   * The UTC day these picks belong to, and whether it is a fallback.
+   *
+   * The board asks for today either way, so it cannot work this out for itself.
+   * When today has no picks the server serves the most recent day that does,
+   * rather than the empty page that used to appear between midnight and the
+   * 05:00 run — and the page has to know, because the heading says "Today's".
+   *
+   * Optional: a client running against a database that predates the fallback
+   * gets undefined and behaves exactly as it did before.
+   */
+  boardDate?: string;
+  isPreviousDay?: boolean;
 };
 
 export type AccessState = {

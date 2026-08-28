@@ -175,18 +175,31 @@ export function PicksHome() {
           {/* The server and the browser disagree about locale and timezone, so
               this string legitimately differs between the two renders. Telling
               React to expect that is correct here; the alternative is a
-              placeholder that shifts layout on mount. */}
+              placeholder that shifts layout on mount.
+
+              The date shown is the BOARD's day, not the reader's. Between
+              midnight and the morning run the board is still yesterday's, and
+              a header dated today above yesterday's results would be the one
+              piece of the page that lies. */}
           <span className="label flex items-center gap-1.5" suppressHydrationWarning>
             <Sparkles className="h-3 w-3" />
-            {new Date().toLocaleDateString(undefined, {
+            {(source?.boardDate ? new Date(source.boardDate) : new Date()).toLocaleDateString(undefined, {
               weekday: "long",
               day: "numeric",
               month: "long",
             })}
           </span>
           <h1 className="display mt-1.5 text-[2rem] sm:text-4xl">
-            Today&rsquo;s predictions
+            {source?.isPreviousDay
+              ? "Latest results"
+              : "Today\u2019s predictions"}
           </h1>
+          {source?.isPreviousDay && (
+            <p className="mt-2 max-w-prose text-[13px] leading-relaxed text-muted">
+              How the last board finished. Today&rsquo;s predictions are published
+              around 5am GMT.
+            </p>
+          )}
         </div>
 
         <div className="flex flex-wrap items-center gap-4">
