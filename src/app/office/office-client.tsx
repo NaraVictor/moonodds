@@ -34,6 +34,7 @@ import {
   usePredictionRuns,
   useTuningReports,
   useUpcomingFixtures,
+  usePredictedFixtureIds,
   useDashboardMetrics,
   usePredictionReport,
   useUserPicksReport,
@@ -503,7 +504,10 @@ function BoardPanel({ override }: { override?: number }) {
   const action = useOfficeAction();
   const { data, isPending } = useUpcomingFixtures();
   const config = useEngineConfig();
-  const [confirming, setConfirming] = useState<string | null>(null);
+  const predicted = usePredictedFixtureIds();
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [confirming, setConfirming] = useState(false);
+  const [result, setResult] = useState<{ deleted: number; refused: number } | null>(null);
 
   const fixtures = data ?? [];
   // The same function runDailyPicks calls, not a second copy of the number.
@@ -513,6 +517,62 @@ function BoardPanel({ override }: { override?: number }) {
     override,
   );
 
+  /*
+   * A fixture that already has a pick cannot be dropped, and is not selectable.
+   *
+   * Deleting a fixture cascades to its predictions, so the route refuses one
+   * that has any. Enforcing that here as well is not belt-and-braces for its
+   * own sake: without it the operator ticks a dozen rows, gets four refusals
+   * back, and has no way of telling WHICH four without reading ids. The server
+   * check stays because this list can be stale — a run can publish between the
+   * page loading and the button being pressed.
+   */
+  const deletable = fixtures.filter((f) => !predicted.ids.has(f.id));
+  /*
+   * Intersected with what is on screen, not just filtered.
+   *
+   * `selected` outlives a refetch, and the board refetches. A fixture that has
+   * kicked off, been graded, or picked up a prediction since it was ticked is
+   * no longer on this list — and sending its id anyway would ask the server to
+   * delete something the operator can no longer see, which is the one thing a
+   * selection UI must never do.
+   */
+  const onBoard = new Set(deletable.map((f) => f.id));
+  const chosen = [...selected].filter((id) => onBoard.has(id));
+  const allChosen = deletable.length > 0 && chosen.length === deletable.length;
+
+  function toggle(id: string) {
+    setResult(null);
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleAll() {
+    setResult(null);
+    setConfirming(false);
+    setSelected(allChosen ? new Set() : new Set(deletable.map((f) => f.id)));
+  }
+
+  function remove() {
+    action.mutate(
+      { action: "deleteFixtures", fixtureIds: chosen },
+      {
+        onSuccess: (res) => {
+          setResult({
+            deleted: Number(res?.deleted ?? 0),
+            refused: Array.isArray(res?.refused) ? res.refused.length : 0,
+          });
+          setSelected(new Set());
+          setConfirming(false);
+        },
+      },
+    );
+  }
+
   return (
     <Panel
       title="Today's board"
@@ -521,33 +581,91 @@ function BoardPanel({ override }: { override?: number }) {
           ? `${fixtures.length} fixture${fixtures.length === 1 ? "" : "s"} upcoming. The engine reads the first ${cap} in kickoff order, drop anything you don't want a pick on before you generate.`
           : "What the engine will read when you generate picks."
       }
+      action={
+        deletable.length > 0 ? (
+          <button type="button" onClick={toggleAll} className={PILL}>
+            {allChosen ? "Clear selection" : `Select all ${deletable.length}`}
+          </button>
+        ) : undefined
+      }
     >
       {isPending ? (
         <Loading />
       ) : !fixtures.length ? (
         <Empty>Nothing on the board. Fetch fixtures to fill it.</Empty>
       ) : (
-        <ul className="max-h-[28rem] divide-y divide-separator overflow-y-auto">
-          {fixtures.map((f, i) => (
-            <BoardRow
-              key={f.id}
-              fixture={f}
-              // The cap counts from the top of this same ordering, so the row
-              // that crosses it is the row the engine stops before.
-              beyondCap={i >= cap}
-              busy={action.isPending}
-              confirming={confirming === f.id}
-              onAsk={() => setConfirming(f.id)}
-              onCancel={() => setConfirming(null)}
-              onDelete={() =>
-                action.mutate(
-                  { action: "deleteFixture", fixtureId: f.id },
-                  { onSuccess: () => setConfirming(null) },
-                )
-              }
-            />
-          ))}
-        </ul>
+        <>
+          <ul className="max-h-[28rem] divide-y divide-separator overflow-y-auto">
+            {fixtures.map((f, i) => (
+              <BoardRow
+                key={f.id}
+                fixture={f}
+                // The cap counts from the top of this same ordering, so the row
+                // that crosses it is the row the engine stops before.
+                beyondCap={i >= cap}
+                locked={predicted.ids.has(f.id)}
+                checked={selected.has(f.id)}
+                busy={action.isPending}
+                onToggle={() => toggle(f.id)}
+              />
+            ))}
+          </ul>
+
+          {/*
+            The bar appears only with a selection, so the common case — reading
+            the board before generating — carries no chrome at all.
+          */}
+          {chosen.length > 0 && (
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-surface-secondary p-3">
+              <span className="text-[13px] font-semibold">
+                {chosen.length} selected
+              </span>
+              {confirming ? (
+                <span className="flex flex-wrap items-center gap-2">
+                  <span className="text-[12px] text-muted">
+                    Drop {chosen.length === 1 ? "it" : "them"} from the board?
+                  </span>
+                  <button
+                    type="button"
+                    disabled={action.isPending}
+                    onClick={remove}
+                    className="press rounded-full px-3 py-1.5 text-[11px] font-semibold disabled:opacity-40"
+                    style={{ background: "var(--lost-wash)", color: "var(--lost-ink)" }}
+                  >
+                    {action.isPending ? "Dropping…" : "Yes, drop"}
+                  </button>
+                  <button type="button" onClick={() => setConfirming(false)} className={PILL}>
+                    Cancel
+                  </button>
+                </span>
+              ) : (
+                <button
+                  type="button"
+                  disabled={action.isPending}
+                  onClick={() => setConfirming(true)}
+                  className={`${PILL} inline-flex items-center gap-1.5`}
+                >
+                  <Trash2 className="h-3 w-3" />
+                  Drop selected
+                </button>
+              )}
+            </div>
+          )}
+        </>
+      )}
+
+      {/*
+        Partial success is the expected outcome, so it is reported as an outcome
+        rather than as an error. "12 dropped" and "12 dropped, 3 kept" are
+        different events and the second one needs its reason attached.
+      */}
+      {result && (
+        <p className="mt-3 text-[13px] leading-relaxed text-muted">
+          {result.deleted} fixture{result.deleted === 1 ? "" : "s"} dropped
+          {result.refused > 0
+            ? `. ${result.refused} kept — ${result.refused === 1 ? "it has" : "they have"} predictions against ${result.refused === 1 ? "it" : "them"}, so removing ${result.refused === 1 ? "it" : "them"} would take those too.`
+            : "."}
+        </p>
       )}
 
       {action.error && <ActionError message={action.error.message} />}
@@ -558,63 +676,85 @@ function BoardPanel({ override }: { override?: number }) {
 function BoardRow({
   fixture: f,
   beyondCap,
+  locked,
+  checked,
   busy,
-  confirming,
-  onAsk,
-  onCancel,
-  onDelete,
+  onToggle,
 }: {
   fixture: BoardFixture;
   beyondCap: boolean;
+  /** Already has a prediction, so the route would refuse to remove it. */
+  locked: boolean;
+  checked: boolean;
   busy: boolean;
-  confirming: boolean;
-  onAsk: () => void;
-  onCancel: () => void;
-  onDelete: () => void;
+  onToggle: () => void;
 }) {
   const label = `${f.home?.name ?? "?"} v ${f.away?.name ?? "?"}`;
 
   return (
     <li className="flex items-center gap-3 py-2.5 first:pt-0">
-      <Crest src={f.leagues?.logo} name={f.leagues?.name ?? "?"} />
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-[13px] font-semibold">{label}</p>
-        <p className="truncate text-[11px] text-muted">
-          {f.leagues?.name ?? "Unknown league"} ·{" "}
-          {new Date(f.fixture_date).toLocaleString(undefined, {
-            day: "numeric", month: "short",
-            hour: "numeric", minute: "2-digit", hour12: true,
-          })}
-          {beyondCap && " · past the session cap"}
-        </p>
-      </div>
+      {/*
+        The whole row is the target, not just the box. These are 40px-tall rows
+        being ticked a dozen at a time, and a 16px hit area for that is a way to
+        make somebody miss and drop the wrong fixture.
 
-      {confirming ? (
-        <span className="flex flex-none gap-2">
-          <button
-            type="button"
-            disabled={busy}
-            onClick={onDelete}
-            className="press rounded-full px-3 py-1.5 text-[11px] font-semibold disabled:opacity-40"
-            style={{ background: "var(--lost-wash)", color: "var(--lost-ink)" }}
+        A locked row is a <div>: not disabled-looking-clickable, just not a
+        control. Its reason sits in the subtitle where the row already explains
+        itself, rather than in a tooltip nobody hovers.
+      */}
+      {locked ? (
+        <div className="flex min-w-0 flex-1 items-center gap-3 opacity-60">
+          <span
+            aria-hidden
+            className="flex h-4 w-4 flex-none items-center justify-center rounded border border-border text-[9px] text-muted"
           >
-            Really drop
-          </button>
-          <button type="button" onClick={onCancel} className={PILL}>
-            Cancel
-          </button>
-        </span>
+            &mdash;
+          </span>
+          <Crest src={f.leagues?.logo} name={f.leagues?.name ?? "?"} />
+          <BoardRowText fixture={f} label={label} beyondCap={beyondCap} locked />
+        </div>
       ) : (
-        <button
-          type="button"
-          onClick={onAsk}
-          aria-label={`Drop ${label} from the board`}
-          className={`${PILL} flex-none`}
-        >
-          <Trash2 className="h-3 w-3" />
-        </button>
+        <label className="flex min-w-0 flex-1 cursor-pointer items-center gap-3">
+          <input
+            type="checkbox"
+            checked={checked}
+            disabled={busy}
+            onChange={onToggle}
+            aria-label={`Select ${label}`}
+            className="h-4 w-4 flex-none accent-[var(--accent)]"
+          />
+          <Crest src={f.leagues?.logo} name={f.leagues?.name ?? "?"} />
+          <BoardRowText fixture={f} label={label} beyondCap={beyondCap} locked={false} />
+        </label>
       )}
     </li>
+  );
+}
+
+function BoardRowText({
+  fixture: f,
+  label,
+  beyondCap,
+  locked,
+}: {
+  fixture: BoardFixture;
+  label: string;
+  beyondCap: boolean;
+  locked: boolean;
+}) {
+  return (
+    <span className="min-w-0 flex-1">
+      <span className="block truncate text-[13px] font-semibold">{label}</span>
+      <span className="block truncate text-[11px] text-muted">
+        {f.leagues?.name ?? "Unknown league"} ·{" "}
+        {new Date(f.fixture_date).toLocaleString(undefined, {
+          day: "numeric", month: "short",
+          hour: "numeric", minute: "2-digit", hour12: true,
+        })}
+        {beyondCap && " · past the session cap"}
+        {locked && " · has a prediction, cannot be dropped"}
+      </span>
+    </span>
   );
 }
 

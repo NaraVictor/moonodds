@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createClient } from "./supabase/client";
 
@@ -401,6 +402,34 @@ function useAllAdminPredictions() {
       return (data as { picks: unknown[] })?.picks ?? [];
     },
   });
+}
+
+/**
+ * Which fixtures already carry a prediction.
+ *
+ * The board cannot ask this directly: `predictions` is granted to nobody and
+ * every read goes through a SECURITY DEFINER RPC, so a PostgREST embed returns
+ * nothing however senior the caller. But the Office already holds every pick
+ * for its Predictions tab, and pick_json carries fixture.id — so the answer is
+ * a derivation of data that is fetched anyway, under the same query key, rather
+ * than a second trip.
+ *
+ * It matters for deletion. Removing a fixture cascades to its predictions, so
+ * the route refuses any fixture that has one; without this the operator picks a
+ * dozen rows, gets four refusals back and has no way to tell which four until
+ * they try.
+ */
+export function usePredictedFixtureIds() {
+  const query = useAllAdminPredictions();
+  const ids = useMemo(() => {
+    const set = new Set<string>();
+    for (const p of (query.data ?? []) as { fixture?: { id?: string } }[]) {
+      if (p?.fixture?.id) set.add(p.fixture.id);
+    }
+    return set;
+  }, [query.data]);
+
+  return { ids, isPending: query.isPending };
 }
 
 export function useAdminPredictions(page: number) {

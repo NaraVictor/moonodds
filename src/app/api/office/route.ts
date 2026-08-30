@@ -87,6 +87,15 @@ const Body = z.discriminatedUnion("action", [
     maxFixtures: z.number().int().min(1).max(MAX_FIXTURES_OVERRIDE).optional(),
   }),
   z.object({ action: z.literal("deleteFixture"), fixtureId: z.uuid() }),
+  /*
+   * Bounded at 100 because the board itself is capped at 100 rows, so a larger
+   * request could only come from something other than the page — and a delete
+   * that takes an unbounded list is a delete that can take the whole table.
+   */
+  z.object({
+    action: z.literal("deleteFixtures"),
+    fixtureIds: z.array(z.uuid()).min(1).max(100),
+  }),
   z.object({ action: z.literal("deletePrediction"), predictionId: z.uuid() }),
   z.object({ action: z.literal("gradeResults") }),
   z.object({ action: z.literal("clvCheck") }),
@@ -339,6 +348,52 @@ export async function POST(request: Request) {
         const { error } = await db.from("fixtures").delete().eq("id", body.fixtureId);
         if (error) throw new Error(error.message);
         return NextResponse.json({ deleted: true });
+      }
+
+      /**
+       * The same rule as deleteFixture, applied to a selection.
+       *
+       * ONE request rather than one per fixture, and that is not only about
+       * round trips. Every action here is written to the append-only audit log
+       * before it runs, so a loop on the client would record twenty entries for
+       * one decision and lose the fact that it WAS one decision. It also makes
+       * the refusal coherent: the whole selection is checked against the same
+       * snapshot of predictions rather than each fixture against a table that
+       * may have changed between calls.
+       *
+       * Partial success is the expected outcome, not an error. A fixture that
+       * has picked up a prediction is refused and the rest still go, because
+       * the alternative — failing all twenty because one is spoken for — makes
+       * the operator hunt for the offender by hand. The response names which
+       * ones were kept and why, so the UI can say so precisely.
+       */
+      case "deleteFixtures": {
+        const { data: held } = await db
+          .from("predictions")
+          .select("fixture_id")
+          .in("fixture_id", body.fixtureIds);
+
+        const blocked = new Map<string, number>();
+        for (const row of held ?? []) {
+          const id = row.fixture_id as string;
+          blocked.set(id, (blocked.get(id) ?? 0) + 1);
+        }
+
+        const deletable = body.fixtureIds.filter((id) => !blocked.has(id));
+
+        if (deletable.length) {
+          const { error } = await db.from("fixtures").delete().in("id", deletable);
+          if (error) throw new Error(error.message);
+        }
+
+        return NextResponse.json({
+          deleted: deletable.length,
+          requested: body.fixtureIds.length,
+          refused: [...blocked.entries()].map(([fixtureId, predictions]) => ({
+            fixtureId,
+            predictions,
+          })),
+        });
       }
 
       /**
