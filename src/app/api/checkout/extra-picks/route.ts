@@ -136,6 +136,8 @@ export async function POST(request: Request) {
     );
   }
 
+  const today = new Date().toISOString().slice(0, 10);
+
   // Don't sell the same fixtures twice. The day pass has always had this check
   // and this route did not, so a double-tap on a slow connection charged twice
   // and unlocked nothing the second time.
@@ -143,14 +145,55 @@ export async function POST(request: Request) {
     .from("extra_pick_orders")
     .select("fixture_ids")
     .eq("user_id", user.id)
-    .eq("date_key", new Date().toISOString().slice(0, 10))
+    .eq("date_key", today)
     .eq("status", "active");
 
   const alreadyOwned = new Set(
     (owned ?? []).flatMap((o) => (o.fixture_ids ?? []) as string[]),
   );
 
-  const fresh = await drawFixtures(db, alreadyOwned, await unlockSize(db));
+  /*
+   * One pending extras checkout per person per day.
+   *
+   * This used to key on the SELECTION — the sorted fixture ids — because the
+   * buyer chose their own leagues and two different choices were two genuine
+   * purchases. A random draw destroys that: every tap draws a different ten,
+   * so every tap produced a different key, no in-flight row ever matched, and
+   * the unique index that exists to stop a double-tap charging twice could
+   * never fire. Keyed on the day it fires exactly when it should.
+   *
+   * A settled purchase does not hold the slot — the index is partial on
+   * `pending` — so someone who buys ten and comes back for ten more still can.
+   */
+  const checkoutKey = today;
+
+  const pendingSame = () =>
+    db
+      .from("payments")
+      .select("reference, amount_minor, metadata")
+      .eq("user_id", user.id)
+      .eq("purpose", "extra_picks")
+      .eq("status", "pending")
+      .eq("metadata->>checkoutKey", checkoutKey)
+      .maybeSingle();
+
+  const { data: inFlight } = await pendingSame();
+
+  /*
+   * A resumed checkout keeps the games the FIRST attempt drew, and is looked
+   * up BEFORE the draw.
+   *
+   * Order matters here. With the draw first, someone who abandoned a payment
+   * and came back after their ten had kicked off — or been re-ranked onto the
+   * free board — drew nothing, and was told there were no extra games today
+   * while holding a live quote for ten of them. Their own pending row is the
+   * answer to that question, so it is asked first.
+   */
+  const held = (inFlight?.metadata as { fixtureIds?: string[] } | null)?.fixtureIds;
+
+  const fresh = held?.length
+    ? held
+    : await drawFixtures(db, alreadyOwned, await unlockSize(db));
 
   /*
    * An empty draw is not an error the customer caused.
@@ -186,45 +229,6 @@ export async function POST(request: Request) {
 
   const rate = await getUsdToGhsRateForServer();
   const amountMinor = usdToPesewas(priceUsd, rate);
-  const today = new Date().toISOString().slice(0, 10);
-
-  /*
-   * One pending extras checkout per person per day.
-   *
-   * This used to key on the SELECTION — the sorted fixture ids — because the
-   * buyer chose their own leagues and two different choices were two genuine
-   * purchases. A random draw destroys that: every tap draws a different ten,
-   * so every tap produced a different key, no in-flight row ever matched, and
-   * the unique index that exists to stop a double-tap charging twice could
-   * never fire. Keyed on the day it fires exactly when it should.
-   *
-   * A settled purchase does not hold the slot — the index is partial on
-   * `pending` — so someone who buys ten and comes back for ten more still can.
-   */
-  const checkoutKey = today;
-
-  const pendingSame = () =>
-    db
-      .from("payments")
-      .select("reference, amount_minor, metadata")
-      .eq("user_id", user.id)
-      .eq("purpose", "extra_picks")
-      .eq("status", "pending")
-      .eq("metadata->>checkoutKey", checkoutKey)
-      .maybeSingle();
-
-  const { data: inFlight } = await pendingSame();
-
-  /*
-   * A resumed checkout keeps the games the FIRST attempt drew.
-   *
-   * Otherwise the second tap silently replaces them, and someone who abandoned
-   * a payment and came back would be charged for one set having been quoted
-   * another. What was drawn is on the payment row; that row is the record.
-   */
-  const drawn =
-    ((inFlight?.metadata as { fixtureIds?: string[] } | null)?.fixtureIds ?? null) ??
-    fresh;
 
   let reference =
     inFlight?.reference ??
@@ -277,7 +281,7 @@ export async function POST(request: Request) {
     metadata: { purpose: "extra_picks", dateKey: today, priceUsd },
   });
 
-  return NextResponse.json({ ...init, numGames: drawn.length, priceUsd });
+  return NextResponse.json({ ...init, numGames: fresh.length, priceUsd });
 }
 
 const Verify = z.object({ reference: z.string().min(8) });
