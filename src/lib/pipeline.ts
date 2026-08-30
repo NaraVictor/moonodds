@@ -8,6 +8,8 @@ import { blankToNull, normalisePredictedValue } from "./engine/output";
 import { ENGINE_CALL_BUDGET_MS, THIN_SEASON_GAMES, sessionCap } from "./engine/limits";
 import { ENGINE_PROMPT_VERSION } from "./engine/prompt";
 import { reportError } from "./report-error";
+import { SITE_URL } from "./site-url";
+import { utcDayWindow } from "./format";
 
 /**
  * The daily pipeline, ported from convex/cron_jobs and convex/football.
@@ -1655,6 +1657,71 @@ export async function runFetchLineups() {
   return { checked: upcoming.length, asked: wanted.length, fetched: lineups.length, upserted };
 }
 
+/** HTML-escape. These are team names from a feed, not our own strings. */
+function esc(v: string): string {
+  return v.replace(/[&<>"']/g, (c) =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c] as string,
+  );
+}
+
+/**
+ * The daily board as an email.
+ *
+ * Table markup with inline styles and no external stylesheet, because that is
+ * the only thing every mail client renders the same way. No flexbox, no grid,
+ * no <style> block: Gmail strips the last one and Outlook has never understood
+ * the first two.
+ *
+ * Confidence is shown, the CALL is not. Everyone who opted in receives this
+ * whether or not they have paid today, so fixture, kickoff and confidence are
+ * the tease and the market and selection stay behind the paywall — which is
+ * also why the button is worth pressing.
+ */
+function dailyPicksEmail(
+  board: Array<{ fixture: string; kickoff: string | null; confidence: number }>,
+  count: number,
+): string {
+  const rows = board
+    .map((b, i) => {
+      const time = b.kickoff
+        ? new Date(b.kickoff).toLocaleTimeString("en-GB", {
+            hour: "2-digit",
+            minute: "2-digit",
+            timeZone: "UTC",
+          })
+        : "—";
+      const cell = "padding:10px 12px;border-bottom:1px solid #e6e8eb;font-size:14px;";
+      return (
+        `<tr>` +
+        `<td style="${cell}color:#6b7280;">${i + 1}</td>` +
+        `<td style="${cell}font-weight:600;">${esc(b.fixture)}</td>` +
+        `<td style="${cell}color:#6b7280;white-space:nowrap;">${time}</td>` +
+        `<td style="${cell}font-weight:600;text-align:right;">${Math.round(b.confidence * 10)}%</td>` +
+        `</tr>`
+      );
+    })
+    .join("");
+
+  const head = "padding:10px 12px;border-bottom:2px solid #111827;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:#6b7280;text-align:left;";
+
+  return [
+    `<div style="font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#111827;max-width:600px;">`,
+    `<p style="font-size:16px;margin:0 0 4px;">${count} new pick${count === 1 ? "" : "s"} are live on Kicka.</p>`,
+    `<p style="font-size:13px;color:#6b7280;margin:0 0 20px;">Kickoff times are UTC. Confidence is the model's own score \u2014 the call and the reasoning are on the board.</p>`,
+    board.length
+      ? `<table role="presentation" cellpadding="0" cellspacing="0" style="border-collapse:collapse;width:100%;">` +
+        `<thead><tr>` +
+        `<th style="${head}">S/N</th><th style="${head}">Fixture</th>` +
+        `<th style="${head}">Time</th><th style="${head}text-align:right;">AI Confidence</th>` +
+        `</tr></thead><tbody>${rows}</tbody></table>`
+      : "",
+    `<p style="margin:28px 0 0;">`,
+    `<a href="${SITE_URL}" style="display:inline-block;background:#15803D;color:#ffffff;text-decoration:none;padding:13px 22px;border-radius:999px;font-size:15px;font-weight:600;">See Predictions on Kicka</a>`,
+    `</p>`,
+    `</div>`,
+  ].join("");
+}
+
 /** Drain the jobs outbox. Called every minute by pg_cron. */
 export async function runDrainJobs(batchSize = 20) {
   const db = createServiceClient();
@@ -1775,6 +1842,44 @@ async function handleJob(
         .select("user_id, email_enabled, sms_enabled, profiles(email, phone)")
         .eq("daily_picks_alert", true);
 
+      /*
+       * The board, as a table, WITHOUT the calls.
+       *
+       * This email goes to everybody who opted in, most of whom have not paid
+       * today — so it carries fixture, kickoff and confidence and stops there.
+       * The market and the selection are the product; naming them here would
+       * hand the day away to a mailing list.
+       *
+       * Fetched here rather than carried in the payload. The job only knows a
+       * count, and a payload holding the whole board would duplicate rows that
+       * may have been corrected in the Office between the run and the drain.
+       */
+      const { startISO, endISO } = utcDayWindow();
+      const { data: boardRows } = await db
+        .from("predictions")
+        .select(
+          "confidence_score, fixtures!inner(fixture_date, home:teams!fixtures_home_team_id_fkey(name), away:teams!fixtures_away_team_id_fkey(name))",
+        )
+        .gte("fixtures.fixture_date", startISO)
+        .lt("fixtures.fixture_date", endISO)
+        .order("confidence_score", { ascending: false })
+        .limit(50);
+
+      const board = (boardRows ?? []).map((r) => {
+        const f = asOne(r.fixtures) as {
+          fixture_date: string;
+          home: unknown;
+          away: unknown;
+        } | null;
+        return {
+          fixture: `${(asOne(f?.home as never) as { name?: string } | null)?.name ?? "?"} v ${(asOne(f?.away as never) as { name?: string } | null)?.name ?? "?"}`,
+          kickoff: f?.fixture_date ?? null,
+          confidence: Number(r.confidence_score ?? 0),
+        };
+      });
+
+      const html = dailyPicksEmail(board, Number(job.payload.count ?? board.length));
+
       let sent = 0;
       let failed = 0;
 
@@ -1786,7 +1891,7 @@ async function handleJob(
             messaging.sendEmail({
               to: email,
               subject: `Today's picks are ready`,
-              html: `<p>${job.payload.count} new picks are live on Kicka.</p>`,
+              html,
             }),
           );
           if (ok) sent++;
@@ -1848,6 +1953,66 @@ async function handleJob(
       }
 
       settleBroadcast("jobs/high_confidence_pick", sent, failed);
+      return;
+    }
+
+    /*
+     * One leg landed, and the slip is still alive.
+     *
+     * refresh_slip decides whether this is worth sending — single-leg slips,
+     * the deciding leg, and legs of an already-decided slip are all filtered
+     * out in SQL, so anything reaching here is a leg the holder can still do
+     * something about. The message says where the slip stands rather than only
+     * what the leg did, because "2 of 4 through" is the part they care about.
+     */
+    case "slip_leg_settled": {
+      const p = job.payload as {
+        userId: string;
+        slipId: string;
+        predictionId: string;
+        legStatus: string;
+        legsSettled: number;
+        legsTotal: number;
+      };
+
+      const { data: pref } = await db
+        .from("notification_preferences")
+        .select("email_enabled, sms_enabled, profiles(email, phone)")
+        .eq("user_id", p.userId)
+        .eq("slip_result_alert", true)
+        .maybeSingle();
+
+      if (!pref) return;
+      const profile = asOne(pref.profiles) as { email: string | null; phone: string | null } | null;
+
+      const { data: pred } = await db
+        .from("predictions")
+        .select("fixtures(home:teams!fixtures_home_team_id_fkey(name), away:teams!fixtures_away_team_id_fkey(name))")
+        .eq("id", p.predictionId)
+        .maybeSingle();
+
+      const fx = asOne(pred?.fixtures as never) as { home: unknown; away: unknown } | null;
+      const match = fx
+        ? `${(asOne(fx.home as never) as { name?: string } | null)?.name ?? "?"} v ${(asOne(fx.away as never) as { name?: string } | null)?.name ?? "?"}`
+        : "A leg of your slip";
+
+      const verb = p.legStatus === "won" ? "won" : p.legStatus === "lost" ? "lost" : "was voided";
+      const line = `${match} ${verb}. ${p.legsSettled} of ${p.legsTotal} legs settled, your slip is still open.`;
+
+      if (pref.email_enabled && profile?.email) {
+        await messaging.sendEmail({
+          to: profile.email,
+          subject: `${match} ${verb}`,
+          html:
+            `<div style="font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#111827;max-width:600px;">` +
+            `<p style="font-size:16px;margin:0 0 16px;">${esc(line)}</p>` +
+            `<p style="margin:0;"><a href="${SITE_URL}/slips" style="display:inline-block;background:#15803D;color:#ffffff;text-decoration:none;padding:12px 20px;border-radius:999px;font-size:15px;font-weight:600;">View your slip</a></p>` +
+            `</div>`,
+        });
+      }
+      if (pref.sms_enabled && profile?.phone) {
+        await messaging.sendSms({ to: profile.phone, message: `Kicka: ${line}` });
+      }
       return;
     }
 
