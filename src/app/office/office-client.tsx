@@ -508,6 +508,7 @@ function BoardPanel({ override }: { override?: number }) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [confirming, setConfirming] = useState(false);
   const [result, setResult] = useState<{ deleted: number; refused: number } | null>(null);
+  const [generated, setGenerated] = useState<string | null>(null);
 
   const fixtures = data ?? [];
   // The same function runDailyPicks calls, not a second copy of the number.
@@ -518,31 +519,33 @@ function BoardPanel({ override }: { override?: number }) {
   );
 
   /*
-   * A fixture that already has a pick cannot be dropped, and is not selectable.
+   * Everything is selectable now, predicted or not.
    *
-   * Deleting a fixture cascades to its predictions, so the route refuses one
-   * that has any. Enforcing that here as well is not belt-and-braces for its
-   * own sake: without it the operator ticks a dozen rows, gets four refusals
-   * back, and has no way of telling WHICH four without reading ids. The server
-   * check stays because this list can be stale — a run can publish between the
-   * page loading and the button being pressed.
+   * A prediction used to make a row untouchable, because dropping a fixture
+   * takes its predictions with it. That was the wrong line: a pick nobody
+   * holds is ours to withdraw. What actually blocks a drop is a customer
+   * having the pick on a slip — and the board cannot see that, because
+   * slip_legs is scoped to its owner by RLS. So the server decides, and
+   * reports precisely which fixtures it kept and how many slips are involved.
+   *
+   * The prediction marker stays, but as information rather than a barrier: it
+   * is what tells the operator which rows a batch generate would re-run.
    */
-  const deletable = fixtures.filter((f) => !predicted.ids.has(f.id));
   /*
    * Intersected with what is on screen, not just filtered.
    *
    * `selected` outlives a refetch, and the board refetches. A fixture that has
-   * kicked off, been graded, or picked up a prediction since it was ticked is
-   * no longer on this list — and sending its id anyway would ask the server to
-   * delete something the operator can no longer see, which is the one thing a
-   * selection UI must never do.
+   * kicked off or been graded since it was ticked is no longer on this list,
+   * and sending its id anyway would ask the server to act on something the
+   * operator can no longer see.
    */
-  const onBoard = new Set(deletable.map((f) => f.id));
+  const onBoard = new Set(fixtures.map((f) => f.id));
   const chosen = [...selected].filter((id) => onBoard.has(id));
-  const allChosen = deletable.length > 0 && chosen.length === deletable.length;
+  const allChosen = fixtures.length > 0 && chosen.length === fixtures.length;
 
   function toggle(id: string) {
     setResult(null);
+    setGenerated(null);
     setSelected((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
@@ -554,7 +557,36 @@ function BoardPanel({ override }: { override?: number }) {
   function toggleAll() {
     setResult(null);
     setConfirming(false);
-    setSelected(allChosen ? new Set() : new Set(deletable.map((f) => f.id)));
+    setSelected(allChosen ? new Set() : new Set(fixtures.map((f) => f.id)));
+  }
+
+  /*
+   * Run the engine over exactly these fixtures.
+   *
+   * Batching is the point: a full board can exceed the model's time budget, and
+   * an operator who wants the four fixtures they care about should not have to
+   * spend a run on thirty to get them. Re-running a predicted fixture is safe —
+   * the engine replaces a pick only when the new one scores higher, and refuses
+   * outright if a customer is holding it.
+   */
+  function generate() {
+    setResult(null);
+    action.mutate(
+      { action: "generatePicks", fixtureIds: chosen },
+      {
+        onSuccess: (res) => {
+          setGenerated(
+            typeof res?.skipped === "string"
+              ? res.skipped
+              : `${Number(res?.generated ?? 0)} published of ${Number(res?.considered ?? 0)} analysed` +
+                (Number(res?.duplicates ?? 0) > 0
+                  ? `, ${Number(res.duplicates)} left as they were`
+                  : ""),
+          );
+          setSelected(new Set());
+        },
+      },
+    );
   }
 
   function remove() {
@@ -582,9 +614,9 @@ function BoardPanel({ override }: { override?: number }) {
           : "What the engine will read when you generate picks."
       }
       action={
-        deletable.length > 0 ? (
+        fixtures.length > 0 ? (
           <button type="button" onClick={toggleAll} className={PILL}>
-            {allChosen ? "Clear selection" : `Select all ${deletable.length}`}
+            {allChosen ? "Clear selection" : `Select all ${fixtures.length}`}
           </button>
         ) : undefined
       }
@@ -603,7 +635,7 @@ function BoardPanel({ override }: { override?: number }) {
                 // The cap counts from the top of this same ordering, so the row
                 // that crosses it is the row the engine stops before.
                 beyondCap={i >= cap}
-                locked={predicted.ids.has(f.id)}
+                predicted={predicted.ids.has(f.id)}
                 checked={selected.has(f.id)}
                 busy={action.isPending}
                 onToggle={() => toggle(f.id)}
@@ -639,15 +671,32 @@ function BoardPanel({ override }: { override?: number }) {
                   </button>
                 </span>
               ) : (
-                <button
-                  type="button"
-                  disabled={action.isPending}
-                  onClick={() => setConfirming(true)}
-                  className={`${PILL} inline-flex items-center gap-1.5`}
-                >
-                  <Trash2 className="h-3 w-3" />
-                  Drop selected
-                </button>
+                <span className="flex flex-wrap items-center gap-2">
+                  {/*
+                    Generating is the constructive action, so it leads and it
+                    does not ask twice: a wasted model call costs a couple of
+                    minutes, where a wasted drop costs a fixture. Only the
+                    destructive one gets a confirm step.
+                  */}
+                  <button
+                    type="button"
+                    disabled={action.isPending}
+                    onClick={generate}
+                    className="press inline-flex items-center gap-1.5 rounded-full bg-accent px-3 py-1.5 text-[11px] font-semibold text-accent-foreground disabled:opacity-40"
+                  >
+                    <Play className="h-3 w-3" fill="currentColor" />
+                    {action.isPending ? "Working…" : `Generate ${chosen.length}`}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={action.isPending}
+                    onClick={() => setConfirming(true)}
+                    className={`${PILL} inline-flex items-center gap-1.5`}
+                  >
+                    <Trash2 className="h-3 w-3" />
+                    Drop selected
+                  </button>
+                </span>
               )}
             </div>
           )}
@@ -663,9 +712,13 @@ function BoardPanel({ override }: { override?: number }) {
         <p className="mt-3 text-[13px] leading-relaxed text-muted">
           {result.deleted} fixture{result.deleted === 1 ? "" : "s"} dropped
           {result.refused > 0
-            ? `. ${result.refused} kept — ${result.refused === 1 ? "it has" : "they have"} predictions against ${result.refused === 1 ? "it" : "them"}, so removing ${result.refused === 1 ? "it" : "them"} would take those too.`
+            ? `. ${result.refused} kept — a customer has a pick from ${result.refused === 1 ? "it" : "them"} on a slip, and removing ${result.refused === 1 ? "it" : "them"} would take that pick off the slip with no trace.`
             : "."}
         </p>
+      )}
+
+      {generated && (
+        <p className="mt-3 text-[13px] leading-relaxed text-muted">{generated}</p>
       )}
 
       {action.error && <ActionError message={action.error.message} />}
@@ -676,15 +729,15 @@ function BoardPanel({ override }: { override?: number }) {
 function BoardRow({
   fixture: f,
   beyondCap,
-  locked,
+  predicted,
   checked,
   busy,
   onToggle,
 }: {
   fixture: BoardFixture;
   beyondCap: boolean;
-  /** Already has a prediction, so the route would refuse to remove it. */
-  locked: boolean;
+  /** Already has a pick. Informational — it does not stop selection. */
+  predicted: boolean;
   checked: boolean;
   busy: boolean;
   onToggle: () => void;
@@ -696,65 +749,47 @@ function BoardRow({
       {/*
         The whole row is the target, not just the box. These are 40px-tall rows
         being ticked a dozen at a time, and a 16px hit area for that is a way to
-        make somebody miss and drop the wrong fixture.
-
-        A locked row is a <div>: not disabled-looking-clickable, just not a
-        control. Its reason sits in the subtitle where the row already explains
-        itself, rather than in a tooltip nobody hovers.
+        make somebody miss and act on the wrong fixture.
       */}
-      {locked ? (
-        <div className="flex min-w-0 flex-1 items-center gap-3 opacity-60">
-          <span
-            aria-hidden
-            className="flex h-4 w-4 flex-none items-center justify-center rounded border border-border text-[9px] text-muted"
-          >
-            &mdash;
+      <label className="flex min-w-0 flex-1 cursor-pointer items-center gap-3">
+        <input
+          type="checkbox"
+          checked={checked}
+          disabled={busy}
+          onChange={onToggle}
+          aria-label={`Select ${label}`}
+          className="h-4 w-4 flex-none accent-[var(--accent)]"
+        />
+        <Crest src={f.leagues?.logo} name={f.leagues?.name ?? "?"} />
+        <span className="min-w-0 flex-1">
+          <span className="flex items-center gap-2">
+            <span className="truncate text-[13px] font-semibold">{label}</span>
+            {/*
+              Marks a row a generate would RE-run rather than fill. The engine
+              replaces a pick only when the new one scores higher, so a second
+              pass over a predicted fixture is safe — but the operator should
+              be able to see which rows those are before spending the call.
+            */}
+            {predicted && (
+              <span
+                className="flex-none rounded-full px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.06em]"
+                style={{ background: "var(--won-wash)", color: "var(--won-ink)" }}
+              >
+                Predicted
+              </span>
+            )}
           </span>
-          <Crest src={f.leagues?.logo} name={f.leagues?.name ?? "?"} />
-          <BoardRowText fixture={f} label={label} beyondCap={beyondCap} locked />
-        </div>
-      ) : (
-        <label className="flex min-w-0 flex-1 cursor-pointer items-center gap-3">
-          <input
-            type="checkbox"
-            checked={checked}
-            disabled={busy}
-            onChange={onToggle}
-            aria-label={`Select ${label}`}
-            className="h-4 w-4 flex-none accent-[var(--accent)]"
-          />
-          <Crest src={f.leagues?.logo} name={f.leagues?.name ?? "?"} />
-          <BoardRowText fixture={f} label={label} beyondCap={beyondCap} locked={false} />
-        </label>
-      )}
+          <span className="block truncate text-[11px] text-muted">
+            {f.leagues?.name ?? "Unknown league"} ·{" "}
+            {new Date(f.fixture_date).toLocaleString(undefined, {
+              day: "numeric", month: "short",
+              hour: "numeric", minute: "2-digit", hour12: true,
+            })}
+            {beyondCap && " · past the session cap"}
+          </span>
+        </span>
+      </label>
     </li>
-  );
-}
-
-function BoardRowText({
-  fixture: f,
-  label,
-  beyondCap,
-  locked,
-}: {
-  fixture: BoardFixture;
-  label: string;
-  beyondCap: boolean;
-  locked: boolean;
-}) {
-  return (
-    <span className="min-w-0 flex-1">
-      <span className="block truncate text-[13px] font-semibold">{label}</span>
-      <span className="block truncate text-[11px] text-muted">
-        {f.leagues?.name ?? "Unknown league"} ·{" "}
-        {new Date(f.fixture_date).toLocaleString(undefined, {
-          day: "numeric", month: "short",
-          hour: "numeric", minute: "2-digit", hour12: true,
-        })}
-        {beyondCap && " · past the session cap"}
-        {locked && " · has a prediction, cannot be dropped"}
-      </span>
-    </span>
   );
 }
 

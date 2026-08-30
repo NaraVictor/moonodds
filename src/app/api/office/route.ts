@@ -80,6 +80,9 @@ const Body = z.discriminatedUnion("action", [
   z.object({
     action: z.literal("generatePicks"),
     maxFixtures: z.number().int().min(1).max(MAX_FIXTURES_OVERRIDE).optional(),
+    // A named selection from the board. Absent means the whole day, which is
+    // what the scheduled run sends.
+    fixtureIds: z.array(z.uuid()).min(1).max(MAX_FIXTURES_OVERRIDE).optional(),
   }),
   z.object({
     action: z.literal("fetchAndGenerate"),
@@ -292,7 +295,12 @@ export async function POST(request: Request) {
         return NextResponse.json(await runFetchStats({ maxFixtures: body.maxFixtures }));
 
       case "generatePicks":
-        return NextResponse.json(await runDailyPicks({ maxFixtures: body.maxFixtures }));
+        return NextResponse.json(
+          await runDailyPicks({
+            maxFixtures: body.maxFixtures,
+            fixtureIds: body.fixtureIds,
+          }),
+        );
 
       /**
        * The whole board in one call: fixtures, their stats, then the engine.
@@ -330,16 +338,29 @@ export async function POST(request: Request) {
        * So a fixture carrying predictions is refused — take the prediction out
        * first, deliberately, and the refusal names the count doing the refusing.
        */
+      /*
+       * A fixture can go whether or not it has been predicted. What stops it is
+       * somebody HOLDING one of those predictions.
+       *
+       * This used to refuse any fixture carrying a prediction at all, which was
+       * the wrong line: a pick nobody has added to a slip is ours to withdraw,
+       * and forcing the operator to delete the pick first only added a step.
+       * The real hazard is narrower and worse — slip_legs cascades from
+       * predictions, which cascade from fixtures, so dropping a fixture a
+       * customer has backed empties their slip with no trace and no record that
+       * it ever contained anything.
+       *
+       * The board only carries upcoming, unstarted fixtures, so nothing settled
+       * is reachable from here and the published record is not at risk.
+       */
       case "deleteFixture": {
-        const { count } = await db
-          .from("predictions")
-          .select("id", { count: "exact", head: true })
-          .eq("fixture_id", body.fixtureId);
+        const held = await slippedFixtures(db, [body.fixtureId]);
 
-        if (count && count > 0) {
+        if (held.size > 0) {
+          const legs = held.get(body.fixtureId) ?? 0;
           return NextResponse.json(
             {
-              error: `This fixture already has ${count} prediction${count === 1 ? "" : "s"} against it. Delete or void ${count === 1 ? "it" : "those"} first, removing the fixture would take ${count === 1 ? "it" : "them"} with it.`,
+              error: `${legs} customer slip${legs === 1 ? " has" : "s have"} a pick from this fixture on ${legs === 1 ? "it" : "them"}. Removing the fixture would take that pick off ${legs === 1 ? "the slip" : "those slips"} with no trace.`,
             },
             { status: 409 },
           );
@@ -368,17 +389,7 @@ export async function POST(request: Request) {
        * ones were kept and why, so the UI can say so precisely.
        */
       case "deleteFixtures": {
-        const { data: held } = await db
-          .from("predictions")
-          .select("fixture_id")
-          .in("fixture_id", body.fixtureIds);
-
-        const blocked = new Map<string, number>();
-        for (const row of held ?? []) {
-          const id = row.fixture_id as string;
-          blocked.set(id, (blocked.get(id) ?? 0) + 1);
-        }
-
+        const blocked = await slippedFixtures(db, body.fixtureIds);
         const deletable = body.fixtureIds.filter((id) => !blocked.has(id));
 
         if (deletable.length) {
@@ -389,9 +400,9 @@ export async function POST(request: Request) {
         return NextResponse.json({
           deleted: deletable.length,
           requested: body.fixtureIds.length,
-          refused: [...blocked.entries()].map(([fixtureId, predictions]) => ({
+          refused: [...blocked.entries()].map(([fixtureId, slips]) => ({
             fixtureId,
-            predictions,
+            slips,
           })),
         });
       }
@@ -1091,6 +1102,47 @@ export async function POST(request: Request) {
 /* ------------------------------ audit helpers ------------------------------ */
 
 /** What the action acts on, for grouping the log by subject. */
+/**
+ * Which of these fixtures have a pick sitting on somebody's slip.
+ *
+ * Two hops, because there is no direct link: slip_legs points at a prediction
+ * and a prediction points at a fixture. Done as two queries rather than a join
+ * so the second one is skipped entirely when no fixture in the set has been
+ * predicted, which is the common case for a board being pruned before a run.
+ *
+ * Returns fixture id -> number of slip legs, so a refusal can say how many
+ * people are actually affected rather than just that someone is.
+ */
+async function slippedFixtures(
+  db: ReturnType<typeof createServiceClient>,
+  fixtureIds: string[],
+): Promise<Map<string, number>> {
+  const blocked = new Map<string, number>();
+  if (!fixtureIds.length) return blocked;
+
+  const { data: preds } = await db
+    .from("predictions")
+    .select("id, fixture_id")
+    .in("fixture_id", fixtureIds);
+
+  if (!preds?.length) return blocked;
+
+  const fixtureOf = new Map(preds.map((p) => [p.id as string, p.fixture_id as string]));
+
+  const { data: legs } = await db
+    .from("slip_legs")
+    .select("prediction_id")
+    .in("prediction_id", [...fixtureOf.keys()]);
+
+  for (const leg of legs ?? []) {
+    const fixtureId = fixtureOf.get(leg.prediction_id as string);
+    if (!fixtureId) continue;
+    blocked.set(fixtureId, (blocked.get(fixtureId) ?? 0) + 1);
+  }
+
+  return blocked;
+}
+
 function targetTypeOf(action: string): string {
   if (action.endsWith("User") || action === "grantPass" || action === "revokePass") {
     return "user";

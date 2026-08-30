@@ -728,7 +728,10 @@ function formatCongestion(raw: unknown): string | null {
 }
 
 /** Generate today's picks with the active engine config. */
-export async function runDailyPicks({ maxFixtures }: { maxFixtures?: number } = {}) {
+export async function runDailyPicks({
+  maxFixtures,
+  fixtureIds,
+}: { maxFixtures?: number; fixtureIds?: string[] } = {}) {
   const startedAt = Date.now();
   const db = createServiceClient();
   const { ai } = getProviders();
@@ -746,16 +749,43 @@ export async function runDailyPicks({ maxFixtures }: { maxFixtures?: number } = 
     Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1),
   );
 
-  const { data: fixtures } = await db
+  /*
+   * A named selection, or the day.
+   *
+   * The scheduled run takes the day and is bounded by it. An operator running
+   * this by hand has usually just ticked a handful of rows on the board, and
+   * for them the day window is the wrong bound entirely: it would silently add
+   * everything else kicking off today alongside the four they chose, and the
+   * session cap would then decide which of the two sets survived.
+   *
+   * So a selection replaces the window rather than narrowing it. What it does
+   * NOT replace is the cap or the status and kickoff filters — a fixture that
+   * has already started cannot be predicted whoever asked for it, and the cap
+   * is what keeps a manual run inside the model's time budget.
+   */
+  const selecting = Array.isArray(fixtureIds) && fixtureIds.length > 0;
+
+  let query = db
     .from("fixtures")
     .select("id, fixture_date, venue, leagues(name, country), home:teams!fixtures_home_team_id_fkey(name, external_id), away:teams!fixtures_away_team_id_fkey(name)")
     .eq("status", "scheduled")
-    .gte("fixture_date", now.toISOString())
-    .lt("fixture_date", endOfDay.toISOString())
+    .gte("fixture_date", now.toISOString());
+
+  query = selecting
+    ? query.in("id", fixtureIds!)
+    : query.lt("fixture_date", endOfDay.toISOString());
+
+  const { data: fixtures } = await query
     .order("fixture_date")
     .limit(sessionCap(config.api_budget, maxFixtures));
 
-  if (!fixtures?.length) return { skipped: "no upcoming fixtures today" };
+  if (!fixtures?.length) {
+    return {
+      skipped: selecting
+        ? "none of the selected fixtures are still upcoming"
+        : "no upcoming fixtures today",
+    };
+  }
 
   // Resolve every tunable once. The prompt gets them substituted into its text;
   // the pipeline reads the same values for its cutoffs, so the number the engine
@@ -953,11 +983,11 @@ ${briefs.join("\n")}`;
    * Read as a batch rather than per pick: a session cap of 20 would otherwise
    * be 40 extra round trips inside a loop that already holds an open run.
    */
-  const fixtureIds = fixtures.map((f) => f.id);
+  const analysedIds = fixtures.map((f) => f.id);
   const { data: existingRows } = await db
     .from("predictions")
     .select("id, fixture_id, status, confidence_score, prediction_type")
-    .in("fixture_id", fixtureIds);
+    .in("fixture_id", analysedIds);
 
   const existing = new Map<string, NonNullable<typeof existingRows>[number]>();
   const superseded: NonNullable<typeof existingRows> = [];
