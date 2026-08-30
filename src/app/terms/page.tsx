@@ -80,14 +80,20 @@ export default async function TermsPage() {
         <Section title="4. Passes and payment">
           <p>
             A day pass grants access to all predictions published on the calendar
-            day it is bought, and expires at the end of that day. It renews
-            nothing and there is nothing to cancel.
+            day it is bought. It renews nothing and there is nothing to cancel.
           </p>
           <p>
-            If a pass is charged in error, or we fail to publish predictions on a
-            day you paid for, contact us and we will refund it. We do not refund
-            passes because the predictions were wrong. Uncertainty is the
-            substance of what is being sold, and no accuracy level is promised.
+            If we publish no predictions at all on a day you paid for, your pass
+            carries forward automatically to the next day we do. You do not need
+            to ask, and it costs you nothing. If that day is also blank, it
+            carries forward again.
+          </p>
+          <p>
+            If a pass is charged in error, contact us and we will refund it. We
+            do not refund or roll passes because the predictions were wrong, or
+            because a day carried fewer of them than you hoped. Uncertainty is
+            the substance of what is being sold, and no accuracy level or number
+            of predictions is promised.
           </p>
           <p>
             Payment is handled by our payment processor. We store a reference to

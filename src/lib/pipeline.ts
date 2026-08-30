@@ -2220,10 +2220,11 @@ async function handleJob(
        * So it goes to both, in different words: customers get what it means for
        * them, admins keep the numbers they need to act on.
        *
-       * WHAT IT DOES NOT SAY is that the pass rolls over. There is no rollover
-       * in this product — daily_passes is keyed to a date and nothing carries
-       * one forward — and the Terms promise a REFUND instead. Writing the
-       * friendlier promise would have been writing a lie into an apology.
+       * It promises a rollover, and the promise is kept by app.roll_unserved_passes
+       * rather than by anybody remembering: a nightly sweep moves every active
+       * pass off a day that published nothing. Written only after that existed —
+       * the friendlier sentence would otherwise have been a lie inside an
+       * apology, which is the worst place to put one.
        */
       const skipped = `Our model went through ${p.considered} game${p.considered === 1 ? "" : "s"} today and did not find one it was confident enough to back.`;
 
@@ -2249,7 +2250,7 @@ async function handleJob(
                   "We would rather sit a day out than put up picks we do not believe in. Publishing something for the sake of it is how a record stops meaning anything.",
                 ) +
                 note(
-                  "If you bought a pass for today, message us on WhatsApp below and we will refund it.",
+                  "If you bought a pass for today, it carries forward on its own \u2014 you will have it on the next day we publish, at no extra cost. Nothing to claim and nothing to do.",
                 ),
               cta: { label: "See past results", href: `${SITE_URL}/history` },
             }),
@@ -2275,7 +2276,7 @@ async function handleJob(
                 `${p.considered} fixture${p.considered === 1 ? "" : "s"} were analysed and none scored above the ${p.floor} publish floor.`,
               ) +
               note(
-                "Subscribers have been told. Passes sold for this day are refundable under the Terms.",
+                "Subscribers have been told. Passes sold for this day roll forward automatically tonight.",
               ),
             cta: { label: "Open the Office", href: `${SITE_URL}/office` },
           }),
