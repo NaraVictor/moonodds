@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Search, X, Lock } from "@/components/ui/icons";
 import { TeamCrest } from "@/components/predictions/team-crest";
 import { usePicksByStatus } from "@/lib/queries";
-import { formatMarket, teamName } from "@/lib/format";
+import { formatDateShort, formatMarket, teamName } from "@/lib/format";
 import type { Pick } from "@/lib/types";
 
 /**
@@ -213,7 +213,22 @@ export function SiteSearch() {
                         <span className="block truncate text-[13px] font-semibold">
                           {teamName(p.homeTeam)} v {teamName(p.awayTeam)}
                         </span>
+                        {/*
+                          The date leads the line, and it leads because the
+                          board is not one day deep. A search for "Chelsea"
+                          returns every Chelsea call we hold, and without a
+                          date two rows for the same fixture — last week's
+                          settled one and today's — are the same sentence
+                          twice. It goes first rather than last because this
+                          line truncates, and the part that tells two
+                          identical rows apart is the part that must survive
+                          a narrow screen.
+                        */}
                         <span className="block truncate text-[11px] text-muted">
+                          <span className="numeral">
+                            {formatDateShort(p.fixture.date)}
+                          </span>
+                          {" · "}
                           {p.league.name}
                           {p.predictionType && (
                             <> · {formatMarket(p.predictionType, p.predictedValue)}</>

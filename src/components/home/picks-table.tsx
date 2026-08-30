@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ArrowDown, ArrowUp, Check, Lock, Plus } from "@/components/ui/icons";
 import { useBetSlip } from "@/lib/bet-slip";
 import { TeamCrest } from "@/components/predictions/team-crest";
+import { OutcomeBadge } from "@/components/predictions/outcome-badge";
 import { isUnlocked, type Pick } from "@/lib/types";
 import { confidencePercent, formatMarket, teamName } from "@/lib/format";
 
@@ -223,9 +224,7 @@ export function PicksTable({ picks }: { picks: Pick[] }) {
                         )}
                       </button>
                     ) : (
-                      <span className="text-[11px] text-muted">
-                        {settled ? p.status : ""}
-                      </span>
+                      <OutcomeBadge status={p.status} />
                     )}
                   </td>
                 </tr>

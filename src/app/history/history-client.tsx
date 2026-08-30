@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { OutcomeBadge } from "@/components/predictions/outcome-badge";
 import Link from "next/link";
 import {
   usePredictionHistory,
@@ -11,7 +12,7 @@ import {
   type HistoryFilters,
 } from "@/lib/queries";
 import { TeamCrest } from "@/components/predictions/team-crest";
-import { Check, X, Clock, ChevronLeft, ChevronRight, BarChart3 } from "@/components/ui/icons";
+import { ChevronLeft, ChevronRight, BarChart3 } from "@/components/ui/icons";
 import {
   MARKET_LABELS,
   formatMarketShort,
@@ -37,40 +38,6 @@ const OUTCOMES = [
   { id: "lost", label: "Lost" },
   { id: "void", label: "Void" },
 ] as const;
-
-function OutcomeBadge({ status }: { status: Pick["status"] }) {
-  if (status === "won") {
-    return (
-      <span
-        className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.08em]"
-        style={{ background: "var(--won-wash)", color: "var(--won-ink)" }}
-      >
-        <Check className="h-2.5 w-2.5" strokeWidth={4} />
-        Won
-      </span>
-    );
-  }
-  if (status === "lost") {
-    return (
-      <span
-        className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.08em]"
-        style={{ background: "var(--lost-wash)", color: "var(--lost-ink)" }}
-      >
-        <X className="h-2.5 w-2.5" strokeWidth={4} />
-        Lost
-      </span>
-    );
-  }
-  return (
-    <span
-      className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.08em]"
-      style={{ background: "var(--surface-secondary)", color: "var(--muted)" }}
-    >
-      <Clock className="h-2.5 w-2.5" strokeWidth={3} />
-      Void
-    </span>
-  );
-}
 
 function StatsPanel({ filters }: { filters: HistoryFilters }) {
   const { data: stats, isPending } = useHistoryStats(filters);
