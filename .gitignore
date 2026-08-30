@@ -42,3 +42,12 @@ next-env.d.ts
 
 # Supabase generated local state — contains dev secrets, never commit
 supabase/.temp/
+
+# Skills installed by third-party setup wizards (PostHog's, so far). They are
+# vendored tool documentation rather than anything authored here, they are
+# regenerable by re-running the wizard, and they are several hundred kilobytes
+# of prose that would sit in every future diff.
+#
+# .claude/launch.json stays tracked: that one IS project configuration, and a
+# clone without it cannot start the dev server.
+.claude/skills/
