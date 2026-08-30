@@ -10,6 +10,7 @@ import { ENGINE_PROMPT_VERSION } from "./engine/prompt";
 import { reportError } from "./report-error";
 import { SITE_URL } from "./site-url";
 import { utcDayWindow } from "./format";
+import { renderEmail, p as para, note, esc } from "./email-layout";
 
 /**
  * The daily pipeline, ported from convex/cron_jobs and convex/football.
@@ -728,11 +729,37 @@ function formatCongestion(raw: unknown): string | null {
 }
 
 /** Generate today's picks with the active engine config. */
+/**
+ * The engine pass. Runs twice a day over two different halves of the board.
+ *
+ * `tier` is what separates them, and it is one parameter rather than a second
+ * copy of this function because everything else — the prompt, the stats, the
+ * anchoring, the duplicate handling, the timing — is identical. Only three
+ * things differ, and each is derived from it:
+ *
+ *   primary  the 05:00 run. Takes the day, publishes above primarySlipFloor,
+ *            and announces itself to everyone who asked to be told.
+ *   extra    the 05:30 run. Takes only fixtures the first pass left WITHOUT a
+ *            pick, publishes above the lower extraPicksFloor, and announces
+ *            nothing — these are bought, not broadcast.
+ *
+ * Extra picks are deliberately kept out of the public record. They are by
+ * definition the calls the board would not carry, so counting them in the
+ * published hit rate would report the engine as worse than the product it
+ * actually sells. Every public read filters on tier; the buyer sees theirs
+ * through get_my_extra_picks.
+ */
 export async function runDailyPicks({
   maxFixtures,
   fixtureIds,
-}: { maxFixtures?: number; fixtureIds?: string[] } = {}) {
+  tier = "primary",
+}: {
+  maxFixtures?: number;
+  fixtureIds?: string[];
+  tier?: "primary" | "extra";
+} = {}) {
   const startedAt = Date.now();
+  const isExtra = tier === "extra";
   const db = createServiceClient();
   const { ai } = getProviders();
 
@@ -775,6 +802,24 @@ export async function runDailyPicks({
     ? query.in("id", fixtureIds!)
     : query.lt("fixture_date", endOfDay.toISOString());
 
+  /*
+   * The extra pass takes what the first one left behind.
+   *
+   * Fixtures the board already carries are excluded outright rather than
+   * scored again and discarded: re-analysing them would spend the model call
+   * on games that already have a published pick, and any result would then be
+   * dropped by the duplicate rule anyway. What is left is exactly the set the
+   * paid tier exists to cover.
+   */
+  if (isExtra) {
+    const { data: already } = await db
+      .from("predictions")
+      .select("fixture_id")
+      .gte("created_at", new Date(now.getTime() - 36 * 3600 * 1000).toISOString());
+    const taken = new Set((already ?? []).map((r) => r.fixture_id as string));
+    if (taken.size) query = query.not("id", "in", `(${[...taken].join(",")})`);
+  }
+
   const { data: fixtures } = await query
     .order("fixture_date")
     .limit(sessionCap(config.api_budget, maxFixtures));
@@ -791,7 +836,9 @@ export async function runDailyPicks({
   // the pipeline reads the same values for its cutoffs, so the number the engine
   // was told to stake against is the number we stake against.
   const vars = resolveEngineVariables(config);
-  const minConfidence = Number(vars.values.primarySlipFloor);
+  const minConfidence = Number(
+    isExtra ? vars.values.extraPicksFloor : vars.values.primarySlipFloor,
+  );
   const floor = Number(vars.values.absoluteMinimumFloor);
 
   // Pull the stats the engine is supposed to reason over.
@@ -907,6 +954,21 @@ ${briefs.join("\n")}`;
         cappedBy: p.anchorCapReason || null,
       }))
       .sort((a, b) => b.confidence - a.confidence);
+
+    if (isExtra) {
+      // Not a contractual event. Nobody is promised extra picks on a given day,
+      // and a pass sold for the board is unaffected by this pass finding
+      // nothing — so it must not raise the refund alert.
+      return {
+        generated: 0,
+        considered: picks.length,
+        tier,
+        note: "no extra picks cleared the floor",
+        fixtures: fixtures.length,
+        modelDurationMs,
+        durationMs: Date.now() - startedAt,
+      };
+    }
 
     await db.from("jobs").insert({
       kind: "engine_published_nothing",
@@ -1127,6 +1189,7 @@ ${briefs.join("\n")}`;
       mra_signal_home: p.mraSignalHome ?? null,
       mra_signal_away: p.mraSignalAway ?? null,
       filters_applied: p.filtersApplied ?? {},
+      tier,
       // The audit trail behind the number. Kept out of columns because nothing
       // queries it, it is read when someone asks why a pick scored what it did.
       local_model_output: {
@@ -1193,13 +1256,18 @@ ${briefs.join("\n")}`;
   // Written directly rather than via app.enqueue(): that helper lives in the
   // private schema PostgREST can't see, and the service role can insert here
   // regardless.
-  await db.from("jobs").insert({
-    kind: "daily_picks_ready",
-    payload: { count: written },
-  });
+  // Only the primary board is announced. Extra picks are bought rather than
+  // broadcast, and a "today's picks are ready" message for them would be
+  // telling everyone about something only buyers can see.
+  if (!isExtra) {
+    await db.from("jobs").insert({
+      kind: "daily_picks_ready",
+      payload: { count: written },
+    });
+  }
 
   // High-confidence calls get their own alert, matching the profile toggle.
-  const standout = qualifying.filter((p) => p.confidenceScore >= 9.5);
+  const standout = isExtra ? [] : qualifying.filter((p) => p.confidenceScore >= 9.5);
   if (standout.length) {
     await db.from("jobs").insert(
       standout.map((p) => {
@@ -1687,13 +1755,6 @@ export async function runFetchLineups() {
   return { checked: upcoming.length, asked: wanted.length, fetched: lineups.length, upserted };
 }
 
-/** HTML-escape. These are team names from a feed, not our own strings. */
-function esc(v: string): string {
-  return v.replace(/[&<>"']/g, (c) =>
-    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c] as string,
-  );
-}
-
 /**
  * The daily board as an email.
  *
@@ -1711,45 +1772,42 @@ function dailyPicksEmail(
   board: Array<{ fixture: string; kickoff: string | null; confidence: number }>,
   count: number,
 ): string {
+  const cell = "padding:10px 12px;border-bottom:1px solid #e6e8eb;font-size:14px;";
+  const head =
+    "padding:0 12px 8px;border-bottom:2px solid #111827;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:#6b7280;text-align:left;";
+
   const rows = board
     .map((b, i) => {
       const time = b.kickoff
         ? new Date(b.kickoff).toLocaleTimeString("en-GB", {
-            hour: "2-digit",
-            minute: "2-digit",
-            timeZone: "UTC",
+            hour: "2-digit", minute: "2-digit", timeZone: "UTC",
           })
         : "—";
-      const cell = "padding:10px 12px;border-bottom:1px solid #e6e8eb;font-size:14px;";
       return (
-        `<tr>` +
-        `<td style="${cell}color:#6b7280;">${i + 1}</td>` +
+        `<tr><td style="${cell}color:#6b7280;">${i + 1}</td>` +
         `<td style="${cell}font-weight:600;">${esc(b.fixture)}</td>` +
         `<td style="${cell}color:#6b7280;white-space:nowrap;">${time}</td>` +
-        `<td style="${cell}font-weight:600;text-align:right;">${Math.round(b.confidence * 10)}%</td>` +
-        `</tr>`
+        `<td style="${cell}font-weight:600;text-align:right;">${Math.round(b.confidence * 10)}%</td></tr>`
       );
     })
     .join("");
 
-  const head = "padding:10px 12px;border-bottom:2px solid #111827;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:#6b7280;text-align:left;";
-
-  return [
-    `<div style="font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#111827;max-width:600px;">`,
-    `<p style="font-size:16px;margin:0 0 4px;">${count} new pick${count === 1 ? "" : "s"} are live on Kicka.</p>`,
-    `<p style="font-size:13px;color:#6b7280;margin:0 0 20px;">Kickoff times are UTC. Confidence is the model's own score \u2014 the call and the reasoning are on the board.</p>`,
-    board.length
-      ? `<table role="presentation" cellpadding="0" cellspacing="0" style="border-collapse:collapse;width:100%;">` +
-        `<thead><tr>` +
-        `<th style="${head}">S/N</th><th style="${head}">Fixture</th>` +
-        `<th style="${head}">Time</th><th style="${head}text-align:right;">AI Confidence</th>` +
-        `</tr></thead><tbody>${rows}</tbody></table>`
-      : "",
-    `<p style="margin:28px 0 0;">`,
-    `<a href="${SITE_URL}" style="display:inline-block;background:#15803D;color:#ffffff;text-decoration:none;padding:13px 22px;border-radius:999px;font-size:15px;font-weight:600;">See Predictions on Kicka</a>`,
-    `</p>`,
-    `</div>`,
-  ].join("");
+  return renderEmail({
+    preheader: `${count} game${count === 1 ? "" : "s"} we like today`,
+    body:
+      para("Today's predictions are ready.") +
+      para(
+        `Our model went through the day's fixtures and settled on ${count} it likes enough to back. Here they are, with how sure it is about each one.`,
+      ) +
+      (board.length
+        ? `<table role="presentation" cellpadding="0" cellspacing="0" style="border-collapse:collapse;width:100%;margin-top:20px;">` +
+          `<thead><tr><th style="${head}">S/N</th><th style="${head}">Fixture</th>` +
+          `<th style="${head}">Time</th><th style="${head}text-align:right;">AI Confidence</th></tr></thead>` +
+          `<tbody>${rows}</tbody></table>`
+        : "") +
+      note("Kickoff times are UTC. The call itself, and why we made it, are on the site."),
+    cta: { label: "See Predictions on Kicka", href: SITE_URL },
+  });
 }
 
 /** Drain the jobs outbox. Called every minute by pg_cron. */
@@ -1932,7 +1990,7 @@ async function handleJob(
           const ok = await deliver("jobs/daily_picks_ready", "sms", () =>
             messaging.sendSms({
               to: phone,
-              message: `Kicka: ${job.payload.count} new picks are live.`,
+              message: `Kicka: today\u2019s predictions are ready \u2014 ${job.payload.count} game${Number(job.payload.count) === 1 ? "" : "s"} we like. See them at kicka.app`,
             }),
           );
           if (ok) sent++;
@@ -1965,8 +2023,17 @@ async function handleJob(
           const ok = await deliver("jobs/high_confidence_pick", "email", () =>
             messaging.sendEmail({
               to: email,
-              subject: `High-confidence call: ${p.home} v ${p.away}`,
-              html: `<p>${line}</p><p>${p.league}</p>`,
+              subject: `One we really like: ${p.home} v ${p.away}`,
+              html: renderEmail({
+                preheader: `${p.home} v ${p.away} — one of our strongest calls`,
+                body:
+                  para(`This one stands out.`) +
+                  para(
+                    `<strong>${esc(p.home)} v ${esc(p.away)}</strong> in the ${esc(p.league)} is among the most confident calls our model has made today.`,
+                  ) +
+                  note("Confident is not certain. Never stake more than you can afford to lose."),
+                cta: { label: "See the call", href: SITE_URL },
+              }),
             }),
           );
           if (ok) sent++;
@@ -2027,17 +2094,21 @@ async function handleJob(
         : "A leg of your slip";
 
       const verb = p.legStatus === "won" ? "won" : p.legStatus === "lost" ? "lost" : "was voided";
-      const line = `${match} ${verb}. ${p.legsSettled} of ${p.legsTotal} legs settled, your slip is still open.`;
+      const line = `${match} ${verb}. ${p.legsSettled} of ${p.legsTotal} games done, your slip is still live.`;
 
       if (pref.email_enabled && profile?.email) {
         await messaging.sendEmail({
           to: profile.email,
-          subject: `${match} ${verb}`,
-          html:
-            `<div style="font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#111827;max-width:600px;">` +
-            `<p style="font-size:16px;margin:0 0 16px;">${esc(line)}</p>` +
-            `<p style="margin:0;"><a href="${SITE_URL}/slips" style="display:inline-block;background:#15803D;color:#ffffff;text-decoration:none;padding:12px 20px;border-radius:999px;font-size:15px;font-weight:600;">View your slip</a></p>` +
-            `</div>`,
+          subject: `${match} ${verb} — your slip is still live`,
+          html: renderEmail({
+            preheader: `${p.legsSettled} of ${p.legsTotal} games done, still going`,
+            body:
+              para(`<strong>${esc(match)}</strong> ${verb}.`) +
+              para(
+                `That is ${p.legsSettled} of your ${p.legsTotal} games finished. Your slip is still in play — the rest have yet to be decided.`,
+              ),
+            cta: { label: "View your slip", href: `${SITE_URL}/slips` },
+          }),
         });
       }
       if (pref.sms_enabled && profile?.phone) {
@@ -2058,17 +2129,34 @@ async function handleJob(
 
       if (!pref) return;
       const profile = asOne(pref.profiles) as { email: string | null; phone: string | null } | null;
-      const line = `Your ${p.legs}-leg slip settled: ${p.status.toUpperCase()}`;
+      const games = `${p.legs} game${p.legs === 1 ? "" : "s"}`;
+      const headline =
+        p.status === "won"
+          ? `Your ${games} came in`
+          : p.status === "lost"
+            ? `Your ${games} did not come in`
+            : `Your slip was voided`;
+
+      const explain =
+        p.status === "won"
+          ? "Every game on it went your way."
+          : p.status === "lost"
+            ? "One of the games went against it, so the slip is settled."
+            : "The games on it were called off or voided, so nothing was risked.";
 
       if (pref.email_enabled && profile?.email) {
         await messaging.sendEmail({
           to: profile.email,
-          subject: line,
-          html: `<p>${line}</p>`,
+          subject: headline,
+          html: renderEmail({
+            preheader: explain,
+            body: para(`<strong>${headline}.</strong>`) + para(explain),
+            cta: { label: "See your slips", href: `${SITE_URL}/slips` },
+          }),
         });
       }
       if (pref.sms_enabled && profile?.phone) {
-        await messaging.sendSms({ to: profile.phone, message: `Kicka: ${line}` });
+        await messaging.sendSms({ to: profile.phone, message: `Kicka: ${headline}. ${explain}` });
       }
       return;
     }
@@ -2093,16 +2181,20 @@ async function handleJob(
 
       await messaging.sendEmail({
         to: profile.email,
-        subject: `Your Kicka receipt (${p.reference})`,
-        html:
-          `<p>Thanks, your payment went through.</p>` +
-          `<table style="border-collapse:collapse">` +
-          `<tr><td style="padding:4px 12px 4px 0">Item</td><td><strong>${what}</strong></td></tr>` +
-          `<tr><td style="padding:4px 12px 4px 0">Amount</td><td><strong>${p.currency} ${major}</strong> (about $${p.amountUsd})</td></tr>` +
-          `<tr><td style="padding:4px 12px 4px 0">Reference</td><td><code>${p.reference}</code></td></tr>` +
-          `<tr><td style="padding:4px 12px 4px 0">Date</td><td>${new Date().toUTCString()}</td></tr>` +
-          `</table>` +
-          `<p style="color:#666;font-size:13px">Keep this reference. You will need it if you ever ask us about this payment.</p>`,
+        subject: `Your Kicka receipt`,
+        html: renderEmail({
+          preheader: `${what} — ${p.currency} ${major}`,
+          body:
+            para("Thanks — your payment went through.") +
+            `<table role="presentation" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin-top:8px;">` +
+            `<tr><td style="padding:6px 16px 6px 0;color:#6b7280;">Item</td><td style="padding:6px 0;font-weight:600;">${esc(what)}</td></tr>` +
+            `<tr><td style="padding:6px 16px 6px 0;color:#6b7280;">Amount</td><td style="padding:6px 0;font-weight:600;">${p.currency} ${major}</td></tr>` +
+            `<tr><td style="padding:6px 16px 6px 0;color:#6b7280;">Reference</td><td style="padding:6px 0;font-family:monospace;">${esc(p.reference)}</td></tr>` +
+            `<tr><td style="padding:6px 16px 6px 0;color:#6b7280;">Date</td><td style="padding:6px 0;">${new Date().toUTCString()}</td></tr>` +
+            `</table>` +
+            note("Hold on to that reference — it is what we will ask for if you ever need us to look this payment up."),
+          cta: { label: "Go to Kicka", href: SITE_URL },
+        }),
       });
       return;
     }
@@ -2113,6 +2205,58 @@ async function handleJob(
       const p = job.payload as {
         date: string; considered: number; floor: number;
       };
+
+      /*
+       * This used to go to admins only, in their language.
+       *
+       *   "The engine ran and published nothing for 2026-08-30.
+       *    12 fixtures considered, none cleared the 6 floor."
+       *
+       * Meanwhile the people who had PAID for that day were told nothing at
+       * all. They opened the app, found an empty board, and were left to guess
+       * whether the product was broken or simply quiet. A day with no picks is
+       * the single most important day to say something on.
+       *
+       * So it goes to both, in different words: customers get what it means for
+       * them, admins keep the numbers they need to act on.
+       *
+       * WHAT IT DOES NOT SAY is that the pass rolls over. There is no rollover
+       * in this product — daily_passes is keyed to a date and nothing carries
+       * one forward — and the Terms promise a REFUND instead. Writing the
+       * friendlier promise would have been writing a lie into an apology.
+       */
+      const skipped = `Our model went through ${p.considered} game${p.considered === 1 ? "" : "s"} today and did not find one it was confident enough to back.`;
+
+      const { data: subscribers } = await db
+        .from("notification_preferences")
+        .select("email_enabled, profiles(email)")
+        .eq("daily_picks_alert", true)
+        .eq("email_enabled", true);
+
+      for (const r of subscribers ?? []) {
+        const email = (asOne(r.profiles) as { email: string | null } | null)?.email;
+        if (!email) continue;
+        await deliver("jobs/no_picks_today", "email", () =>
+          messaging.sendEmail({
+            to: email,
+            subject: "No predictions today",
+            html: renderEmail({
+              preheader: "We would rather skip a day than publish a weak call",
+              body:
+                para("There are no predictions today.") +
+                para(skipped) +
+                para(
+                  "We would rather sit a day out than put up picks we do not believe in. Publishing something for the sake of it is how a record stops meaning anything.",
+                ) +
+                note(
+                  "If you bought a pass for today, message us on WhatsApp below and we will refund it.",
+                ),
+              cta: { label: "See past results", href: `${SITE_URL}/history` },
+            }),
+          }),
+        );
+      }
+
       const { data: admins } = await db
         .from("profiles")
         .select("email")
@@ -2122,13 +2266,22 @@ async function handleJob(
         if (!a.email) continue;
         await messaging.sendEmail({
           to: a.email,
-          subject: `No predictions published for ${p.date}`,
-          html:
-            `<p>The engine ran and published nothing for ${p.date}.</p>` +
-            `<p>${p.considered} fixtures considered, none cleared the ${p.floor} floor.</p>` +
-            `<p>Passes sold for this day may be refundable under the Terms.</p>`,
+          subject: `No board published for ${p.date}`,
+          html: renderEmail({
+            preheader: `${p.considered} considered, none above ${p.floor}`,
+            body:
+              para(`Nothing was published for <strong>${esc(p.date)}</strong>.`) +
+              para(
+                `${p.considered} fixture${p.considered === 1 ? "" : "s"} were analysed and none scored above the ${p.floor} publish floor.`,
+              ) +
+              note(
+                "Subscribers have been told. Passes sold for this day are refundable under the Terms.",
+              ),
+            cta: { label: "Open the Office", href: `${SITE_URL}/office` },
+          }),
         });
       }
+
       return;
     }
 

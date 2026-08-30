@@ -61,7 +61,7 @@ async function selectFixtures(
   const chosen = new Set<string>();
   for (const leagueId of leagueIds) {
     /*
-     * Only fixtures that HAVE a prediction.
+     * Only fixtures carrying an EXTRA pick.
      *
      * This selected from `fixtures`, but what the customer is handed is
      * get_my_extra_picks — which returns PREDICTIONS for these fixture ids. The
@@ -69,12 +69,15 @@ async function selectFixtures(
      * different: on a live board today, 3 of 14 upcoming fixtures had a
      * prediction, and five of the eight leagues on offer had none at all.
      *
-     * Selling those charged $2 and delivered an empty list. The inner join is
-     * what makes the count sold and the count delivered the same number.
+     * Selling anything else charged $2 and delivered an empty list. The join
+     * also excludes fixtures the BOARD already covers: those are not for sale,
+     * because a day pass already unlocks them and charging again would be
+     * selling something the buyer can see for free.
      */
     const { data } = await db
       .from("fixtures")
-      .select("id, predictions!inner(id)")
+      .select("id, predictions!inner(id, tier)")
+      .eq("predictions.tier", "extra")
       .eq("league_id", leagueId)
       .eq("status", "scheduled")
       .gte("fixture_date", now.toISOString())

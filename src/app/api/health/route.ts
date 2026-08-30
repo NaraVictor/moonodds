@@ -6,12 +6,12 @@ export const dynamic = "force-dynamic";
 
 /**
  * Thirteen: fetch-fixtures, fetch-stats, fetch-lineups, fetch-injuries,
- * daily-picks, auto-grade, poll-live, clv-check, weekly-recalibration,
+ * daily-picks, extra-picks, auto-grade, poll-live, clv-check, weekly-recalibration,
  * reconcile-payments, drain-jobs, reap-stalled, and sweep-expired. Asserted as an exact count rather than
  * "more than zero", because the failure this catches is a rename or a partial
  * migration leaving a subset behind. Bump it when a job is added.
  */
-const EXPECTED_CRON_JOBS = 13;
+const EXPECTED_CRON_JOBS = 14;
 
 /**
  * Deployment readiness, as something you can actually look at.

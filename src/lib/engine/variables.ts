@@ -205,6 +205,7 @@ export const ENGINE_VARIABLES: readonly EngineVariable[] = [
   { key: "stakingUnit5Threshold", group: "staking", unit: "score", fallback: 9.0, note: "Five units." },
   { key: "absoluteMinimumFloor", group: "staking", unit: "score", fallback: 5.0, note: "Nothing below this is ever published." },
   { key: "primarySlipFloor", group: "staking", unit: "score", fallback: 7.0, note: "Cutoff the app applies after the engine has scored honestly." },
+  { key: "extraPicksFloor", group: "staking", unit: "score", fallback: 5.0, note: "Cutoff for the paid extra-picks pass over games the board skipped. Lower on purpose: these are the calls the main board would not carry." },
 ] as const;
 
 export const VARIABLES_BY_KEY: ReadonlyMap<string, EngineVariable> = new Map(
@@ -407,6 +408,16 @@ export function validateEngineVariables(values: Record<string, number | string>)
   // Publishing above where staking starts means the cutoff discards bands the
   // anchoring rules spent their effort calibrating.
   const floor = num(values.primarySlipFloor);
+
+  const extra = num(values.extraPicksFloor);
+  if (floor != null && extra != null && extra >= floor) {
+    warnings.push({
+      key: "extraPicksFloor",
+      value: extra,
+      message: `Extra picks are the calls the board would not carry, so this has to sit BELOW primarySlipFloor (${floor}). At ${extra} the second pass can only find what the first pass already published.`,
+    });
+  }
+
   const unit1 = num(values.stakingUnit1Threshold);
   if (floor != null && unit1 != null && floor > unit1 + 2) {
     warnings.push({
