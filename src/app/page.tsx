@@ -4,6 +4,7 @@ import { PicksHome } from "@/components/home/picks-home";
 import { SiteHeader } from "@/components/layout/site-header";
 import { SiteFooter } from "@/components/layout/site-footer";
 import { BottomNav } from "@/components/layout/bottom-nav";
+import { WhatsAppFab } from "@/components/layout/whatsapp-help";
 
 /**
  * The board carries the brand query, so it gets metadata written for it rather
@@ -45,6 +46,7 @@ export default async function HomePage() {
       <SiteHeader signedIn={!!user} />
       <PicksHome />
       <SiteFooter />
+      <WhatsAppFab />
       <BottomNav />
     </>
   );

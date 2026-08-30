@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { SiteHeader } from "@/components/layout/site-header";
 import { BottomNav } from "@/components/layout/bottom-nav";
+import { WhatsAppFab } from "@/components/layout/whatsapp-help";
 import { OfficeClient } from "./office-client";
 
 export const metadata = { title: "Office" };
@@ -45,6 +46,7 @@ export default async function OfficePage() {
     <>
       <SiteHeader signedIn />
       <OfficeClient adminName={profile?.display_name ?? user!.email ?? "admin"} />
+      <WhatsAppFab />
       <BottomNav />
     </>
   );

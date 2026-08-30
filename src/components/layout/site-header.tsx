@@ -7,6 +7,7 @@ import { LinkButton } from "@/components/ui/link-button";
 import { Chip } from "@heroui/react/chip";
 import { LogOut } from "@/components/ui/icons";
 import { Logo } from "@/components/brand/logo";
+import { WhatsAppIcon, WHATSAPP_URL } from "@/components/layout/whatsapp-help";
 import { SiteSearch } from "./site-search";
 import { useAccessState } from "@/lib/queries";
 import { signOut } from "@/lib/auth-actions";
@@ -84,6 +85,19 @@ export function SiteHeader({ signedIn }: { signedIn: boolean }) {
               Suspended
             </Chip>
           )}
+
+          {/* A way to reach a person, in the bar rather than buried in a footer.
+              Hidden on the narrowest screens, where the floating button covers
+              it and the header has no room to spare. */}
+          <a
+            href={WHATSAPP_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="press hidden items-center gap-1.5 rounded-full border border-border px-3 py-2 text-[13px] font-semibold text-muted transition-colors hover:text-foreground sm:inline-flex"
+          >
+            <WhatsAppIcon className="h-4 w-4 text-[#25D366]" />
+            Chat us
+          </a>
 
           {signedIn ? (
             <form action={signOut}>

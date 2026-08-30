@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { SiteHeader } from "@/components/layout/site-header";
 import { BottomNav } from "@/components/layout/bottom-nav";
+import { WhatsAppFab } from "@/components/layout/whatsapp-help";
 import { SlipsClient } from "./slips-client";
 
 export const metadata = {
@@ -23,6 +24,7 @@ export default async function SlipsPage() {
     <>
       <SiteHeader signedIn={!!user} />
       <SlipsClient />
+      <WhatsAppFab />
       <BottomNav />
     </>
   );

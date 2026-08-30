@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { SiteHeader } from "@/components/layout/site-header";
 import { SiteFooter } from "@/components/layout/site-footer";
 import { BottomNav } from "@/components/layout/bottom-nav";
+import { WhatsAppFab } from "@/components/layout/whatsapp-help";
 import { PredictionDetail } from "@/components/predictions/prediction-detail";
 import { fetchPredictionMeta, fixtureHeadline } from "./meta";
 
@@ -176,6 +177,7 @@ export default async function PredictionPage({
       <SiteHeader signedIn={!!user} />
       <PredictionDetail id={id} />
       <SiteFooter />
+      <WhatsAppFab />
       <BottomNav />
     </>
   );

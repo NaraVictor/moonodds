@@ -2598,13 +2598,18 @@ const GROUP_ORDER: VariableGroup[] = [
  */
 function PublishFloor({
   config,
+  variable = "primarySlipFloor",
+  label = "Primary floor",
 }: {
   config: Record<string, unknown> & { id: string };
+  /** Which cutoff this card edits. Both live in confidence_thresholds. */
+  variable?: "primarySlipFloor" | "extraPicksFloor";
+  label?: string;
 }) {
   const action = useOfficeAction();
   const live = Number(
-    (config.confidence_thresholds as Record<string, number> | undefined)
-      ?.primarySlipFloor ?? 7,
+    (config.confidence_thresholds as Record<string, number> | undefined)?.[variable] ??
+      (variable === "primarySlipFloor" ? 7 : 5),
   );
   const [draft, setDraft] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -2620,7 +2625,7 @@ function PublishFloor({
       await action.mutateAsync({
         action: "updateVariables",
         configId: config.id,
-        values: { primarySlipFloor: parsed },
+        values: { [variable]: parsed },
       });
       setDraft(null);
     } catch (e) {
@@ -2630,12 +2635,12 @@ function PublishFloor({
 
   return (
     <div className="rounded-2xl bg-surface-secondary p-4">
-      <label htmlFor="publish-floor" className="label">
-        Primary floor
+      <label htmlFor={`floor-${variable}`} className="label">
+        {label}
       </label>
       <div className="mt-1.5 flex items-center gap-2">
         <input
-          id="publish-floor"
+          id={`floor-${variable}`}
           type="number"
           step="0.1"
           min="0"
@@ -2671,8 +2676,10 @@ function PublishFloor({
         {!valid
           ? "Between 0 and 10."
           : dirty
-            ? `Picks scoring under ${parsed} will not publish. Currently ${live}.`
-            : "Below this, the engine's call is not published."}
+            ? `Currently ${live}.`
+            : variable === "primarySlipFloor"
+              ? "Below this, a call does not reach the free board."
+              : "Below the board's floor, a call becomes a paid extra pick instead."}
       </p>
       {error && <ActionError message={error} />}
     </div>
@@ -2934,9 +2941,9 @@ function EnginePanel() {
         */}
         <div className="grid gap-3 sm:grid-cols-3">
           <PublishFloor config={config} />
+          <PublishFloor config={config} variable="extraPicksFloor" label="Extra picks floor" />
           {[
             ["Absolute min", config.confidence_thresholds?.absoluteMinimumFloor],
-            ["Batch size", config.self_tuning?.batchSize],
           ].map(([k, v]) => (
             <div key={String(k)} className="rounded-2xl bg-surface-secondary p-4">
               <p className="label">{k}</p>

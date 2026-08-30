@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { SiteHeader } from "@/components/layout/site-header";
 import { SiteFooter } from "@/components/layout/site-footer";
 import { BottomNav } from "@/components/layout/bottom-nav";
+import { WhatsAppFab } from "@/components/layout/whatsapp-help";
 import { PageShell, Section } from "@/components/legal/page-shell";
 
 export const metadata: Metadata = {
@@ -95,6 +96,7 @@ export default async function AboutPage() {
         </Section>
       </PageShell>
       <SiteFooter />
+      <WhatsAppFab />
       <BottomNav />
     </>
   );

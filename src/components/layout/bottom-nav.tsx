@@ -30,6 +30,26 @@ export function BottomNav() {
   const pathname = usePathname();
 
   return (
+    <>
+      {/*
+        Reserved space, so the last card is not sitting under the bar.
+        
+        The nav is `fixed`, which takes it out of flow entirely — the page ends
+        where its content ends and the final row of anything is covered by 4rem
+        of frosted glass. Every page had to remember its own bottom padding, and
+        none of them did.
+        
+        The spacer lives HERE rather than on <body> for two reasons: the nav is
+        mounted per page, so body padding would leave a gap on the pages without
+        it; and a spacer beside the thing it compensates for cannot drift out of
+        step with it. h-16 is the nav's own link height, and the safe-area inset
+        matches what the nav adds for the home indicator.
+      */}
+      <div
+        aria-hidden
+        className="h-16 md:hidden"
+        style={{ marginBottom: "env(safe-area-inset-bottom)" }}
+      />
     <nav
       aria-label="Primary"
       className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-surface/90 backdrop-blur-xl md:hidden"
@@ -67,5 +87,6 @@ export function BottomNav() {
         })}
       </ul>
     </nav>
+    </>
   );
 }

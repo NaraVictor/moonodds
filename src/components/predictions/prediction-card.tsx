@@ -7,6 +7,7 @@ import { ConfidenceRing } from "./confidence-ring";
 import { TeamCrest } from "./team-crest";
 import { isUnlocked, type Pick, type UnlockedPick } from "@/lib/types";
 import { formatMarket, matchClock, teamName } from "@/lib/format";
+import { PASS_PRICE_USD } from "@/lib/pricing";
 
 /**
  * The prediction card.
@@ -249,14 +250,44 @@ export function PredictionCard({
             size={54}
           />
         ) : (
-          <span
-            className="flex h-[54px] w-[54px] flex-none items-center justify-center rounded-full"
-            style={{
-              background: feature ? "rgba(255,255,255,0.08)" : "var(--accent-wash)",
-              color: feature ? "#fff" : "var(--accent)",
-            }}
-          >
-            <Lock className="h-4 w-4" strokeWidth={2.5} />
+          /*
+            A score behind frosted glass, not an empty padlock.
+            
+            The lock alone read as "nothing here" — a locked card looked like a
+            card that had failed to load, which is why people scrolled past
+            rather than tapping. A blurred ring reads as withheld: there is
+            clearly a value, and clearly you cannot have it yet.
+            
+            THE BLUR IS DECORATION, NOT A CONTROL. There is no real number under
+            it — confidence_score is not in the locked payload and must never be
+            added to it, because CSS blur is readable by anyone who opens the
+            inspector. The arc below is a fixed placeholder, so it reveals
+            nothing about the actual call.
+          */
+          <span className="relative flex h-[54px] w-[54px] flex-none items-center justify-center">
+            <span
+              aria-hidden
+              className="absolute inset-0 rounded-full blur-[5px]"
+              style={{
+                background: `conic-gradient(${
+                  feature ? "rgba(255,255,255,0.55)" : "var(--accent)"
+                } 0turn 0.62turn, ${
+                  feature ? "rgba(255,255,255,0.10)" : "var(--accent-wash)"
+                } 0.62turn 1turn)`,
+                mask: "radial-gradient(circle, transparent 58%, #000 59%)",
+                WebkitMask: "radial-gradient(circle, transparent 58%, #000 59%)",
+              }}
+            />
+            <span
+              className="relative flex h-9 w-9 items-center justify-center rounded-full"
+              style={{
+                background: feature ? "rgba(255,255,255,0.12)" : "var(--surface)",
+                color: feature ? "#fff" : "var(--accent)",
+              }}
+            >
+              <Lock className="h-3.5 w-3.5" strokeWidth={2.5} />
+            </span>
+            <span className="sr-only">Confidence hidden until unlocked</span>
           </span>
         )}
       </div>
@@ -276,16 +307,29 @@ export function PredictionCard({
             style={{ color: subtleInk }}
           >
             Summary
-            <ArrowUpRight className="h-3.5 w-3.5 opacity-0 transition-opacity duration-200 group-hover:opacity-100" />
+            {/* Visible at rest, brighter on hover. It was opacity-0 until hover,
+                which on a phone means never — and the arrow is the only thing
+                on the card saying it leads somewhere. */}
+            <ArrowUpRight className="h-3.5 w-3.5 opacity-50 transition-opacity duration-200 group-hover:opacity-100" />
           </button>
         ) : (
+          /*
+            Filled, not a tinted word. On a locked card this is the only thing
+            worth pressing, and as plain accent text it carried the same weight
+            as "Summary" on an unlocked one — so the two cards looked equally
+            finished and neither invited a tap. It also names the price, because
+            "Unlock" alone asks the reader to find out what it costs.
+          */
           <Link
             href="/checkout/day-pass"
             className="press flex flex-1 items-center justify-center gap-1.5 px-4 py-3.5 text-[12px] font-semibold"
-            style={{ color: feature ? "#fff" : "var(--accent)" }}
+            style={{
+              background: feature ? "rgba(255,255,255,0.14)" : "var(--accent)",
+              color: feature ? "#fff" : "var(--accent-foreground)",
+            }}
           >
             <Lock className="h-3.5 w-3.5" />
-            Unlock
+            Unlock today · ${PASS_PRICE_USD}
           </Link>
         )}
 

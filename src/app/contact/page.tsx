@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { SiteHeader } from "@/components/layout/site-header";
 import { SiteFooter } from "@/components/layout/site-footer";
 import { BottomNav } from "@/components/layout/bottom-nav";
+import { WhatsAppFab } from "@/components/layout/whatsapp-help";
 import { PageShell, Section } from "@/components/legal/page-shell";
 import { Mail, MessageSquare, ShieldAlert } from "@/components/ui/icons";
 
@@ -117,6 +118,7 @@ export default async function ContactPage() {
         </Section>
       </PageShell>
       <SiteFooter />
+      <WhatsAppFab />
       <BottomNav />
     </>
   );

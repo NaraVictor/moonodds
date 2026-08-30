@@ -147,62 +147,32 @@ function StatsPanel() {
         </p>
       )}
 
-      {stats.calibration?.length > 0 && (
-        <div className="mt-3 rounded-[1.25rem] border border-border bg-surface p-5">
-          <h2 className="text-[13px] font-semibold">Is the confidence honest?</h2>
-          <p className="mt-1 text-[12px] leading-relaxed text-muted">
-            Each band compares what the engine claimed against what actually
-            landed. A well-calibrated model tracks the diagonal: a 90% call
-            should win about nine times in ten.
-          </p>
-
-          <ul className="mt-4 space-y-3">
-            {stats.calibration.map((c) => {
-              const gap = c.actualRate - c.impliedRate;
-              return (
-                <li key={c.band} className="flex items-center gap-3">
-                  <span className="numeral w-14 flex-none text-[12px]">
-                    {c.band}
-                  </span>
-                  <span className="relative h-2 flex-1 overflow-hidden rounded-full bg-surface-secondary">
-                    <span
-                      className="absolute inset-y-0 left-0 rounded-full opacity-40"
-                      style={{
-                        width: `${Math.round(c.impliedRate * 100)}%`,
-                        background: "var(--muted)",
-                      }}
-                    />
-                    <span
-                      className="absolute inset-y-0 left-0 rounded-full"
-                      style={{
-                        width: `${Math.round(c.actualRate * 100)}%`,
-                        background:
-                          gap >= -0.05 ? "var(--success)" : "var(--danger)",
-                      }}
-                    />
-                  </span>
-                  <span className="numeral w-24 flex-none text-right text-[11px] text-muted">
-                    said {formatPercent(c.impliedRate, 0)}
-                  </span>
-                  <span className="numeral w-20 flex-none text-right text-[12px] font-semibold">
-                    got {formatPercent(c.actualRate, 0)}
-                  </span>
-                  <span className="numeral w-10 flex-none text-right text-[11px] text-muted">
-                    {c.settled}
-                  </span>
-                </li>
-              );
-            })}
-          </ul>
-        </div>
-      )}
 
       <ClvPanel />
 
+      {/*
+        Behind a press, because it is reference rather than headline.
+        
+        Most people reading this page want one number and the list of results.
+        The market breakdown is what you open when that number has raised a
+        question — so it sits closed, says how much is in it, and opens on
+        demand. <details> rather than state: it works before hydration and the
+        browser handles the semantics.
+      */}
       {stats.byMarket.length > 0 && (
-        <div className="mt-3 rounded-[1.25rem] border border-border bg-surface p-5">
-          <div className="mb-4 flex items-baseline justify-between gap-3">
-            <h2 className="text-[13px] font-semibold">By market</h2>
+        <details className="group mt-3 rounded-[1.25rem] border border-border bg-surface p-5">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-3">
+            <span className="text-[13px] font-semibold">
+              By market
+              <span className="ml-2 font-normal text-muted">
+                {stats.byMarket.length} market{stats.byMarket.length === 1 ? "" : "s"}
+              </span>
+            </span>
+            <span className="text-[11px] font-semibold text-muted transition-transform group-open:rotate-180">
+              ▾
+            </span>
+          </summary>
+          <div className="mb-4 mt-4 flex items-baseline justify-between gap-3">
             {best && (
               <p className="text-[11px] text-muted">
                 Strongest:{" "}
@@ -244,7 +214,7 @@ function StatsPanel() {
             the price the pick was taken at. Voids are excluded from win rate: a
             refunded stake is neither a win nor a loss.
           </p>
-        </div>
+        </details>
       )}
     </section>
   );

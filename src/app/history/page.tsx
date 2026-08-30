@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { createClient } from "@/lib/supabase/server";
 import { SiteHeader } from "@/components/layout/site-header";
 import { BottomNav } from "@/components/layout/bottom-nav";
+import { WhatsAppFab } from "@/components/layout/whatsapp-help";
 import { HistoryClient } from "./history-client";
 
 const DESCRIPTION =
@@ -44,6 +45,7 @@ export default async function HistoryPage() {
     <>
       <SiteHeader signedIn={!!user} />
       <HistoryClient />
+      <WhatsAppFab />
       <BottomNav />
     </>
   );
