@@ -60,9 +60,21 @@ async function selectFixtures(
   // the charge must not double.
   const chosen = new Set<string>();
   for (const leagueId of leagueIds) {
+    /*
+     * Only fixtures that HAVE a prediction.
+     *
+     * This selected from `fixtures`, but what the customer is handed is
+     * get_my_extra_picks — which returns PREDICTIONS for these fixture ids. The
+     * engine publishes a fraction of the board, so the two are routinely
+     * different: on a live board today, 3 of 14 upcoming fixtures had a
+     * prediction, and five of the eight leagues on offer had none at all.
+     *
+     * Selling those charged $2 and delivered an empty list. The inner join is
+     * what makes the count sold and the count delivered the same number.
+     */
     const { data } = await db
       .from("fixtures")
-      .select("id")
+      .select("id, predictions!inner(id)")
       .eq("league_id", leagueId)
       .eq("status", "scheduled")
       .gte("fixture_date", now.toISOString())
@@ -118,7 +130,7 @@ export async function POST(request: Request) {
   const fixtureIds = await selectFixtures(db, parsed.data.leagueIds);
   if (!fixtureIds.length) {
     return NextResponse.json(
-      { error: "No upcoming games left in those leagues today." },
+      { error: "No predicted games left in those leagues today." },
       { status: 400 },
     );
   }

@@ -2,6 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createClient } from "./supabase/client";
+import { EXTRA_PICK_GAMES_PER_LEAGUE } from "./pricing";
 import { utcDayWindow } from "./format";
 import type {
   AccessState,
@@ -285,44 +286,34 @@ export function useExtraPicks(enabled: boolean) {
   });
 }
 
-/** Leagues with upcoming games today, for the extra-picks league picker. */
+/**
+ * Leagues worth buying, for the extra-picks picker.
+ *
+ * Counts PREDICTIONS, not fixtures. This used to query `fixtures` directly and
+ * offer a league five games when the engine had published one for it — and on
+ * a live board today, five of eight leagues had no prediction at all, so the
+ * picker was offering to sell nothing. The gap is not an edge case: the engine
+ * publishes a fraction of the board by design.
+ *
+ * It has to be an RPC because predictions are default-deny under RLS, so no
+ * query the browser can make will count them. get_extra_pick_leagues also drops
+ * anything already unlocked today, so the picker never charges twice.
+ */
 export function useLeagueOptions(enabled: boolean) {
-  const { startISO, endISO } = utcDayWindow();
-
   return useQuery({
     queryKey: keys.leagueOptions,
     enabled,
     queryFn: async (): Promise<LeagueOption[]> => {
       const supabase = createClient();
-      const { data, error } = await supabase
-        .from("fixtures")
-        .select("league_id, leagues(id, name, country, logo)")
-        .gte("fixture_date", startISO)
-        .lt("fixture_date", endISO)
-        .eq("status", "scheduled");
-
+      const { data, error } = await supabase.rpc("get_extra_pick_leagues");
       if (error) throw error;
 
-      const byLeague = new Map<string, LeagueOption>();
-      for (const row of (data ?? []) as unknown as Array<{
-        league_id: string;
-        leagues: { name: string; country: string; logo: string | null } | null;
-      }>) {
-        const existing = byLeague.get(row.league_id);
-        if (existing) {
-          existing.availableGames = Math.min(existing.availableGames + 1, 3);
-          continue;
-        }
-        byLeague.set(row.league_id, {
-          leagueId: row.league_id,
-          name: row.leagues?.name ?? "Unknown league",
-          country: row.leagues?.country ?? "",
-          logo: row.leagues?.logo ?? null,
-          availableGames: 1,
-        });
-      }
-
-      return [...byLeague.values()].sort((a, b) => a.name.localeCompare(b.name));
+      // Capped here rather than in SQL so the per-league limit stays a single
+      // constant in the app. It was hardcoded 3 while the constant said 5.
+      return ((data as LeagueOption[]) ?? []).map((l) => ({
+        ...l,
+        availableGames: Math.min(l.availableGames, EXTRA_PICK_GAMES_PER_LEAGUE),
+      }));
     },
   });
 }
