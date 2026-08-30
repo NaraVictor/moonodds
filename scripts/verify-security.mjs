@@ -468,28 +468,24 @@ async function main() {
   }
 
 
-  // --- 8. Landing preview (the paywall change) ---------------------------
+  // --- 8. The landing preview is gone -----------------------------------
   {
+    /*
+     * It was granted to anon and called by nothing in the application — a
+     * public endpoint handing out a full pick and a count of the day's board,
+     * kept alive by this test and nothing else. It also had no tier filter, so
+     * its counts would have included the paid basket.
+     *
+     * Asserting it is ABSENT rather than deleting the check: a dropped
+     * function is easy to recreate by restoring an old migration, and this is
+     * what would catch that.
+     */
     const anon = anonClient();
-    const { data } = await anon.rpc("get_landing_preview");
-    const hasOne = data?.preview != null;
+    const { error } = await anon.rpc("get_landing_preview");
     check(
-      "guest landing preview returns exactly ONE full pick",
-      hasOne && typeof data.lockedCount === "number",
-      `preview=${hasOne ? "1" : "0"} locked=${data?.lockedCount} total=${data?.totalToday}`,
-    );
-
-    // The whole point: locked picks must not be in the payload at all.
-    // Count PICKS, not ids, every pick carries a nested fixture id too, so
-    // counting uuids double-counts the single preview. predictedValue appears
-    // exactly once per prediction.
-    const blob = JSON.stringify(data ?? {});
-    const picksInPayload = (blob.match(/"predictedValue":/g) ?? []).length;
-    const reasoningInPayload = (blob.match(/"reasoning":/g) ?? []).length;
-    check(
-      "locked predictions are NOT in the landing payload",
-      picksInPayload === 1 && reasoningInPayload === 1,
-      `picks in payload=${picksInPayload}, reasoning bodies=${reasoningInPayload} (1 each = preview only, ${data?.lockedCount} locked withheld)`,
+      "get_landing_preview no longer exists",
+      !!error,
+      error ? `gone: ${error.code ?? error.message}` : "STILL CALLABLE by anon",
     );
   }
 

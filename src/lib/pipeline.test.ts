@@ -580,3 +580,54 @@ describe("assignTiers", () => {
     expect([...out.values()]).toEqual(["extra", "extra"]);
   });
 });
+
+/**
+ * The board must not inflate as the day runs.
+ *
+ * The failure this pins: a settled or in-play pick used to drop out of the
+ * ranking entirely, which freed its board slot and let the next engine pass
+ * promote an extra into it. Over a day that turned a board of fifteen into a
+ * board of twenty, and turned unsold paid inventory into free content.
+ */
+describe("assignTiers, over a day in progress", () => {
+  const pick = (id: string, confidence: number, tier = "primary") => ({
+    id,
+    confidence,
+    tier,
+  });
+
+  it("keeps the board at its size when earlier picks have settled", () => {
+    // Three board picks already graded, two slots left, four extras waiting.
+    const day = [
+      pick("done1", 9.9),
+      pick("done2", 9.8),
+      pick("done3", 9.7),
+      pick("e1", 7.4, "extra"),
+      pick("e2", 7.3, "extra"),
+      pick("e3", 7.2, "extra"),
+      pick("e4", 7.1, "extra"),
+    ];
+    const settledIds = new Set(["done1", "done2", "done3"]);
+    const out = assignTiers(day, 5, settledIds);
+
+    const board = [...out.entries()].filter(([, t]) => t === "primary");
+    expect(board).toHaveLength(5);
+    // The two strongest extras are promoted, and no more than two.
+    expect(out.get("e1")).toBe("primary");
+    expect(out.get("e2")).toBe("primary");
+    expect(out.get("e3")).toBe("extra");
+    expect(out.get("e4")).toBe("extra");
+  });
+
+  it("promotes nothing when the settled picks already fill the board", () => {
+    const day = [
+      pick("done1", 9.9),
+      pick("done2", 9.8),
+      pick("e1", 7.4, "extra"),
+      pick("e2", 7.3, "extra"),
+    ];
+    const out = assignTiers(day, 2, new Set(["done1", "done2"]));
+    expect(out.get("e1")).toBe("extra");
+    expect(out.get("e2")).toBe("extra");
+  });
+});

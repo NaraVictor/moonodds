@@ -72,13 +72,34 @@ function OutcomeBadge({ status }: { status: Pick["status"] }) {
   );
 }
 
-function StatsPanel() {
-  const { data: stats, isPending } = useHistoryStats();
+function StatsPanel({ filters }: { filters: HistoryFilters }) {
+  const { data: stats, isPending } = useHistoryStats(filters);
+
+  // Only league and market reach the numbers. See useHistoryStats.
+  const narrowing = [filters.league, filters.market].filter(Boolean) as string[];
+  const narrowed = narrowing.length > 0;
 
   if (isPending) {
     return <div className="shimmer mb-8 h-40 rounded-[1.5rem] bg-surface" />;
   }
-  if (!stats || stats.settled === 0) return null;
+  /*
+   * A filter that matches nothing gets a sentence, not a blank.
+   *
+   * Returning null here was right when these numbers covered the whole record
+   * — no record, nothing to say. Now that they follow the filters, the same
+   * null means the panel silently disappears when someone picks a league with
+   * no settled calls, and the page looks broken rather than empty.
+   */
+  if (!stats) return null;
+  if (stats.settled === 0) {
+    return narrowed ? (
+      <section aria-label="Historical performance" className="mb-8">
+        <p className="rounded-[1.25rem] border border-border bg-surface p-5 text-[13px] text-muted">
+          Nothing has settled in this view yet.
+        </p>
+      </section>
+    ) : null;
+  }
 
   const tiles: {
     label: string;
@@ -136,6 +157,25 @@ function StatsPanel() {
           </div>
         ))}
       </dl>
+
+      {/*
+        Says what the numbers are OF.
+
+        They follow the league and market filters now, so a headline that drops
+        from 81% to 64% needs to name the reason on the same screen — otherwise
+        it reads as the record having changed rather than the question.
+      */}
+      {narrowed && (
+        <p className="mt-3 text-[12px] leading-relaxed">
+          <span className="font-semibold">{narrowing.join(" · ")}</span>
+          <span className="text-muted">
+            {" "}— {stats.settled} settled call{stats.settled === 1 ? "" : "s"}.
+            {filters.outcome
+              ? " Rates cover every outcome; the tabs filter the list below."
+              : ""}
+          </span>
+        </p>
+      )}
 
       {stats.winRateInterval?.low != null && (
         <p className="mt-3 text-[11px] leading-relaxed text-muted">
@@ -303,7 +343,7 @@ export function HistoryClient() {
         </p>
       </header>
 
-      <StatsPanel />
+      <StatsPanel filters={filters} />
 
       {/* Filters. Outcome first because it is the one people reach for when
           they are checking whether the losses are being shown. */}

@@ -461,15 +461,37 @@ export function usePredictionHistory(page: number, filters: HistoryFilters) {
   });
 }
 
-export function useHistoryStats() {
+/**
+ * The headline numbers, over the same records the list is showing.
+ *
+ * They used to describe the whole record regardless of the filters, so picking
+ * Serie A left an 80% win rate sitting above eleven Serie A rows it had not
+ * been computed from.
+ *
+ * Outcome is deliberately NOT passed. Filtering to "Won" and then computing a
+ * win rate returns 100% with a confidence interval around it — a tautology
+ * wearing the clothes of a statistic. The outcome tabs stay a view on the
+ * list, and the panel says so.
+ */
+export function useHistoryStats(filters: HistoryFilters = {}) {
+  const league = filters.league ?? null;
+  const market = filters.market ?? null;
+
   return useQuery({
-    queryKey: ["history", "stats"],
+    queryKey: ["history", "stats", league, market],
     queryFn: async (): Promise<HistoryStats> => {
       const supabase = createClient();
-      const { data, error } = await supabase.rpc("get_history_stats");
+      const { data, error } = await supabase.rpc("get_history_stats", {
+        p_league: league,
+        p_market: market,
+      });
       if (error) throw error;
       return data as HistoryStats;
     },
+    // Keeps the previous numbers on screen while the next set loads, so
+    // changing a filter does not collapse the panel to a shimmer and push the
+    // list up the page under the reader's cursor.
+    placeholderData: (prev) => prev,
   });
 }
 

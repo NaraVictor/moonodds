@@ -1305,11 +1305,16 @@ ${briefs.join("\n")}`;
    * board is supposed to be the day's best `dailyBoardSize`, not the first
    * pass's best.
    */
+  const startOfDay = new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
+  );
+
+  // The calendar day, whatever each fixture's status. Filtering to scheduled
+  // and still-upcoming is what let the board inflate — see settleTiers.
   const { data: dayFixtures } = await db
     .from("fixtures")
     .select("id")
-    .eq("status", "scheduled")
-    .gte("fixture_date", now.toISOString())
+    .gte("fixture_date", startOfDay.toISOString())
     .lt("fixture_date", endOfDay.toISOString());
 
   const dayFixtureIds = (dayFixtures ?? []).map((f) => f.id as string);
@@ -2464,11 +2469,25 @@ async function settleTiers(
 ): Promise<number> {
   if (!fixtureIds.length) return 0;
 
+  /*
+   * Every pick on the day, not just the ones still to kick off.
+   *
+   * This read `status = 'pending'` over fixtures that had not started, and
+   * both halves of that leaked board slots as the day wore on. A pick whose
+   * match kicked off, or which had already been graded, dropped out of the
+   * ranking — so the count of board picks fell, slots opened, and the next
+   * pass promoted extras to fill them. By evening a fifteen-pick board could
+   * be showing twenty, and an unsold extra somebody could have paid for at
+   * noon was free content by kickoff.
+   *
+   * So the whole day is loaded and ranked together. Anything not pending is
+   * frozen below: it keeps the tier it has AND holds its slot, which is the
+   * part that stops the board inflating.
+   */
   const { data: rows } = await db
     .from("predictions")
     .select("id, fixture_id, tier, confidence_score, status")
-    .in("fixture_id", fixtureIds)
-    .eq("status", "pending");
+    .in("fixture_id", fixtureIds);
 
   if (!rows?.length) return 0;
 
@@ -2489,6 +2508,12 @@ async function settleTiers(
     .in("prediction_id", ids);
 
   const frozen = new Set((legs ?? []).map((l) => l.prediction_id as string));
+
+  // Graded, voided or flagged. Its tier is in the published record, so moving
+  // it would edit a number the site has already shown.
+  for (const row of rows) {
+    if (row.status !== "pending") frozen.add(row.id as string);
+  }
 
   const { data: orders } = await db
     .from("extra_pick_orders")
