@@ -5,6 +5,7 @@ import { z } from "zod";
 import { requireSuperAdmin } from "@/lib/api-auth";
 import { createServiceClient } from "@/lib/supabase/server";
 import { getProviders } from "@/lib/providers";
+import { note, p, renderEmail } from "@/lib/email-layout";
 
 /**
  * Confirmation code for system-prompt changes.
@@ -115,8 +116,23 @@ export async function POST(request: Request) {
   await messaging.sendEmail({
     to: email,
     subject: "Kicka, confirm the system prompt change",
-    html: `<p>Your confirmation code is <strong style="font-size:24px;letter-spacing:4px">${code}</strong></p>
-           <p>It expires in ${TTL_MINUTES} minutes. If you didn't request this, ignore this email, nothing has changed.</p>`,
+    // Through the shell like everything else. This was the last message still
+    // shipping two bare <p> tags — no wordmark, no footer, no way back to the
+    // site — which on a security email is the wrong impression to give: an
+    // unbranded code in a plain message is exactly what a phishing attempt
+    // looks like.
+    html: renderEmail({
+      preheader: `Your confirmation code expires in ${TTL_MINUTES} minutes.`,
+      body:
+        p("Someone asked to change the engine's system prompt. Here is the code to confirm it:") +
+        `<p style="margin:0 0 16px;font-size:32px;font-weight:800;letter-spacing:8px;color:#111827;">${code}</p>` +
+        note(
+          `It expires in ${TTL_MINUTES} minutes and works once. If this was not you, ignore this email — nothing has changed, and nobody can apply the change without this code.`,
+        ),
+      // No call to action. The code is used in the Office, and a button in a
+      // security email trains people to click buttons in security emails.
+      signOff: false,
+    }),
   });
 
   const masked = email.replace(/^(.{2}).*(@.*)$/, "$1***$2");

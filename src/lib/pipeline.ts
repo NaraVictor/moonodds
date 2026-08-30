@@ -1856,7 +1856,7 @@ export async function runFetchLineups() {
  * the tease and the market and selection stay behind the paywall — which is
  * also why the button is worth pressing.
  */
-function dailyPicksEmail(
+export function dailyPicksEmail(
   board: Array<{ fixture: string; kickoff: string | null; confidence: number }>,
   count: number,
 ): string {
@@ -2036,6 +2036,12 @@ async function handleJob(
         .select(
           "confidence_score, fixtures!inner(fixture_date, home:teams!fixtures_home_team_id_fkey(name), away:teams!fixtures_away_team_id_fkey(name))",
         )
+        // The BOARD, which is what this email is about. Without the tier
+        // filter the table listed the paid basket too, so the sentence above
+        // it said fifteen and the rows under it ran to thirty — and the extra
+        // rows advertised games a reader cannot see without buying them.
+        .eq("tier", "primary")
+        .eq("status", "pending")
         .gte("fixtures.fixture_date", startISO)
         .lt("fixtures.fixture_date", endISO)
         .order("confidence_score", { ascending: false })
