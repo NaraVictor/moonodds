@@ -205,7 +205,15 @@ export const ENGINE_VARIABLES: readonly EngineVariable[] = [
   { key: "stakingUnit5Threshold", group: "staking", unit: "score", fallback: 9.0, note: "Five units." },
   { key: "absoluteMinimumFloor", group: "staking", unit: "score", fallback: 5.0, note: "Nothing below this is ever published." },
   { key: "primarySlipFloor", group: "staking", unit: "score", fallback: 7.0, note: "Cutoff the app applies after the engine has scored honestly." },
-  { key: "extraPicksFloor", group: "staking", unit: "score", fallback: 5.0, note: "Cutoff for the paid extra-picks pass over games the board skipped. Lower on purpose: these are the calls the main board would not carry." },
+
+  // --- How the day's picks are split ------------------------------------
+  //
+  // One floor decides what is publishable at all. These two decide where a
+  // publishable pick goes: the strongest `dailyBoardSize` become the free
+  // board, everything else above the floor becomes the paid extras basket,
+  // and a single unlock hands over `extraPicksPerUnlock` of them.
+  { key: "dailyBoardSize", group: "staking", unit: "count", fallback: 15, note: "How many picks the free board shows. The rest of the day's qualifying picks become extras." },
+  { key: "extraPicksPerUnlock", group: "staking", unit: "count", fallback: 10, note: "Games one extras unlock hands over, drawn from the basket." },
 ] as const;
 
 export const VARIABLES_BY_KEY: ReadonlyMap<string, EngineVariable> = new Map(
@@ -409,12 +417,23 @@ export function validateEngineVariables(values: Record<string, number | string>)
   // anchoring rules spent their effort calibrating.
   const floor = num(values.primarySlipFloor);
 
-  const extra = num(values.extraPicksFloor);
-  if (floor != null && extra != null && extra >= floor) {
+  // A board bigger than a day's card is not an error, but it does mean the
+  // extras basket can never fill, and the add-on quietly stops existing.
+  const board = num(values.dailyBoardSize);
+  if (board != null && board < 1) {
     warnings.push({
-      key: "extraPicksFloor",
-      value: extra,
-      message: `Extra picks are the calls the board would not carry, so this has to sit BELOW primarySlipFloor (${floor}). At ${extra} the second pass can only find what the first pass already published.`,
+      key: "dailyBoardSize",
+      value: board,
+      message: "The free board would show nothing. Every qualifying pick would go behind the paywall.",
+    });
+  }
+
+  const unlock = num(values.extraPicksPerUnlock);
+  if (unlock != null && unlock < 1) {
+    warnings.push({
+      key: "extraPicksPerUnlock",
+      value: unlock,
+      message: "An unlock would hand over no games. Checkout refuses to charge for an empty basket, so the add-on would be unbuyable.",
     });
   }
 

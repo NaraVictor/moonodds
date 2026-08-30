@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  assignTiers,
   gradePrediction,
   liveWindow,
   replaceVerdict,
@@ -471,5 +472,111 @@ describe("absences in the prompt", () => {
   it("ignores malformed entries instead of printing blanks", () => {
     const out = statsBlock({ ...base, home_absences: [{ reason: "Injury" }, {}] }, null);
     expect(out).not.toContain("Home absences");
+  });
+});
+
+/**
+ * The split between the free board and the paid basket.
+ *
+ * This is the only thing deciding what a visitor sees for nothing and what
+ * costs $2, so both directions of getting it wrong are worth pinning: giving
+ * away a pick that was sold, and charging for one that was advertised free.
+ *
+ * The frozen set is the safety rail. A pick inside a paid order or on a
+ * customer's slip cannot move tier, because get_my_extra_picks filters on
+ * `tier = 'extra'` — flipping a sold pick to primary removes it from the
+ * buyer's list as surely as deleting the row would.
+ */
+describe("assignTiers", () => {
+  const none = new Set<string>();
+  const pick = (id: string, confidence: number, tier = "primary") => ({
+    id,
+    confidence,
+    tier,
+  });
+
+  it("puts the strongest on the board and the rest in the basket", () => {
+    const out = assignTiers(
+      [pick("a", 7.1), pick("b", 9.2), pick("c", 8.0), pick("d", 7.5)],
+      2,
+      none,
+    );
+    expect(out.get("b")).toBe("primary");
+    expect(out.get("c")).toBe("primary");
+    expect(out.get("d")).toBe("extra");
+    expect(out.get("a")).toBe("extra");
+  });
+
+  it("leaves the basket empty when the day is smaller than the board", () => {
+    const out = assignTiers([pick("a", 7.1), pick("b", 9.2)], 15, none);
+    expect([...out.values()]).toEqual(["primary", "primary"]);
+  });
+
+  it("never moves a pick somebody has paid for", () => {
+    // "sold" scores highest on the day. Without the freeze it would be
+    // promoted onto the free board and vanish from the buyer's list.
+    const out = assignTiers(
+      [pick("sold", 9.9, "extra"), pick("a", 7.0), pick("b", 6.5)],
+      2,
+      new Set(["sold"]),
+    );
+    expect(out.get("sold")).toBe("extra");
+  });
+
+  it("never demotes a frozen board pick behind the paywall", () => {
+    const out = assignTiers(
+      [pick("slipped", 5.1, "primary"), pick("a", 9.9), pick("b", 9.8)],
+      2,
+      new Set(["slipped"]),
+    );
+    expect(out.get("slipped")).toBe("primary");
+  });
+
+  it("counts a frozen board pick against the board, so it cannot overflow", () => {
+    // Two slots, one already held by a frozen primary. Exactly one of the
+    // stronger movable picks can join it — the other is an extra.
+    const out = assignTiers(
+      [pick("slipped", 5.1, "primary"), pick("a", 9.9), pick("b", 9.8)],
+      2,
+      new Set(["slipped"]),
+    );
+    const board = [...out.entries()].filter(([, t]) => t === "primary");
+    expect(board).toHaveLength(2);
+    expect(out.get("a")).toBe("primary");
+    expect(out.get("b")).toBe("extra");
+  });
+
+  it("gives every pick a tier, whatever the board size", () => {
+    for (const size of [1, 3, 100]) {
+      const out = assignTiers([pick("a", 7), pick("b", 8), pick("c", 9)], size, none);
+      expect(out.size).toBe(3);
+    }
+  });
+
+  it("breaks ties the same way twice, so a rerun does not reshuffle the paywall", () => {
+    const day = [pick("z", 7.5), pick("a", 7.5), pick("m", 7.5)];
+    const first = assignTiers(day, 2, none);
+    const again = assignTiers([...day].reverse(), 2, none);
+    expect([...first.entries()].sort()).toEqual([...again.entries()].sort());
+  });
+
+  it("compares numerically, not as text", () => {
+    // confidence_score arrives from PostgREST as a string on a numeric column,
+    // and "9.5" > "10" is true under string comparison.
+    const out = assignTiers(
+      [
+        { id: "ten", confidence: "10" as unknown as number, tier: "primary" },
+        { id: "nine", confidence: "9.5" as unknown as number, tier: "primary" },
+      ],
+      1,
+      none,
+    );
+    expect(out.get("ten")).toBe("primary");
+    expect(out.get("nine")).toBe("extra");
+  });
+
+  it("puts everything behind the paywall when the board is closed", () => {
+    const out = assignTiers([pick("a", 9), pick("b", 8)], 0, none);
+    expect([...out.values()]).toEqual(["extra", "extra"]);
   });
 });

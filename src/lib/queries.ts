@@ -2,13 +2,11 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createClient } from "./supabase/client";
-import { EXTRA_PICK_GAMES_PER_LEAGUE } from "./pricing";
 import { utcDayWindow } from "./format";
 import type {
   AccessState,
   EngineStats,
   GatedPicks,
-  LeagueOption,
   Pick,
   SlipLeg,
   StatusCounts,
@@ -41,7 +39,7 @@ export const keys = {
   engineStats: ["stats", "engine"] as const,
   statusCounts: ["stats", "status"] as const,
   extraPicks: ["extra-picks"] as const,
-  leagueOptions: ["extra-picks", "leagues"] as const,
+  extraPicksOffer: ["extra-picks", "offer"] as const,
   slips: ["slips"] as const,
   profile: ["profile"] as const,
   notifications: ["notifications"] as const,
@@ -287,33 +285,37 @@ export function useExtraPicks(enabled: boolean) {
 }
 
 /**
- * Leagues worth buying, for the extra-picks picker.
+ * Whether there is anything to sell this person today, and how much.
  *
- * Counts PREDICTIONS, not fixtures. This used to query `fixtures` directly and
- * offer a league five games when the engine had published one for it — and on
- * a live board today, five of eight leagues had no prediction at all, so the
- * picker was offering to sell nothing. The gap is not an edge case: the engine
- * publishes a fraction of the board by design.
+ * The extras add-on used to be offered unconditionally, so on a day the engine
+ * put every qualifying pick on the board — no basket at all — the page still
+ * showed an unlock button and a price. That is a charge for nothing, and the
+ * customer had no way to know before paying.
  *
- * It has to be an RPC because predictions are default-deny under RLS, so no
- * query the browser can make will count them. get_extra_pick_leagues also drops
- * anything already unlocked today, so the picker never charges twice.
+ * It has to be an RPC because `predictions` is default-deny under RLS: no
+ * query the browser can make can see, let alone count, an unsold pick.
  */
-export function useLeagueOptions(enabled: boolean) {
-  return useQuery({
-    queryKey: keys.leagueOptions,
-    enabled,
-    queryFn: async (): Promise<LeagueOption[]> => {
-      const supabase = createClient();
-      const { data, error } = await supabase.rpc("get_extra_pick_leagues");
-      if (error) throw error;
+export type ExtraPicksOffer = {
+  available: number;
+  owned: number;
+  /** Games one purchase deals. Operator-set, so the page never hardcodes it. */
+  unlockSize: number;
+};
 
-      // Capped here rather than in SQL so the per-league limit stays a single
-      // constant in the app. It was hardcoded 3 while the constant said 5.
-      return ((data as LeagueOption[]) ?? []).map((l) => ({
-        ...l,
-        availableGames: Math.min(l.availableGames, EXTRA_PICK_GAMES_PER_LEAGUE),
-      }));
+export function useExtraPicksOffer(enabled: boolean) {
+  return useQuery({
+    queryKey: keys.extraPicksOffer,
+    enabled,
+    queryFn: async (): Promise<ExtraPicksOffer> => {
+      const supabase = createClient();
+      const { data, error } = await supabase.rpc("get_extra_pick_offer");
+      if (error) throw error;
+      const row = (data ?? {}) as Partial<ExtraPicksOffer>;
+      return {
+        available: Number(row.available ?? 0),
+        owned: Number(row.owned ?? 0),
+        unlockSize: Number(row.unlockSize ?? 10),
+      };
     },
   });
 }

@@ -3,91 +3,102 @@ import { enforceRateLimit } from "@/lib/rate-limit";
 import { z } from "zod";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { getProviders } from "@/lib/providers";
-import {
-  EXTRA_PICK_GAMES_PER_LEAGUE,
-  extraPicksPriceUsd,
-  usdToPesewas,
-} from "@/lib/pricing";
+import { extraPicksPriceUsd, usdToPesewas } from "@/lib/pricing";
 import { getUsdToGhsRateForServer } from "@/lib/pricing-server";
+import { resolveEngineVariables } from "@/lib/engine/variables";
 import { settlePayment } from "@/lib/payments";
 import { requireVerifiedContact } from "@/lib/require-verified";
 import { SITE_URL } from "@/lib/site-url";
 
 /**
- * Extra league picks, a pass-holder perk.
+ * The extras add-on.
  *
- * Price scales with the number of games actually available, not the number of
- * leagues asked for, so a league with one fixture left doesn't get billed as
- * three. The fixtures are resolved server-side and stored on the order, which
- * is what get_my_extra_picks() later reads.
+ * One flat price deals a fixed number of games from today's extras basket —
+ * the picks that cleared the publish floor but placed outside the free board.
+ *
+ * THE BUYER DOES NOT CHOOSE, AND DOES NOT NAME
+ *
+ * This route used to accept `leagueIds` and resolve fixtures from them. That
+ * made the size of the purchase a function of the day's card: the same two
+ * leagues delivered five games on a Saturday and one on a Tuesday, for the
+ * same $2. Now the count is the product — "10 more of today's calls" — and it
+ * is the same sentence every day.
+ *
+ * The draw happens here, server-side, and is written onto the payment row
+ * before Paystack is called. So the set is settled before money moves, and
+ * nothing the browser sends can widen it afterwards. There is no request body
+ * to tamper with any more, which is the strongest version of that guarantee.
  */
 
-/**
- * `leagueIds` is deduplicated, and that is a billing control.
+/*
+ * Deal `count` fixtures from today's basket.
  *
- * Nothing enforced uniqueness, and selectFixtures resolves fixtures per ARRAY
- * ENTRY rather than per distinct league. Six copies of one league id therefore
- * resolved the same three fixtures six times, and the price is a function of
- * how many fixtures came back — so the same three games were billed at six
- * times the price, and the order was written with eighteen fixture ids and a
- * num_games of eighteen to match.
+ * Random rather than strongest-first, deliberately. Handing every buyer the
+ * same top ten would mean the basket's best calls are the only ones that ever
+ * sell, and two people who both bought would hold identical slips. The buyer
+ * still SEES theirs strongest-first — get_my_extra_picks orders by confidence
+ * — so the draw is invisible where it would look arbitrary and useful where it
+ * would not.
  *
- * The UI does not send duplicates today, which is exactly why this went
- * unnoticed: it takes a double-submit or one bad render to overcharge somebody,
- * and nothing downstream would have flagged it, because every figure on the
- * payment row agrees with every other one.
+ * Excludes what the caller already owns today, so a second purchase deals from
+ * what is left rather than selling the same game twice.
  */
-const Init = z.object({
-  leagueIds: z
-    .array(z.uuid())
-    .min(1)
-    .max(6)
-    .transform((ids) => [...new Set(ids)]),
-});
-
-async function selectFixtures(
+async function drawFixtures(
   db: ReturnType<typeof createServiceClient>,
-  leagueIds: string[],
+  alreadyOwned: ReadonlySet<string>,
+  count: number,
 ) {
   const now = new Date();
   const end = new Date(
     Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1),
   );
 
-  // A Set, not an array. The caller is deduplicated above, but this function
-  // is what the price is computed from, so it does not rely on that: two
-  // different leagues cannot share a fixture today, and if that ever changes
-  // the charge must not double.
-  const chosen = new Set<string>();
-  for (const leagueId of leagueIds) {
-    /*
-     * Only fixtures carrying an EXTRA pick.
-     *
-     * This selected from `fixtures`, but what the customer is handed is
-     * get_my_extra_picks — which returns PREDICTIONS for these fixture ids. The
-     * engine publishes a fraction of the board, so the two are routinely
-     * different: on a live board today, 3 of 14 upcoming fixtures had a
-     * prediction, and five of the eight leagues on offer had none at all.
-     *
-     * Selling anything else charged $2 and delivered an empty list. The join
-     * also excludes fixtures the BOARD already covers: those are not for sale,
-     * because a day pass already unlocks them and charging again would be
-     * selling something the buyer can see for free.
-     */
-    const { data } = await db
-      .from("fixtures")
-      .select("id, predictions!inner(id, tier)")
-      .eq("predictions.tier", "extra")
-      .eq("league_id", leagueId)
-      .eq("status", "scheduled")
-      .gte("fixture_date", now.toISOString())
-      .lt("fixture_date", end.toISOString())
-      .order("fixture_date")
-      .limit(EXTRA_PICK_GAMES_PER_LEAGUE);
+  /*
+   * Only fixtures carrying a PENDING EXTRA pick.
+   *
+   * What the customer is handed is get_my_extra_picks, which returns
+   * predictions for these fixture ids — so selling a fixture without one
+   * charges $2 and delivers an empty list. `tier` keeps the board's own picks
+   * out: a day-pass holder can already see those, and charging again would be
+   * selling something the buyer has.
+   */
+  const { data } = await db
+    .from("fixtures")
+    .select("id, predictions!inner(id, tier, status)")
+    .eq("predictions.tier", "extra")
+    .eq("predictions.status", "pending")
+    .eq("status", "scheduled")
+    .gte("fixture_date", now.toISOString())
+    .lt("fixture_date", end.toISOString());
 
-    for (const f of data ?? []) chosen.add(f.id as string);
+  const pool = (data ?? [])
+    .map((f) => f.id as string)
+    .filter((id) => !alreadyOwned.has(id));
+
+  // Fisher-Yates over the whole pool, then take the head. Sorting by
+  // Math.random() - 0.5 is the usual shortcut and it is biased: it leaves the
+  // early entries near the front, which here would mean the same fixtures
+  // being dealt disproportionately often.
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [pool[i], pool[j]] = [pool[j], pool[i]];
   }
-  return [...chosen];
+
+  return pool.slice(0, count);
+}
+
+/** How many games one unlock deals. Admin-set, with the shipped default. */
+async function unlockSize(db: ReturnType<typeof createServiceClient>) {
+  const { data: config } = await db
+    .from("ai_engine_config")
+    .select("*")
+    .eq("status", "active")
+    .maybeSingle();
+
+  const raw = Number(
+    resolveEngineVariables(config ?? {}).values.extraPicksPerUnlock,
+  );
+  return Number.isFinite(raw) && raw >= 1 ? Math.trunc(raw) : 10;
 }
 
 export async function POST(request: Request) {
@@ -114,11 +125,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: verified.reason }, { status: verified.status });
   }
 
-  const parsed = Init.safeParse(await request.json().catch(() => null));
-  if (!parsed.success) {
-    return NextResponse.json({ error: "Pick at least one league." }, { status: 400 });
-  }
-
   const db = createServiceClient();
 
   // Perk gate: this is for pass holders. Ask the database, not the client.
@@ -127,14 +133,6 @@ export async function POST(request: Request) {
     return NextResponse.json(
       { error: "Extra picks are for day-pass holders." },
       { status: 403 },
-    );
-  }
-
-  const fixtureIds = await selectFixtures(db, parsed.data.leagueIds);
-  if (!fixtureIds.length) {
-    return NextResponse.json(
-      { error: "No predicted games left in those leagues today." },
-      { status: 400 },
     );
   }
 
@@ -151,13 +149,25 @@ export async function POST(request: Request) {
   const alreadyOwned = new Set(
     (owned ?? []).flatMap((o) => (o.fixture_ids ?? []) as string[]),
   );
-  const fresh = fixtureIds.filter((id) => !alreadyOwned.has(id));
 
+  const fresh = await drawFixtures(db, alreadyOwned, await unlockSize(db));
+
+  /*
+   * An empty draw is not an error the customer caused.
+   *
+   * Two ways to get here: the engine put every qualifying pick on the board
+   * today, so there is no basket; or this buyer has already bought all of it.
+   * Neither is a failed request, and neither should read like one — so both
+   * come back 200 with something true to say, and the page stops offering the
+   * unlock rather than letting a second tap charge for nothing.
+   */
   if (!fresh.length) {
     return NextResponse.json(
       {
-        alreadyActive: true,
-        message: "You've already unlocked every game in those leagues today.",
+        alreadyActive: alreadyOwned.size > 0,
+        message: alreadyOwned.size
+          ? "You've already unlocked every extra game available today."
+          : "There are no extra games today — everything the engine published is on the board.",
       },
       { status: 200 },
     );
@@ -179,27 +189,42 @@ export async function POST(request: Request) {
   const today = new Date().toISOString().slice(0, 10);
 
   /*
-   * A stable name for exactly this selection.
+   * One pending extras checkout per person per day.
    *
-   * Sorted, so the same games chosen in a different order are the same order.
-   * It is what the partial unique index keys on, which is why it identifies the
-   * SELECTION rather than the day: two pending day passes are always a mistake,
-   * but a second extra-picks checkout for different leagues is a legitimate
-   * second purchase and must not be blocked.
+   * This used to key on the SELECTION — the sorted fixture ids — because the
+   * buyer chose their own leagues and two different choices were two genuine
+   * purchases. A random draw destroys that: every tap draws a different ten,
+   * so every tap produced a different key, no in-flight row ever matched, and
+   * the unique index that exists to stop a double-tap charging twice could
+   * never fire. Keyed on the day it fires exactly when it should.
+   *
+   * A settled purchase does not hold the slot — the index is partial on
+   * `pending` — so someone who buys ten and comes back for ten more still can.
    */
-  const fixtureKey = [...fresh].sort().join(",");
+  const checkoutKey = today;
 
   const pendingSame = () =>
     db
       .from("payments")
-      .select("reference, amount_minor")
+      .select("reference, amount_minor, metadata")
       .eq("user_id", user.id)
       .eq("purpose", "extra_picks")
       .eq("status", "pending")
-      .eq("metadata->>fixtureKey", fixtureKey)
+      .eq("metadata->>checkoutKey", checkoutKey)
       .maybeSingle();
 
   const { data: inFlight } = await pendingSame();
+
+  /*
+   * A resumed checkout keeps the games the FIRST attempt drew.
+   *
+   * Otherwise the second tap silently replaces them, and someone who abandoned
+   * a payment and came back would be charged for one set having been quoted
+   * another. What was drawn is on the payment row; that row is the record.
+   */
+  const drawn =
+    ((inFlight?.metadata as { fixtureIds?: string[] } | null)?.fixtureIds ?? null) ??
+    fresh;
 
   let reference =
     inFlight?.reference ??
@@ -220,9 +245,8 @@ export async function POST(request: Request) {
       metadata: {
         rate,
         dateKey: today,
-        leagueIds: parsed.data.leagueIds,
         fixtureIds: fresh,
-        fixtureKey,
+        checkoutKey,
       },
     });
 
@@ -253,7 +277,7 @@ export async function POST(request: Request) {
     metadata: { purpose: "extra_picks", dateKey: today, priceUsd },
   });
 
-  return NextResponse.json({ ...init, numGames: fresh.length, priceUsd });
+  return NextResponse.json({ ...init, numGames: drawn.length, priceUsd });
 }
 
 const Verify = z.object({ reference: z.string().min(8) });

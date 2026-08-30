@@ -182,10 +182,3 @@ export type SlipLeg = {
   odds: number;
 };
 
-export type LeagueOption = {
-  leagueId: string;
-  name: string;
-  country: string;
-  logo: string | null;
-  availableGames: number;
-};

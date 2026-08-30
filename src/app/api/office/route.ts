@@ -100,6 +100,11 @@ const Body = z.discriminatedUnion("action", [
     fixtureIds: z.array(z.uuid()).min(1).max(100),
   }),
   z.object({ action: z.literal("deletePrediction"), predictionId: z.uuid() }),
+  z.object({
+    action: z.literal("setPredictionTier"),
+    predictionId: z.uuid(),
+    tier: z.enum(["primary", "extra"]),
+  }),
   z.object({ action: z.literal("gradeResults") }),
   z.object({ action: z.literal("clvCheck") }),
   z.object({ action: z.literal("recalibrate") }),
@@ -455,6 +460,86 @@ export async function POST(request: Request) {
         const { error } = await db.from("predictions").delete().eq("id", body.predictionId);
         if (error) throw new Error(error.message);
         return NextResponse.json({ deleted: true });
+      }
+
+      /*
+       * Move one pick across the paywall.
+       *
+       * Three refusals, and each of them protects a promise already made:
+       *
+       *   settled     its tier is in the published record. get_history_stats
+       *               counts the board and ignores extras, so moving a graded
+       *               pick silently rewrites the hit rate on /history.
+       *   sold        a buyer was dealt this fixture. get_my_extra_picks
+       *               filters on tier = 'extra', so promoting it removes the
+       *               pick from their list as completely as deleting the row.
+       *   on a slip   somebody added it to a slip while it was on the free
+       *               board. Demoting it puts what they are holding behind a
+       *               paywall they have not paid.
+       *
+       * The engine's own settleTiers applies the same freezes, so a run cannot
+       * undo an operator's move on a sold or slipped pick either.
+       */
+      case "setPredictionTier": {
+        if (body.tier !== "primary" && body.tier !== "extra") {
+          return NextResponse.json({ error: "Unknown tier." }, { status: 400 });
+        }
+
+        const { data: pred } = await db
+          .from("predictions")
+          .select("id, status, tier, fixture_id")
+          .eq("id", body.predictionId)
+          .maybeSingle();
+
+        if (!pred) {
+          return NextResponse.json({ error: "No such pick." }, { status: 404 });
+        }
+
+        if (pred.status !== "pending") {
+          return NextResponse.json(
+            {
+              error: "That pick is settled and its tier is part of the published record. Moving it would rewrite the hit rate on /history.",
+            },
+            { status: 409 },
+          );
+        }
+
+        const { data: orders } = await db
+          .from("extra_pick_orders")
+          .select("id")
+          .eq("status", "active")
+          .contains("fixture_ids", [pred.fixture_id]);
+
+        if (orders?.length) {
+          return NextResponse.json(
+            {
+              error: `${orders.length} customer${orders.length === 1 ? " has" : "s have"} paid for this game. Moving it would take it off ${orders.length === 1 ? "their" : "their"} list with no trace.`,
+            },
+            { status: 409 },
+          );
+        }
+
+        const { count: legs } = await db
+          .from("slip_legs")
+          .select("id", { count: "exact", head: true })
+          .eq("prediction_id", body.predictionId);
+
+        if (legs && legs > 0 && body.tier === "extra") {
+          return NextResponse.json(
+            {
+              error: `${legs} customer slip${legs === 1 ? " has" : "s have"} this pick. Moving it to extras would put something they are already holding behind the paywall.`,
+            },
+            { status: 409 },
+          );
+        }
+
+        const { error } = await db
+          .from("predictions")
+          .update({ tier: body.tier })
+          .eq("id", body.predictionId);
+        if (error) throw new Error(error.message);
+
+        return NextResponse.json({ moved: true, tier: body.tier });
       }
 
       case "gradeResults":

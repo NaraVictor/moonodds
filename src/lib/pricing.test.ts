@@ -4,7 +4,6 @@ import {
   paymentAmountMatches,
   usdToPesewas,
   PAYSTACK_MIN_PESEWAS,
-  EXTRA_PICK_GAMES_PER_LEAGUE,
   EXTRA_PICK_PRICE_USD,
 } from "./pricing";
 
@@ -68,11 +67,11 @@ describe("usdToPesewas", () => {
 
 describe("extraPicksPriceUsd", () => {
   it("is one flat price, whatever the unlock covers", () => {
-    // The copy promises "$2 unlocks up to 5 games in every league you pick".
-    // That is only true while the price is independent of the count, so the
-    // count is varied across the whole plausible range and the price must not
-    // move. Six leagues of five games is the largest order the schema allows.
-    for (const games of [1, EXTRA_PICK_GAMES_PER_LEAGUE, 6, 10, 11, 30]) {
+    // The copy promises "$2 deals you N more of today's calls", where N is an
+    // operator setting. That is only true while the price is independent of
+    // the count, so the count is varied across the whole plausible range —
+    // including a basket smaller than one unlock — and the price must not move.
+    for (const games of [1, 5, 6, 10, 11, 30]) {
       expect(extraPicksPriceUsd(games)).toBe(EXTRA_PICK_PRICE_USD);
     }
   });
@@ -106,30 +105,5 @@ describe("paymentAmountMatches", () => {
 
   it("rejects a non-finite amount", () => {
     expect(paymentAmountMatches(charged, { amountMinor: Number.NaN, currency: "GHS" })).toBe(false);
-  });
-});
-
-/**
- * The billing consequence of a duplicated league id.
- *
- * The checkout resolves fixtures per ARRAY ENTRY, and the price is a function
- * of how many came back. Six copies of one league id therefore billed the same
- * three games six times. The dedupe lives in the route's zod schema and in
- * selectFixtures; this pins the arithmetic that made it expensive, so the cost
- * of losing either one is visible here rather than on a customer's statement.
- */
-describe("extra picks, duplicate leagues", () => {
-  it("cannot be overcharged by duplicating a league, at any count", () => {
-    // A flat price removes the money from this bug, but not the bug: duplicate
-    // ids still write duplicate fixture_ids and a wrong num_games onto the
-    // order, so the dedupe in the route stays load-bearing for the RECORD even
-    // though the charge no longer moves.
-    const distinct = EXTRA_PICK_GAMES_PER_LEAGUE;
-    expect(extraPicksPriceUsd(distinct * 6)).toBe(extraPicksPriceUsd(distinct));
-  });
-
-  it("deduplicating ids collapses the charge back to the real one", () => {
-    const requested = ["L1", "L1", "L1", "L1", "L1", "L1"];
-    expect([...new Set(requested)]).toHaveLength(1);
   });
 });

@@ -61,11 +61,8 @@ export const MAX_USD_TO_GHS = 60;
 /** Paystack rejects anything under GHS 1 on a cedi transaction. */
 export const PAYSTACK_MIN_PESEWAS = 100;
 
-/** Games unlocked per league selected. */
-export const EXTRA_PICK_GAMES_PER_LEAGUE = 5;
-
 /**
- * One flat price for the whole add-on, however much it unlocks.
+ * One flat price for the whole add-on.
  *
  * It used to be metered — $2 per group of games — so the total moved with how
  * many leagues someone picked and, because the fixture count per league varies
@@ -73,8 +70,9 @@ export const EXTRA_PICK_GAMES_PER_LEAGUE = 5;
  * different days. That is a quote you cannot put in the copy and a number the
  * customer cannot predict before tapping.
  *
- * Flat removes both. The price is $2, the answer to "what will this cost" is
- * $2, and the only thing selecting more leagues changes is how much you get.
+ * Flat removes both, and the draw removes the rest of it: the count is set by
+ * the operator, not by the shape of the day's card, so "$2 for ten more calls"
+ * is a promise that holds on a Tuesday as well as a Saturday.
  */
 export const EXTRA_PICK_PRICE_USD = 2;
 

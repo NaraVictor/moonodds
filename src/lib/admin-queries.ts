@@ -392,14 +392,20 @@ function useAllAdminPredictions() {
     queryKey: adminKeys.predictions,
     queryFn: async () => {
       const supabase = createClient();
-      // Admins read predictions through the same gated RPC everyone uses,
-      // their access is full because access_state() says so, not because the
-      // table is open to them.
-      const { data, error } = await supabase.rpc("get_picks_by_status", {
-        filter: "all",
-      });
+      /*
+       * The Office has its own read, and it has to.
+       *
+       * It used to share get_picks_by_status with everyone else. That RPC now
+       * returns the free board only — it must, or a day-pass holder would be
+       * handed the paid basket for nothing — which leaves the operator unable
+       * to see the picks that landed behind the paywall, let alone move one.
+       *
+       * get_admin_predictions is super-admin gated in SQL, not by the fact
+       * that this page is only linked from /office.
+       */
+      const { data, error } = await supabase.rpc("get_admin_predictions");
       if (error) throw error;
-      return (data as { picks: unknown[] })?.picks ?? [];
+      return (data as unknown[]) ?? [];
     },
   });
 }
@@ -421,15 +427,29 @@ function useAllAdminPredictions() {
  */
 export function usePredictedFixtureIds() {
   const query = useAllAdminPredictions();
-  const ids = useMemo(() => {
+  const { ids, byFixture } = useMemo(() => {
     const set = new Set<string>();
-    for (const p of (query.data ?? []) as { fixture?: { id?: string } }[]) {
-      if (p?.fixture?.id) set.add(p.fixture.id);
+    const map = new Map<string, { id: string; tier: string; status: string }>();
+    for (const p of (query.data ?? []) as {
+      id?: string;
+      tier?: string;
+      status?: string;
+      fixture?: { id?: string };
+    }[]) {
+      if (!p?.fixture?.id) continue;
+      set.add(p.fixture.id);
+      if (p.id) {
+        map.set(p.fixture.id, {
+          id: p.id,
+          tier: p.tier ?? "primary",
+          status: p.status ?? "pending",
+        });
+      }
     }
-    return set;
+    return { ids: set, byFixture: map };
   }, [query.data]);
 
-  return { ids, isPending: query.isPending };
+  return { ids, byFixture, isPending: query.isPending };
 }
 
 export function useAdminPredictions(page: number) {

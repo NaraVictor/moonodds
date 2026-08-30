@@ -9,7 +9,7 @@ import { Chip } from "@heroui/react/chip";
 import { Alert } from "@/components/ui/alert";
 import { Skeleton } from "@heroui/react/skeleton";
 import { Check, ShieldCheck, Sparkles } from "@/components/ui/icons";
-import { useAccessState, useLeagueOptions } from "@/lib/queries";
+import { useAccessState, useExtraPicksOffer } from "@/lib/queries";
 import { LinkButton } from "@/components/ui/link-button";
 import { extraPicksPriceUsd ,
 } from "@/lib/pricing";
@@ -46,14 +46,16 @@ export function CheckoutClient({ kind }: { kind: Kind }) {
 
   const [stage, setStage] = useState<Stage>("idle");
   const [error, setError] = useState<string | null>(null);
-  const [selected, setSelected] = useState<string[]>([]);
 
-  const leagues = useLeagueOptions(kind === "extra-picks");
+  const offer = useExtraPicksOffer(kind === "extra-picks");
 
-  const games = selected.reduce((sum, id) => {
-    const l = leagues.data?.find((x) => x.leagueId === id);
-    return sum + (l?.availableGames ?? 0);
-  }, 0);
+  // The buyer no longer chooses. What is on offer is however many the operator
+  // set an unlock to deal, capped by what is actually left in today's basket —
+  // so the page never quotes a number it cannot hand over.
+  const games = Math.min(
+    offer.data?.available ?? 0,
+    offer.data?.unlockSize ?? 0,
+  );
   const priceUsd = kind === "day-pass" ? 3 : extraPicksPriceUsd(games);
 
   const endpoint =
@@ -68,10 +70,9 @@ export function CheckoutClient({ kind }: { kind: Kind }) {
       const initRes = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body:
-          kind === "extra-picks"
-            ? JSON.stringify({ leagueIds: selected })
-            : undefined,
+        // No body. The games are drawn server-side, so there is nothing for the
+        // browser to say about which ones.
+        body: undefined,
       });
       const init = await initRes.json();
 
@@ -127,7 +128,7 @@ export function CheckoutClient({ kind }: { kind: Kind }) {
       setError(e instanceof Error ? e.message : "Something went wrong.");
       setStage("idle");
     }
-  }, [endpoint, kind, selected, qc, priceUsd]);
+  }, [endpoint, kind, qc, priceUsd]);
 
   /*
    * Verified, then straight into Paystack. No second button.
@@ -179,7 +180,7 @@ export function CheckoutClient({ kind }: { kind: Kind }) {
       <header className="space-y-1 text-center">
         <p className="label">Checkout</p>
         <h1 className="display text-2xl">
-          {kind === "day-pass" ? "Day pass" : "Extra league picks"}
+          {kind === "day-pass" ? "Day pass" : "Extra picks"}
         </h1>
       </header>
 
@@ -197,7 +198,7 @@ export function CheckoutClient({ kind }: { kind: Kind }) {
 
       {kind === "extra-picks" && !access?.hasFullAccess && (
         <Alert status="warning" title="Pass holders only">
-          Extra league picks are a day-pass perk. Grab a pass first.
+          Extra picks are a day-pass perk. Grab a pass first.
         </Alert>
       )}
 
@@ -205,45 +206,32 @@ export function CheckoutClient({ kind }: { kind: Kind }) {
         <Card.Content className="space-y-5 p-6">
           {kind === "extra-picks" && (
             <div className="space-y-2">
-              <p className="label">Choose leagues</p>
-              {leagues.isPending ? (
-                <Skeleton className="h-32 rounded-lg" />
-              ) : !leagues.data?.length ? (
+              <p className="label">What you get</p>
+              {offer.isPending ? (
+                <Skeleton className="h-20 rounded-lg" />
+              ) : games === 0 ? (
                 <p className="py-4 text-center text-sm text-muted">
-                  No leagues have upcoming games left today.
+                  {offer.data?.owned
+                    ? "You've already unlocked every extra game available today."
+                    : "No extra games today — everything the engine published is already on the board."}
                 </p>
               ) : (
-                <div className="space-y-1.5">
-                  {leagues.data.map((l) => {
-                    const on = selected.includes(l.leagueId);
-                    return (
-                      <button
-                        key={l.leagueId}
-                        type="button"
-                        onClick={() =>
-                          setSelected((s) =>
-                            on
-                              ? s.filter((x) => x !== l.leagueId)
-                              : [...s, l.leagueId],
-                          )
-                        }
-                        aria-pressed={on}
-                        className={`flex w-full cursor-pointer items-center justify-between rounded-lg border px-3 py-2.5 text-left transition-colors ${
-                          on
-                            ? "border-accent bg-accent/10"
-                            : "border-border hover:bg-surface-secondary"
-                        }`}
-                      >
-                        <div>
-                          <p className="text-sm font-medium">{l.name}</p>
-                          <p className="text-[11px] text-muted">{l.country}</p>
-                        </div>
-                        <Chip size="sm" variant="soft" color={on ? "accent" : "default"}>
-                          {l.availableGames} games
-                        </Chip>
-                      </button>
-                    );
-                  })}
+                <div className="rounded-lg border border-border p-4">
+                  <p className="text-sm">
+                    <span className="font-semibold">{games} more call{games === 1 ? "" : "s"}</span>{" "}
+                    from today&rsquo;s board, on top of the {offer.data?.owned ? "ones you already hold" : "free picks"}.
+                  </p>
+                  {/*
+                    Said plainly, because it is the part a buyer would
+                    otherwise discover afterwards and feel misled by. They are
+                    dealt, not chosen — and the reason is worth one sentence:
+                    everyone picking from the same list would mean the same few
+                    games sell every day.
+                  */}
+                  <p className="mt-1.5 text-[11px] leading-relaxed text-muted">
+                    Dealt from the games that just missed the board, strongest first.
+                    You don&rsquo;t choose them, and no two unlocks are the same.
+                  </p>
                 </div>
               )}
             </div>

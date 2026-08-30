@@ -737,17 +737,27 @@ function formatCongestion(raw: unknown): string | null {
  * anchoring, the duplicate handling, the timing — is identical. Only three
  * things differ, and each is derived from it:
  *
- *   primary  the 05:00 run. Takes the day, publishes above primarySlipFloor,
- *            and announces itself to everyone who asked to be told.
+ *   primary  the 05:00 run. Takes the day and announces itself to everyone
+ *            who asked to be told.
  *   extra    the 05:30 run. Takes only fixtures the first pass left WITHOUT a
- *            pick, publishes above the lower extraPicksFloor, and announces
- *            nothing — these are bought, not broadcast.
+ *            pick — the tail of a card too big for one session's cap — and
+ *            announces nothing.
  *
- * Extra picks are deliberately kept out of the public record. They are by
- * definition the calls the board would not carry, so counting them in the
- * published hit rate would report the engine as worse than the product it
- * actually sells. Every public read filters on tier; the buyer sees theirs
- * through get_my_extra_picks.
+ * THE TIER IS NOT THE FLOOR. Both passes publish above the same
+ * primarySlipFloor, and what separates board from basket is RANK: the
+ * strongest `dailyBoardSize` picks of the day are the board, and every other
+ * qualifying pick is an extra. So an extra is not a weak call — it is a good
+ * call that placed sixteenth. Selling the engine's rejects would be a
+ * different product from the one advertised, and a worse one.
+ *
+ * Tiers are settled by assignTiers() at the end of every pass rather than
+ * fixed at insert time, because the second pass and any rerun change the
+ * ranking of picks already written.
+ *
+ * Extras stay out of the public record: they are not what the free board
+ * claimed, so counting them in the published hit rate would describe a
+ * different product. Every public read filters on tier; the buyer sees the
+ * games they were dealt through get_my_extra_picks.
  */
 export async function runDailyPicks({
   maxFixtures,
@@ -836,9 +846,11 @@ export async function runDailyPicks({
   // the pipeline reads the same values for its cutoffs, so the number the engine
   // was told to stake against is the number we stake against.
   const vars = resolveEngineVariables(config);
-  const minConfidence = Number(
-    isExtra ? vars.values.extraPicksFloor : vars.values.primarySlipFloor,
-  );
+  // One floor for both passes. What a pick clears decides whether it is
+  // published at all; where it ranks decides which side of the paywall it
+  // lands on, and that is settled after the writes.
+  const minConfidence = Number(vars.values.primarySlipFloor);
+  const boardSize = Math.max(1, Math.trunc(Number(vars.values.dailyBoardSize) || 15));
   const floor = Number(vars.values.absoluteMinimumFloor);
 
   // Pull the stats the engine is supposed to reason over.
@@ -1088,6 +1100,32 @@ ${briefs.join("\n")}`;
   const slipped = new Set((legs ?? []).map((l) => l.prediction_id as string));
 
   /*
+   * And which of them somebody has already PAID for.
+   *
+   * An extras buyer holds a pick every bit as much as a slip holder does —
+   * they were dealt a fixed list of fixtures at checkout, and that list is
+   * what get_my_extra_picks reads back. Rewriting, deleting or re-tiering one
+   * of those rows takes away something already sold, and none of the three
+   * would leave a trace the buyer could point at.
+   *
+   * Orders record FIXTURE ids, so this resolves them to the prediction on each
+   * fixture and joins the result into `slipped` — every guard downstream then
+   * covers both kinds of holder without a second code path.
+   */
+  const { data: orders } = await db
+    .from("extra_pick_orders")
+    .select("fixture_ids")
+    .eq("date_key", now.toISOString().slice(0, 10))
+    .eq("status", "active");
+
+  const soldFixtures = new Set(
+    (orders ?? []).flatMap((o) => (o.fixture_ids ?? []) as string[]),
+  );
+  for (const row of [...existing.values(), ...superseded]) {
+    if (soldFixtures.has(row.fixture_id as string)) slipped.add(row.id as string);
+  }
+
+  /*
    * Duplicates left behind before one-pick-per-fixture existed.
    *
    * Keeping only the strongest in `existing` decides which row this run will
@@ -1162,7 +1200,7 @@ ${briefs.join("\n")}`;
     if (verdict !== "write") {
       if (verdict === "slipped") {
         console.warn(
-          `[engine] ${describeFixture(fixture)} already has a pick on a customer slip, leaving it`,
+          `[engine] ${describeFixture(fixture)} already has a pick a customer is holding, leaving it`,
         );
       }
       duplicates++;
@@ -1259,10 +1297,50 @@ ${briefs.join("\n")}`;
   // Only the primary board is announced. Extra picks are bought rather than
   // broadcast, and a "today's picks are ready" message for them would be
   // telling everyone about something only buyers can see.
-  if (!isExtra) {
+  /*
+   * Settle the split now that today's picks are all in.
+   *
+   * Over the whole day, not just this pass's fixtures: the 05:30 run can write
+   * a pick stronger than something the 05:00 run put on the board, and the
+   * board is supposed to be the day's best `dailyBoardSize`, not the first
+   * pass's best.
+   */
+  const { data: dayFixtures } = await db
+    .from("fixtures")
+    .select("id")
+    .eq("status", "scheduled")
+    .gte("fixture_date", now.toISOString())
+    .lt("fixture_date", endOfDay.toISOString());
+
+  const dayFixtureIds = (dayFixtures ?? []).map((f) => f.id as string);
+  const retiered = await settleTiers(
+    db,
+    dayFixtureIds,
+    boardSize,
+    now.toISOString().slice(0, 10),
+  );
+
+  /*
+   * Announced only when a board exists to announce.
+   *
+   * The extra pass writes nothing a visitor can see, so it stays silent; and a
+   * pass whose picks all landed in the basket has not published a board
+   * either, so counting `written` here would tell everyone about a board that
+   * is entirely behind the paywall.
+   */
+  const { count: onBoard } = dayFixtureIds.length
+    ? await db
+        .from("predictions")
+        .select("id", { count: "exact", head: true })
+        .in("fixture_id", dayFixtureIds)
+        .eq("tier", "primary")
+        .eq("status", "pending")
+    : { count: 0 };
+
+  if (!isExtra && written > 0 && (onBoard ?? 0) > 0) {
     await db.from("jobs").insert({
       kind: "daily_picks_ready",
-      payload: { count: written },
+      payload: { count: onBoard },
     });
   }
 
@@ -1303,6 +1381,11 @@ ${briefs.join("\n")}`;
     configFallbacks: rendered.fallbacks.length,
     warnings: rendered.warnings.length,
     duplicatesCleared: cleaned,
+    // What the split came out as. `generated` counts what this pass wrote;
+    // these two describe the day the visitor and the buyer actually get.
+    onBoard: onBoard ?? 0,
+    retiered,
+    boardSize,
     fixtures: fixtures.length,
     modelDurationMs,
     durationMs,
@@ -2176,7 +2259,7 @@ async function handleJob(
       if (!profile?.email) return;
 
       const what =
-        p.purpose === "daily_pass" ? "Day pass" : "Extra league picks";
+        p.purpose === "daily_pass" ? "Day pass" : "Extra picks";
       const major = (p.amountMinor / 100).toFixed(2);
 
       await messaging.sendEmail({
@@ -2313,6 +2396,144 @@ function stakingUnit(confidence: number, v: Record<string, number | string>): nu
 }
 
 /** PostgREST returns embedded relations as an array or object depending on shape. */
+/**
+ * Which picks are the board, and which are the basket.
+ *
+ * The split is by RANK, not by score: the strongest `boardSize` picks of the
+ * day are what a visitor sees free, and everything else that cleared the floor
+ * is what an unlock hands over. Both sides are picks the engine was willing to
+ * publish — the basket is the tail of the same list, not a bin of rejects.
+ *
+ * `frozen` is the part that cannot move: a pick on a customer's slip, or one
+ * inside an extras order somebody has paid for. Those keep the tier they have,
+ * whatever they score. A frozen primary still occupies a board slot, so the
+ * board never grows past `boardSize` to accommodate one — otherwise a day with
+ * fifteen frozen picks would publish sixteen.
+ *
+ * Deterministic and total: every id in, every id out, ties broken by id so a
+ * rerun over an unchanged board produces an unchanged split rather than
+ * shuffling two equal picks across the paywall.
+ */
+export function assignTiers(
+  picks: ReadonlyArray<{ id: string; confidence: number; tier: string }>,
+  boardSize: number,
+  frozen: ReadonlySet<string>,
+): Map<string, "primary" | "extra"> {
+  const out = new Map<string, "primary" | "extra">();
+
+  let taken = 0;
+  const movable: { id: string; confidence: number }[] = [];
+
+  for (const p of picks) {
+    if (frozen.has(p.id)) {
+      const tier = p.tier === "extra" ? "extra" : "primary";
+      out.set(p.id, tier);
+      if (tier === "primary") taken++;
+    } else {
+      movable.push({ id: p.id, confidence: Number(p.confidence) });
+    }
+  }
+
+  movable.sort((a, b) =>
+    b.confidence - a.confidence || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0),
+  );
+
+  const slots = Math.max(0, boardSize - taken);
+  movable.forEach((p, i) => out.set(p.id, i < slots ? "primary" : "extra"));
+
+  return out;
+}
+
+/**
+ * Settle today's split and write back only what moved.
+ *
+ * Runs after every pass because both of them change the ranking: the 05:30 run
+ * adds picks the 05:00 cap could not reach, and a rerun can replace a pick with
+ * a stronger one. Doing it here rather than at insert time means there is one
+ * place that decides the split, and it sees the whole day when it decides.
+ *
+ * Settled picks are excluded outright. Their tier is part of the published
+ * record — get_history_stats counts primaries and ignores extras — so moving
+ * one after the fact would edit a number the site has already shown.
+ */
+async function settleTiers(
+  db: ReturnType<typeof createServiceClient>,
+  fixtureIds: readonly string[],
+  boardSize: number,
+  dateKey: string,
+): Promise<number> {
+  if (!fixtureIds.length) return 0;
+
+  const { data: rows } = await db
+    .from("predictions")
+    .select("id, fixture_id, tier, confidence_score, status")
+    .in("fixture_id", fixtureIds)
+    .eq("status", "pending");
+
+  if (!rows?.length) return 0;
+
+  /*
+   * What cannot move, read over the whole day rather than the run.
+   *
+   * The caller already has a frozen set, but it covers only the fixtures this
+   * pass analysed — and this function re-tiers the entire day, including picks
+   * written hours ago on fixtures the current pass never looked at. Reusing
+   * the caller's set would leave exactly those unprotected: a pick sold at
+   * 09:00 could be promoted onto the free board by the 05:30 pass the next
+   * time it ran, and vanish from the buyer's list.
+   */
+  const ids = rows.map((r) => r.id as string);
+  const { data: legs } = await db
+    .from("slip_legs")
+    .select("prediction_id")
+    .in("prediction_id", ids);
+
+  const frozen = new Set((legs ?? []).map((l) => l.prediction_id as string));
+
+  const { data: orders } = await db
+    .from("extra_pick_orders")
+    .select("fixture_ids")
+    .eq("date_key", dateKey)
+    .eq("status", "active");
+
+  const sold = new Set(
+    (orders ?? []).flatMap((o) => (o.fixture_ids ?? []) as string[]),
+  );
+  for (const row of rows) {
+    if (sold.has(row.fixture_id as string)) frozen.add(row.id as string);
+  }
+
+  const wanted = assignTiers(
+    rows.map((r) => ({
+      id: r.id as string,
+      confidence: Number(r.confidence_score),
+      tier: r.tier as string,
+    })),
+    boardSize,
+    frozen,
+  );
+
+  let moved = 0;
+  for (const row of rows) {
+    const tier = wanted.get(row.id as string);
+    if (!tier || tier === row.tier) continue;
+    const { error } = await db
+      .from("predictions")
+      .update({ tier })
+      .eq("id", row.id);
+    if (error) {
+      // Not fatal. The pick is published and correct; only which side of the
+      // paywall it sits on is stale, and the next pass settles it again.
+      console.warn(`[engine] could not re-tier ${row.id}:`, error.message);
+      continue;
+    }
+    moved++;
+  }
+
+  return moved;
+}
+
+
 /**
  * Whether an incoming pick may take a fixture that already has one.
  *

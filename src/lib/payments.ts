@@ -106,14 +106,13 @@ export async function settlePayment(
   }
 
   if (payment.purpose === "extra_picks") {
-    const meta = (payment.metadata ?? {}) as {
-      leagueIds?: string[];
-      fixtureIds?: string[];
-    };
+    // The games were drawn at checkout and written onto the payment before
+    // Paystack was called. This hands that list over unchanged — activation
+    // never re-draws, so what settles is what was quoted.
+    const meta = (payment.metadata ?? {}) as { fixtureIds?: string[] };
     const { error } = await db.rpc("activate_extra_picks", {
       p_user_id: payment.user_id,
       p_reference: reference,
-      p_league_ids: meta.leagueIds ?? [],
       p_fixture_ids: meta.fixtureIds ?? [],
     });
     if (error) {

@@ -22,6 +22,7 @@ import {
   useAccessState,
   useEngineStats,
   useExtraPicks,
+  useExtraPicksOffer,
   usePicksByStatus,
   useStatusCounts,
   useTodaysPicks,
@@ -31,7 +32,6 @@ import { formatPercent } from "@/lib/format";
 import type { Market, Pick, UnlockedPick } from "@/lib/types";
 import {
   PASS_PRICE_USD,
-  EXTRA_PICK_GAMES_PER_LEAGUE,
   EXTRA_PICK_PRICE_USD,
 } from "@/lib/pricing";
 
@@ -78,6 +78,7 @@ export function PicksHome() {
   const today = useTodaysPicks({ enabled: showingAll });
   const byStatus = usePicksByStatus(filters.status, { enabled: !showingAll });
   const extra = useExtraPicks(access?.hasFullAccess === true);
+  const offer = useExtraPicksOffer(access?.hasFullAccess === true);
 
   const source = showingAll ? today.data : byStatus.data;
   const isPending = showingAll ? today.isPending : byStatus.isPending;
@@ -376,7 +377,21 @@ export function PicksHome() {
           )}
 
           {/* ------------------------- extra picks ------------------------- */}
-          {access?.hasFullAccess && (
+          {/*
+            Nothing here at all on a day with nothing to sell.
+
+            The section used to render unconditionally, so on a day the engine
+            put every qualifying pick on the board — no basket — a pass holder
+            still saw a price and a button that would have charged them for an
+            empty list. An add-on that cannot be delivered should not be
+            advertised, and the only way to know is to ask the database: the
+            basket is behind RLS and invisible to this page otherwise.
+
+            `owned` keeps the section up once someone has bought, so their
+            games do not vanish the moment the basket runs dry.
+          */}
+          {access?.hasFullAccess &&
+            ((offer.data?.available ?? 0) > 0 || (extra.data?.length ?? 0) > 0) && (
             <section className="mt-12">
               <div className="mb-5 flex items-end justify-between gap-4">
                 <div>
@@ -384,11 +399,13 @@ export function PicksHome() {
                     <TrendingUp className="h-3 w-3" />
                     Pass-holder perk
                   </span>
-                  <h2 className="display mt-1.5 text-2xl">Extra league picks</h2>
+                  <h2 className="display mt-1.5 text-2xl">Extra picks</h2>
                 </div>
-                <LinkButton href="/checkout/extra-picks" variant="secondary" size="sm">
-                  Add leagues
-                </LinkButton>
+                {(offer.data?.available ?? 0) > 0 && (
+                  <LinkButton href="/checkout/extra-picks" variant="secondary" size="sm">
+                    {extra.data?.length ? "Unlock more" : "Unlock"}
+                  </LinkButton>
+                )}
               </div>
 
               {extra.data?.length ? (
@@ -399,8 +416,9 @@ export function PicksHome() {
                 </div>
               ) : (
                 <div className="rounded-[1.5rem] border border-border bg-surface p-10 text-center text-sm text-muted">
-                  ${EXTRA_PICK_PRICE_USD} unlocks up to {EXTRA_PICK_GAMES_PER_LEAGUE} games
-                  in every league you pick. One price, however many you choose.
+                  ${EXTRA_PICK_PRICE_USD} deals you{" "}
+                  {Math.min(offer.data?.available ?? 0, offer.data?.unlockSize ?? 0)} more
+                  of today&rsquo;s calls — the ones that just missed the board.
                 </div>
               )}
             </section>

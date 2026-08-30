@@ -509,8 +509,32 @@ function BoardPanel({ override }: { override?: number }) {
   const [confirming, setConfirming] = useState(false);
   const [result, setResult] = useState<{ deleted: number; refused: number } | null>(null);
   const [generated, setGenerated] = useState<string | null>(null);
+  const [filter, setFilter] = useState<"all" | "primary" | "extra" | "none">("all");
+  const [moveError, setMoveError] = useState<string | null>(null);
 
-  const fixtures = data ?? [];
+  const all = data ?? [];
+
+  /*
+   * Filtered for reading, not for acting.
+   *
+   * The counts below are taken from the whole board so the tabs can say how
+   * much is in each without the operator having to visit them — and `chosen`
+   * is still intersected with what is on screen, so narrowing the view cannot
+   * leave a hidden row ticked and then act on it.
+   */
+  const counts = {
+    all: all.length,
+    primary: all.filter((f) => predicted.byFixture.get(f.id)?.tier === "primary").length,
+    extra: all.filter((f) => predicted.byFixture.get(f.id)?.tier === "extra").length,
+    none: all.filter((f) => !predicted.ids.has(f.id)).length,
+  };
+
+  const fixtures =
+    filter === "all"
+      ? all
+      : filter === "none"
+        ? all.filter((f) => !predicted.ids.has(f.id))
+        : all.filter((f) => predicted.byFixture.get(f.id)?.tier === filter);
   // The same function runDailyPicks calls, not a second copy of the number.
   // A line drawn here that the engine does not draw is worse than no line.
   const cap = sessionCap(
@@ -589,6 +613,17 @@ function BoardPanel({ override }: { override?: number }) {
     );
   }
 
+  function move(predictionId: string, tier: "primary" | "extra") {
+    setMoveError(null);
+    action.mutate(
+      { action: "setPredictionTier", predictionId, tier },
+      {
+        onError: (e: unknown) =>
+          setMoveError(e instanceof Error ? e.message : "Could not move that pick."),
+      },
+    );
+  }
+
   function remove() {
     action.mutate(
       { action: "deleteFixtures", fixtureIds: chosen },
@@ -609,8 +644,8 @@ function BoardPanel({ override }: { override?: number }) {
     <Panel
       title="Today's board"
       description={
-        fixtures.length
-          ? `${fixtures.length} fixture${fixtures.length === 1 ? "" : "s"} upcoming. The engine reads the first ${cap} in kickoff order, drop anything you don't want a pick on before you generate.`
+        all.length
+          ? `${all.length} fixture${all.length === 1 ? "" : "s"} upcoming, ${counts.primary} on the board and ${counts.extra} in the paid basket. The engine reads the first ${cap} in kickoff order, drop anything you don't want a pick on before you generate.`
           : "What the engine will read when you generate picks."
       }
       action={
@@ -623,22 +658,72 @@ function BoardPanel({ override }: { override?: number }) {
     >
       {isPending ? (
         <Loading />
-      ) : !fixtures.length ? (
+      ) : !all.length ? (
         <Empty>Nothing on the board. Fetch fixtures to fill it.</Empty>
       ) : (
         <>
+          {/*
+            Which side of the paywall, at a glance.
+
+            The split is decided by rank at the end of every engine pass, so
+            the operator's question is usually "what did it decide today"
+            rather than "show me one fixture" — hence counts on the tabs, and
+            a tab for the rows carrying no pick at all, which is the set a
+            generate would actually fill.
+          */}
+          <div className="mb-3 flex flex-wrap gap-1.5">
+            {(
+              [
+                ["all", "All"],
+                ["primary", "Board"],
+                ["extra", "Extras"],
+                ["none", "No pick"],
+              ] as const
+            ).map(([key, label]) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => setFilter(key)}
+                aria-pressed={filter === key}
+                className={`press rounded-full px-3 py-1.5 text-[11px] font-semibold transition-colors ${
+                  filter === key
+                    ? "bg-accent text-accent-foreground"
+                    : "bg-surface-secondary text-muted hover:text-foreground"
+                }`}
+              >
+                {label} · {counts[key]}
+              </button>
+            ))}
+          </div>
+
+          {moveError && (
+            <p className="mb-3 text-[12px]" style={{ color: "var(--lost-ink)" }}>
+              {moveError}
+            </p>
+          )}
+
+          {!fixtures.length && (
+            <p className="py-6 text-center text-[13px] text-muted">
+              Nothing in this view.
+            </p>
+          )}
+
           <ul className="max-h-[28rem] divide-y divide-separator overflow-y-auto">
-            {fixtures.map((f, i) => (
+            {fixtures.map((f) => (
               <BoardRow
                 key={f.id}
                 fixture={f}
-                // The cap counts from the top of this same ordering, so the row
-                // that crosses it is the row the engine stops before.
-                beyondCap={i >= cap}
+                // Counted against the FULL board, not the filtered view: the
+                // engine reads the day in kickoff order and stops at the cap,
+                // and it does not know a filter is on. Ranking within the
+                // filtered list would draw the line in the wrong place.
+                beyondCap={all.indexOf(f) >= cap}
                 predicted={predicted.ids.has(f.id)}
+                pick={predicted.byFixture.get(f.id)}
                 checked={selected.has(f.id)}
                 busy={action.isPending}
                 onToggle={() => toggle(f.id)}
+                onMove={move}
               />
             ))}
           </ul>
@@ -730,19 +815,25 @@ function BoardRow({
   fixture: f,
   beyondCap,
   predicted,
+  pick,
   checked,
   busy,
   onToggle,
+  onMove,
 }: {
   fixture: BoardFixture;
   beyondCap: boolean;
   /** Already has a pick. Informational — it does not stop selection. */
   predicted: boolean;
+  /** The pick on it, when there is one, so the row can show and move its tier. */
+  pick?: { id: string; tier: string; status: string };
   checked: boolean;
   busy: boolean;
   onToggle: () => void;
+  onMove: (predictionId: string, tier: "primary" | "extra") => void;
 }) {
   const label = `${f.home?.name ?? "?"} v ${f.away?.name ?? "?"}`;
+  const extra = pick?.tier === "extra";
 
   return (
     <li className="flex items-center gap-3 py-2.5 first:pt-0">
@@ -773,9 +864,13 @@ function BoardRow({
             {predicted && (
               <span
                 className="flex-none rounded-full px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.06em]"
-                style={{ background: "var(--won-wash)", color: "var(--won-ink)" }}
+                style={
+                  extra
+                    ? { background: "var(--surface-secondary)", color: "var(--muted)" }
+                    : { background: "var(--won-wash)", color: "var(--won-ink)" }
+                }
               >
-                Predicted
+                {extra ? "Extra" : "Board"}
               </span>
             )}
           </span>
@@ -789,6 +884,31 @@ function BoardRow({
           </span>
         </span>
       </label>
+
+      {/*
+        Outside the label, so pressing it does not also tick the row.
+
+        Settled picks have no control at all: their tier is part of the
+        published record — get_history_stats counts the board and ignores
+        extras — so moving one after the fact would edit a number the site has
+        already shown. The server refuses it too; this just stops the operator
+        reaching for something that will be denied.
+      */}
+      {pick && pick.status === "pending" && (
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => onMove(pick.id, extra ? "primary" : "extra")}
+          className={`${PILL} flex-none disabled:opacity-40`}
+          title={
+            extra
+              ? "Move onto the free board"
+              : "Move into the paid extras basket"
+          }
+        >
+          {extra ? "→ Board" : "→ Extras"}
+        </button>
+      )}
     </li>
   );
 }
@@ -2596,27 +2716,58 @@ const GROUP_ORDER: VariableGroup[] = [
  * would pass through 0.6 and 0 on the way if someone cleared it first, and each
  * of those is a publishable floor that would ship a board of noise.
  */
+const NUMERIC_FIELDS = {
+  primarySlipFloor: {
+    label: "Publish floor",
+    fallback: 7,
+    min: 0,
+    max: 10,
+    step: 0.1,
+    hint: "Below this a call is not published at all, on the board or behind the paywall.",
+  },
+  dailyBoardSize: {
+    label: "Board size",
+    fallback: 15,
+    min: 1,
+    max: 60,
+    step: 1,
+    hint: "How many of the day's picks a visitor sees free. Everything else above the floor becomes an extra.",
+  },
+  extraPicksPerUnlock: {
+    label: "Games per unlock",
+    fallback: 10,
+    min: 1,
+    max: 30,
+    step: 1,
+    hint: "How many games one purchase deals from the extras basket.",
+  },
+} as const;
+
 function PublishFloor({
   config,
   variable = "primarySlipFloor",
-  label = "Primary floor",
 }: {
   config: Record<string, unknown> & { id: string };
-  /** Which cutoff this card edits. Both live in confidence_thresholds. */
-  variable?: "primarySlipFloor" | "extraPicksFloor";
-  label?: string;
+  /** Which number this card edits. All three live in confidence_thresholds. */
+  variable?: keyof typeof NUMERIC_FIELDS;
 }) {
   const action = useOfficeAction();
+  const field = NUMERIC_FIELDS[variable];
   const live = Number(
     (config.confidence_thresholds as Record<string, number> | undefined)?.[variable] ??
-      (variable === "primarySlipFloor" ? 7 : 5),
+      field.fallback,
   );
   const [draft, setDraft] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const value = draft ?? String(live);
   const parsed = Number(value);
-  const valid = value.trim() !== "" && Number.isFinite(parsed) && parsed >= 0 && parsed <= 10;
+  const valid =
+    value.trim() !== "" &&
+    Number.isFinite(parsed) &&
+    parsed >= field.min &&
+    parsed <= field.max &&
+    (field.step !== 1 || Number.isInteger(parsed));
   const dirty = valid && parsed !== live;
 
   async function save() {
@@ -2636,15 +2787,15 @@ function PublishFloor({
   return (
     <div className="rounded-2xl bg-surface-secondary p-4">
       <label htmlFor={`floor-${variable}`} className="label">
-        {label}
+        {field.label}
       </label>
       <div className="mt-1.5 flex items-center gap-2">
         <input
           id={`floor-${variable}`}
           type="number"
-          step="0.1"
-          min="0"
-          max="10"
+          step={field.step}
+          min={field.min}
+          max={field.max}
           value={value}
           onChange={(e) => {
             setError(null);
@@ -2674,12 +2825,10 @@ function PublishFloor({
         style={{ color: valid ? "var(--muted)" : "var(--lost-ink)" }}
       >
         {!valid
-          ? "Between 0 and 10."
+          ? `${field.step === 1 ? "A whole number between" : "Between"} ${field.min} and ${field.max}.`
           : dirty
             ? `Currently ${live}.`
-            : variable === "primarySlipFloor"
-              ? "Below this, a call does not reach the free board."
-              : "Below the board's floor, a call becomes a paid extra pick instead."}
+            : field.hint}
       </p>
       {error && <ActionError message={error} />}
     </div>
@@ -2941,7 +3090,8 @@ function EnginePanel() {
         */}
         <div className="grid gap-3 sm:grid-cols-3">
           <PublishFloor config={config} />
-          <PublishFloor config={config} variable="extraPicksFloor" label="Extra picks floor" />
+          <PublishFloor config={config} variable="dailyBoardSize" />
+          <PublishFloor config={config} variable="extraPicksPerUnlock" />
           {[
             ["Absolute min", config.confidence_thresholds?.absoluteMinimumFloor],
           ].map(([k, v]) => (
