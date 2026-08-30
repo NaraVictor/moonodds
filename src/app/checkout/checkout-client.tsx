@@ -46,6 +46,9 @@ export function CheckoutClient({ kind }: { kind: Kind }) {
 
   const [stage, setStage] = useState<Stage>("idle");
   const [error, setError] = useState<string | null>(null);
+  // Set by the init call when every one of today's games has kicked off, so
+  // the pass the server will issue is tomorrow's. See the day-pass route.
+  const [forTomorrow, setForTomorrow] = useState(false);
 
   const offer = useExtraPicksOffer(kind === "extra-picks");
 
@@ -75,6 +78,7 @@ export function CheckoutClient({ kind }: { kind: Kind }) {
         body: undefined,
       });
       const init = await initRes.json();
+      setForTomorrow(init.forTomorrow === true);
 
       /*
        * Not signed in. That is a step, not a failure.
@@ -249,10 +253,29 @@ export function CheckoutClient({ kind }: { kind: Kind }) {
             </div>
             {kind === "day-pass" && (
               <Chip size="sm" variant="soft" color="accent">
-                Today only
+                {forTomorrow ? "Tomorrow" : "Today only"}
               </Chip>
             )}
           </div>
+
+          {/*
+            Said before the money moves, not after.
+
+            The pass rolls to tomorrow when nothing is left to kick off today —
+            which is the right outcome, but finding out afterwards feels like a
+            mistake rather than a courtesy. Only rendered once the server has
+            told us, so it never guesses.
+          */}
+          {forTomorrow && (
+            <p
+              className="rounded-lg p-3 text-[12px] leading-relaxed"
+              style={{ background: "var(--accent-wash)", color: "var(--foreground)" }}
+            >
+              Every game on today&rsquo;s board has already kicked off, so this
+              pass is for <strong>tomorrow</strong> — a full day rather than the
+              rest of tonight. Today&rsquo;s results are on the record either way.
+            </p>
+          )}
 
           {stage === "auth" ? (
             <InlineAuth auth={auth} />

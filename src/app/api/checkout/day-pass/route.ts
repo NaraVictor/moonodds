@@ -84,6 +84,33 @@ export async function POST(request: Request) {
   const amountMinor = usdToPesewas(PASS_PRICE_USD, rate);
 
   /*
+   * Whether this pass will actually be for tomorrow, said before they pay.
+   *
+   * activate_daily_pass rolls a pass forward when no board pick is left to
+   * kick off — a pass bought at 23:50 is otherwise ten minutes long. The roll
+   * is the right outcome, but discovering it after paying is not: someone who
+   * meant to buy tonight's football should be told they are buying tomorrow's
+   * while they can still change their mind.
+   *
+   * Advisory only. The database decides at activation, from the state at that
+   * moment, and this is a read of the same condition a few seconds earlier.
+   */
+  const now = new Date();
+  const dayEnd = new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1),
+  );
+  const { count: stillToPlay } = await db
+    .from("predictions")
+    .select("id, fixtures!inner(fixture_date, status)", { count: "exact", head: true })
+    .eq("tier", "primary")
+    .eq("status", "pending")
+    .eq("fixtures.status", "scheduled")
+    .gt("fixtures.fixture_date", now.toISOString())
+    .lt("fixtures.fixture_date", dayEnd.toISOString());
+
+  const forTomorrow = (stillToPlay ?? 0) === 0;
+
+  /*
    * Reuse a checkout already in flight rather than opening a second one.
    *
    * The active-pass check above only sees a pass that has SETTLED. Two requests
@@ -181,7 +208,7 @@ export async function POST(request: Request) {
     },
   });
 
-  return NextResponse.json(init);
+  return NextResponse.json({ ...init, forTomorrow });
 }
 
 const Verify = z.object({ reference: z.string().min(8) });

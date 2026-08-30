@@ -1,4 +1,4 @@
-import { randomInt } from "node:crypto";
+import { createHmac, randomInt } from "node:crypto";
 import { NextResponse } from "next/server";
 import { enforceRateLimit } from "@/lib/rate-limit";
 import { z } from "zod";
@@ -19,6 +19,39 @@ import { getProviders } from "@/lib/providers";
 
 const PURPOSE = "update_system_prompt";
 const TTL_MINUTES = 10;
+
+/**
+ * The digest that goes in the database, so the six digits never do.
+ *
+ * otp_tokens.code held the code as typed. RLS keeps every client out of that
+ * table, so reading it takes a database compromise — a backup, a replica, a
+ * support query, an accidental grant. But this is the SECOND factor on
+ * system-prompt changes, and a second factor whose value is sitting next to
+ * the thing it protects is not one.
+ *
+ * Keyed, not merely hashed. Six digits is a million possibilities: a plain
+ * digest, salted or not, is reversed by anyone holding the row in the time it
+ * takes to loop to a million. What makes this worth doing is that the key is
+ * not in the database.
+ *
+ * The key is DERIVED from the service-role secret rather than being a new
+ * environment variable, so there is nothing to configure and no deployment
+ * where the Office stops issuing codes because a value was missed. Deriving it
+ * through HMAC with a fixed label keeps it a separate key: this digest cannot
+ * be replayed anywhere else the service-role secret is used, and the secret
+ * cannot be recovered from it.
+ */
+function digestOtp(code: string): string {
+  const secret = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!secret) {
+    // Fail closed. Issuing a code we cannot verify later, or verifying against
+    // a key that changed, both end with an admin locked out of their own
+    // Office — better to say so at the point the secret is missing.
+    throw new Error("SUPABASE_SERVICE_ROLE_KEY is not set, cannot key the OTP digest.");
+  }
+  const key = createHmac("sha256", secret).update("kicka-otp-pepper-v1").digest();
+  return createHmac("sha256", key).update(code).digest("hex");
+}
 
 export async function POST(request: Request) {
   // Minting is cheap for us and noisy for the admin whose inbox it fills.
@@ -68,7 +101,7 @@ export async function POST(request: Request) {
 
   const { error } = await db.from("otp_tokens").insert({
     email,
-    code,
+    code_hash: digestOtp(code),
     purpose: PURPOSE,
     expires_at: expiresAt,
     used: false,
@@ -169,7 +202,7 @@ export async function PATCH(request: Request) {
     .update({ used: true })
     .eq("email", email!)
     .eq("purpose", PURPOSE)
-    .eq("code", parsed.data.code)
+    .eq("code_hash", digestOtp(parsed.data.code))
     .eq("used", false)
     .gt("expires_at", new Date().toISOString())
     .select("id")
