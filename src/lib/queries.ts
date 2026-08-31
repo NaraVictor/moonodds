@@ -413,6 +413,8 @@ export type HistoryStats = {
   winRate: number | null;
   winRateInterval: { low: number | null; high: number | null };
   roi: number | null;
+  /** How many settled picks the return is computed from. Zero means unknown. */
+  roiSample: number;
   avgOdds: number | null;
   avgConfidence: number | null;
   bestMarket: string | null;

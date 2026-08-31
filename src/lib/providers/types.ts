@@ -1,3 +1,4 @@
+import type { Market } from "../types";
 /**
  * External providers, behind one interface each.
  *
@@ -244,7 +245,29 @@ export interface FootballProvider {
   searchTeams(query: string): Promise<RawTeam[]>;
   /** Every team in a league for a season, bulk import after adding a league. */
   fetchTeamsByLeague(leagueExternalId: number, season: number): Promise<RawTeam[]>;
+  /**
+   * Bookmaker prices for a fixture, one entry per bookmaker per selection.
+   *
+   * Every bookmaker is returned rather than a single "best" price, because the
+   * caller wants the LOWEST of them: a claim about a day's return should be one
+   * a customer could have beaten, not one they might have missed.
+   */
+  fetchOdds(externalId: number): Promise<RawOdds[]>;
 }
+
+/**
+ * One bookmaker's price for one selection on one fixture.
+ *
+ * `market` and `value` are OUR vocabulary, not the upstream's — the provider
+ * does the translating, so nothing downstream has to know that API-Football
+ * calls a double chance "Home/Draw" and we call it "1X".
+ */
+export type RawOdds = {
+  bookmaker: string;
+  market: Market;
+  value: string;
+  price: number;
+};
 
 /** What the engine is asked to analyse. */
 export type FixtureBrief = {

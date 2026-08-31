@@ -164,7 +164,10 @@ export type AccessState = {
 
 export type EngineStats = {
   winRate: number;
-  roi: number;
+  /** Null when no settled pick carries a real bookmaker price. */
+  roi: number | null;
+  /** How many settled picks the return is computed from. */
+  roiSample: number;
   totalPicks: number;
 };
 

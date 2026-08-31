@@ -34,7 +34,7 @@ const CHANNELS = [
 const ALERTS = [
   { key: "daily_picks_alert", label: "Daily predictions", detail: "When the board is published" },
   { key: "slip_result_alert", label: "Slip settled", detail: "When one of your slips resolves" },
-  { key: "high_confidence_alert", label: "High confidence", detail: "When a call clears 95%" },
+  { key: "high_confidence_alert", label: "High confidence", detail: "When a call clears 80%" },
 ] as const;
 
 const THEMES: { v: ThemePref; label: string; Icon: typeof Sun }[] = [
@@ -407,7 +407,7 @@ export function ProfileClient() {
         <section className="rounded-[1.75rem] border border-border bg-surface p-6">
           <h2 className="flex items-center gap-2 text-[15px] font-semibold">
             <Bell className="h-4 w-4 text-muted" />
-            What we tell you about
+            When to receive notifications
           </h2>
 
           <div className="mt-4 space-y-4">

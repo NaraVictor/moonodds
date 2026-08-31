@@ -1350,7 +1350,15 @@ ${briefs.join("\n")}`;
   }
 
   // High-confidence calls get their own alert, matching the profile toggle.
-  const standout = isExtra ? [] : qualifying.filter((p) => p.confidenceScore >= 9.5);
+  /*
+   * 80, not 95.
+   *
+   * At 9.5 the alert had almost never fired: the engine's ceiling is 9.8 and
+   * a board rarely carries anything above 9.0, so an opt-in people had
+   * switched on was silently doing nothing. 8.0 is a threshold the model
+   * actually reaches, which is what makes the toggle mean something.
+   */
+  const standout = isExtra ? [] : qualifying.filter((p) => p.confidenceScore >= 8.0);
   if (standout.length) {
     await db.from("jobs").insert(
       standout.map((p) => {
@@ -1413,6 +1421,119 @@ ${briefs.join("\n")}`;
  * no fixture is ever fetched by both.
  */
 const LIVE_WINDOW_MS = 4 * 60 * 60 * 1000;
+
+/**
+ * Bookmaker prices for today's board, written to odds_snapshots.
+ *
+ * WHY THIS EXISTS
+ *
+ * Nothing ever wrote this table. app.pick_price falls back to
+ * `2.60 - (confidence - 7.0) * 0.28` when it finds no snapshot, and with the
+ * table empty that fallback WAS the product's odds — a straight line drawn
+ * from the confidence score with no bookmaker anywhere in it. It reads high
+ * because it is not a price: a 74% call was shown at 2.49, which implies 40%,
+ * so the two numbers on the same card disagreed by more than thirty points and
+ * did so in the flattering direction.
+ *
+ * Every bookmaker is stored rather than a chosen one, because the readers of
+ * this table want different things from it: app.pick_price takes the latest
+ * for the record, app.pick_price_low takes the minimum for any claim about a
+ * return, and runClvCheck compares opening against closing.
+ *
+ * Only picks that do not already have a price, so a rerun costs nothing and
+ * the daily API budget is spent on fixtures that need it.
+ */
+export async function runFetchOdds({ maxFixtures }: { maxFixtures?: number } = {}) {
+  const db = createServiceClient();
+  const { football } = getProviders();
+
+  const { startISO, endISO } = utcDayWindow();
+
+  const { data: picks } = await db
+    .from("predictions")
+    .select(
+      "id, prediction_type, predicted_value, fixture_id, fixtures!inner(external_id, fixture_date, status)",
+    )
+    .eq("status", "pending")
+    .eq("fixtures.status", "scheduled")
+    .gte("fixtures.fixture_date", startISO)
+    .lt("fixtures.fixture_date", endISO);
+
+  if (!picks?.length) return { fixtures: 0, priced: 0, snapshots: 0 };
+
+  // Which already have a price. Fetching a fixture again to write the same
+  // numbers is a call against a budget that buys nothing.
+  const { data: have } = await db
+    .from("odds_snapshots")
+    .select("prediction_id")
+    .in("prediction_id", picks.map((p) => p.id));
+
+  const priced = new Set((have ?? []).map((h) => h.prediction_id as string));
+  const todo = picks.filter((p) => !priced.has(p.id as string));
+  if (!todo.length) return { fixtures: 0, priced: 0, snapshots: 0 };
+
+  // Grouped, because odds are fetched per FIXTURE and a fixture can carry more
+  // than one pick. Ungrouped, a fixture with two picks costs two calls.
+  const byFixture = new Map<number, typeof todo>();
+  for (const p of todo) {
+    const f = asOne(p.fixtures) as { external_id: number | null } | null;
+    if (!f?.external_id) continue;
+    const list = byFixture.get(f.external_id) ?? [];
+    list.push(p);
+    byFixture.set(f.external_id, list);
+  }
+
+  const cap = Math.max(1, maxFixtures ?? 40);
+  let snapshots = 0;
+  let pricedCount = 0;
+  let fixtures = 0;
+
+  for (const [externalId, group] of [...byFixture].slice(0, cap)) {
+    fixtures++;
+    let quotes;
+    try {
+      quotes = await football.fetchOdds(externalId);
+    } catch (err) {
+      // One fixture nobody prices must not stop the rest. The pick keeps the
+      // fallback, which is what it had before this ran.
+      console.warn(`[odds] fixture ${externalId} failed:`, err);
+      continue;
+    }
+
+    const rows: Array<Record<string, unknown>> = [];
+
+    for (const pick of group) {
+      const market = pick.prediction_type as Market;
+      const value = pick.predicted_value as string;
+      const matches = quotes.filter((q) => q.market === market && q.value === value);
+      if (!matches.length) continue;
+
+      pricedCount++;
+      for (const q of matches) {
+        rows.push({
+          fixture_id: pick.fixture_id,
+          prediction_id: pick.id,
+          market_type: market,
+          bookmaker: q.bookmaker,
+          pick_odds: q.price,
+          opening_odds: q.price,
+        });
+      }
+    }
+
+    if (rows.length) {
+      const { error } = await db.from("odds_snapshots").insert(rows);
+      if (error) console.warn("[odds] could not write snapshots:", error.message);
+      else snapshots += rows.length;
+    }
+  }
+
+  console.warn(
+    `[odds] ${fixtures} fixture(s) read, ${pricedCount} pick(s) priced, ${snapshots} snapshot(s)`,
+  );
+
+  return { fixtures, priced: pricedCount, snapshots };
+}
 
 export async function runAutoGrade() {
   const db = createServiceClient();
@@ -2160,7 +2281,8 @@ export function dailyResultsEmail(p: {
     prediction: string;
     confidence: number;
     status: string;
-    odds: number;
+    /** Null when no bookmaker price was recorded for the call. */
+    odds: number | null;
   }>;
 }): string {
   const graded = p.results.filter((r) => r.status === "won" || r.status === "lost");
@@ -2181,12 +2303,16 @@ export function dailyResultsEmail(p: {
    * latest, so the total is one a customer could have beaten rather than one
    * they could have missed. See app.pick_price_low.
    */
-  const totalOdds = winners.reduce((sum, r) => sum + r.odds, 0);
+  const allPriced = winners.length > 0 && winners.every((r) => r.odds != null);
+  const totalOdds = winners.reduce((sum, r) => sum + (r.odds ?? 0), 0);
 
-  const summary = [
+  const summary: string[][] = [
     ["Total Predictions", String(p.results.length)],
     ["Games Won", String(winners.length)],
-    ["Total Odds", `${totalOdds.toFixed(2)} odds`],
+    // Stated only when every winning call carries a real bookmaker price.
+    // Totalling the priced ones under a heading that implies all of them is
+    // the kind of small dishonesty a reader finds by adding up the column.
+    ...(allPriced ? [["Total Odds", `${totalOdds.toFixed(2)} odds`]] : []),
   ];
 
   const rows = p.results.map((r, i) => [
@@ -2201,7 +2327,8 @@ export function dailyResultsEmail(p: {
     preheader:
       rate == null
         ? "Today's results are in"
-        : `${winners.length} of ${graded.length} landed — ${totalOdds.toFixed(2)} odds`,
+        : `${winners.length} of ${graded.length} landed` +
+          (allPriced ? ` — ${totalOdds.toFixed(2)} odds` : ""),
     body:
       para("<strong>Today's results are in.</strong>") +
       // The three numbers first, in the order a tipster posts them. Everything
@@ -2229,7 +2356,10 @@ export function dailyResultsEmail(p: {
         align: ["left", "left", "left", "right", "right"],
       }) +
       note(
-        "Total odds add the price of each winning call, taken at the lowest odds we recorded for it. One day is a small sample — the running record is on the site.",
+        (allPriced
+          ? "Total odds add the price of each winning call, taken at the lowest odds any bookmaker offered. "
+          : "") +
+          "One day is a small sample — the running record is on the site.",
       ),
     cta: { label: "See the full record", href: `${SITE_URL}/history` },
   });
@@ -2649,7 +2779,7 @@ async function handleJob(
         prediction: formatMarket(r.market as Market, r.value),
         confidence: Number(r.confidence ?? 0),
         status: r.status,
-        odds: Number(r.odds ?? 0),
+        odds: r.odds == null ? null : Number(r.odds),
       }));
 
       // A day that settled nothing is not a day worth mailing about. Only

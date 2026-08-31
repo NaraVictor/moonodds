@@ -85,18 +85,35 @@ function StatsPanel({ filters }: { filters: HistoryFilters }) {
           ? `${formatPercent(stats.winRateInterval.low, 0)} to ${formatPercent(stats.winRateInterval.high, 0)}`
           : null,
     },
-    {
-      label: "Return",
-      value: stats.roi == null ? "-" : formatSigned(stats.roi),
-      ink:
-        stats.roi == null
-          ? undefined
-          : stats.roi >= 0
-            ? "var(--success)"
-            : "var(--danger)",
-    },
+    /*
+     * Only when a real price backs it.
+     *
+     * This figure used to be computed from app.pick_price, which falls back to
+     * an estimate derived from the confidence score when a pick has no odds
+     * snapshot — and nothing wrote snapshots, so the published +119.7% was
+     * arithmetic over prices no bookmaker ever quoted. It now counts only
+     * settled picks carrying a real one, and until some do, the tile is absent
+     * rather than showing a zero that would read as "we broke even".
+     */
+    ...(stats.roiSample > 0 && stats.roi != null
+      ? [
+          {
+            label: "Return",
+            value: formatSigned(stats.roi),
+            ink: stats.roi >= 0 ? "var(--success)" : "var(--danger)",
+            note:
+              stats.roiSample < stats.settled
+                ? `from ${stats.roiSample} priced call${stats.roiSample === 1 ? "" : "s"}`
+                : null,
+          },
+        ]
+      : []),
     { label: "Settled calls", value: String(stats.settled) },
-    { label: "Average price", value: stats.avgOdds == null ? "-" : stats.avgOdds.toFixed(2) },
+    // Absent rather than a dash, for the same reason as the return: until a
+    // real bookmaker price exists there is nothing to average.
+    ...(stats.avgOdds != null
+      ? [{ label: "Average price", value: stats.avgOdds.toFixed(2) }]
+      : []),
   ];
 
   const best = stats.byMarket.length

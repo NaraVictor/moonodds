@@ -1,5 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { leagueBadgeUrl, teamCrestUrl } from "./types";
+import type { Market } from "../types";
 import type {
   AiProvider,
   EnginePick,
@@ -8,6 +9,7 @@ import type {
   MessagingProvider,
   PaymentProvider,
   RawFixture,
+  RawOdds,
   RawFixtureStats,
   RawLineup,
   RawLineupPlayer,
@@ -498,6 +500,90 @@ function num(v: string | number | null | undefined): number {
   return Number.isFinite(n) ? Number((n as number).toFixed(2)) : 0;
 }
 
+/**
+ * API-Football's bet vocabulary, translated into ours.
+ *
+ * Matched on the bet NAME rather than its numeric id. The ids are stable in
+ * the documentation and not in practice — they differ between plans and have
+ * been renumbered — while the names have stayed put, and a name that stops
+ * matching produces a missing price rather than a WRONG one, which is the
+ * failure to prefer when the output is a number about money.
+ *
+ * Several aliases per market for the same reason: bookmakers under one feed do
+ * not all label a market identically.
+ */
+const BET_NAMES: Partial<Record<Market, string[]>> = {
+  "1x2": ["match winner", "1x2", "full time result"],
+  double_chance: ["double chance"],
+  draw_no_bet: ["draw no bet"],
+  btts: ["both teams score", "both teams to score"],
+  over_under_1_5: ["goals over/under", "over/under"],
+  over_under_2_5: ["goals over/under", "over/under"],
+  over_under_3_5: ["goals over/under", "over/under"],
+  first_half_goals: ["goals over/under first half", "over/under first half"],
+  second_half_goals: ["goals over/under - second half", "over/under second half"],
+  correct_score: ["exact score", "correct score"],
+  handicap: ["asian handicap", "handicap result"],
+};
+
+/**
+ * A bookmaker's selection label, translated back into our predicted_value.
+ *
+ * Deliberately this direction. Going the other way — enumerating our values
+ * and asking which label each would produce — cannot express correct_score or
+ * handicap, whose values are open sets validated by regex rather than a list.
+ * Reading the label and deciding what it means handles every market with one
+ * function and no duplicated vocabulary.
+ *
+ * Returns null for anything it does not recognise, which is how an unfamiliar
+ * label becomes a missing price rather than a wrong one.
+ */
+function ourValue(market: Market, label: string): string | null {
+  const v = label.trim().toLowerCase();
+
+  switch (market) {
+    case "1x2":
+      return { home: "1", draw: "X", away: "2" }[v] ?? null;
+    case "draw_no_bet":
+      return { home: "1", away: "2" }[v] ?? null;
+    case "double_chance":
+      return { "home/draw": "1X", "draw/away": "X2", "home/away": "12" }[v] ?? null;
+    case "btts":
+      return v === "yes" || v === "no" ? v : null;
+    case "over_under_1_5":
+    case "over_under_2_5":
+    case "over_under_3_5": {
+      // "over 2.5" only counts for over_under_2_5. Matching the side without
+      // checking the line is how a 1.5 price ends up attached to a 2.5 call.
+      const line = market.slice("over_under_".length).replace("_", ".");
+      const m = /^(over|under)\s+([\d.]+)$/.exec(v);
+      return m && m[2] === line ? m[1] : null;
+    }
+    case "correct_score":
+      return /^\d+-\d+$/.test(v) ? v : null;
+    case "handicap":
+      return /^(home|away) [+-]\d+(\.\d+)?$/.test(v) ? v : null;
+    // Upstream states these on 0.5/1.5 lines and our engine states them
+    // without one, so there is nothing safe to match on. Skipped rather than
+    // guessed: a wrong line is a wrong price.
+    case "first_half_goals":
+    case "second_half_goals":
+    default:
+      return null;
+  }
+}
+
+type ApiOddsResponse = {
+  fixture?: { id?: number };
+  bookmakers?: Array<{
+    name?: string;
+    bets?: Array<{
+      name?: string;
+      values?: Array<{ value?: string; odd?: string }>;
+    }>;
+  }>;
+};
+
 export const liveFootball: FootballProvider = {
   async fetchFixtures(date, leagueIds) {
     const seen = new Set<number>();
@@ -707,6 +793,51 @@ export const liveFootball: FootballProvider = {
       `/teams?search=${encodeURIComponent(query)}`,
     );
     return rows.map(toRawTeam);
+  },
+
+  /**
+   * Every bookmaker price we can match to one of our markets.
+   *
+   * One upstream call per fixture. Unmatched markets are simply absent rather
+   * than filled with a default — a fixture nobody prices is a fixture we do
+   * not state a price for, and the alternative is inventing one, which is the
+   * problem this whole feed exists to end.
+   */
+  async fetchOdds(externalId) {
+    const pages = await apiFootball<ApiOddsResponse>(`/odds?fixture=${externalId}`);
+    const out: RawOdds[] = [];
+
+    for (const page of pages) {
+      for (const book of page.bookmakers ?? []) {
+        const bookmaker = book.name?.trim();
+        if (!bookmaker) continue;
+
+        for (const bet of book.bets ?? []) {
+          const betName = bet.name?.trim().toLowerCase();
+          if (!betName) continue;
+
+          for (const [market, names] of Object.entries(BET_NAMES) as Array<
+            [Market, string[]]
+          >) {
+            if (!names.includes(betName)) continue;
+
+            for (const v of bet.values ?? []) {
+              const label = v.value?.trim().toLowerCase();
+              const price = Number(v.odd);
+              // A price at or below evens on these markets is a feed error,
+              // not a bargain, and 1.0 would make a return calculation read as
+              // free money.
+              if (!label || !Number.isFinite(price) || price <= 1) continue;
+
+              const ours = ourValue(market, label);
+              if (ours) out.push({ bookmaker, market, value: ours, price });
+            }
+          }
+        }
+      }
+    }
+
+    return out;
   },
 
   async fetchTeamsByLeague(leagueExternalId, season) {

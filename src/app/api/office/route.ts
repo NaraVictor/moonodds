@@ -255,9 +255,19 @@ export async function GET() {
   if ("error" in guard) return guard.error;
 
   const db = createServiceClient();
-  const { data: policy } = await db.rpc("get_settlement_policy");
+  const { data: policy, error } = await db.rpc("get_settlement_policy");
 
-  return NextResponse.json({ fx: await currentFallback(), settlementPolicy: policy });
+  // Surfaced rather than swallowed. Ignoring this error is what let the panel
+  // render its default of "all" while the policy was unreadable, so the first
+  // sign of trouble was a save failing.
+  if (error) {
+    console.error("[office] could not read the settlement policy:", error.message);
+  }
+
+  return NextResponse.json({
+    fx: await currentFallback(),
+    settlementPolicy: policy ?? null,
+  });
 }
 
 export async function POST(request: Request) {
