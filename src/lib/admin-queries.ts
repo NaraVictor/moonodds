@@ -51,6 +51,38 @@ export function useFxFallback() {
   });
 }
 
+export type SettlementPolicy = {
+  mode: "all" | "selected" | "off";
+  userIds: string[];
+  updatedAt: string | null;
+  updatedBy: string | null;
+};
+
+/**
+ * Who gets the end-of-day results email.
+ *
+ * Read through the Office route rather than the RPC directly, so it arrives on
+ * the same request as the pricing settings and the panel has no second
+ * loading state for one small object.
+ */
+export function useSettlementPolicy() {
+  return useQuery({
+    queryKey: [...adminKeys.fx, "settlement"] as const,
+    queryFn: async (): Promise<SettlementPolicy> => {
+      const res = await fetch("/api/office");
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? "Could not read the policy.");
+      const p = (json.settlementPolicy ?? {}) as Partial<SettlementPolicy>;
+      return {
+        mode: p.mode ?? "all",
+        userIds: Array.isArray(p.userIds) ? p.userIds : [],
+        updatedAt: p.updatedAt ?? null,
+        updatedBy: p.updatedBy ?? null,
+      };
+    },
+  });
+}
+
 export function useEngineConfig() {
   return useQuery({
     queryKey: adminKeys.config,

@@ -146,6 +146,11 @@ const Body = z.discriminatedUnion("action", [
     values: z.record(z.string(), z.union([z.number(), z.string().min(1).max(60)])),
   }),
   z.object({
+    action: z.literal("setSettlementPolicy"),
+    mode: z.enum(["all", "selected", "off"]),
+    userIds: z.array(z.uuid()).max(500).default([]),
+  }),
+  z.object({
     action: z.literal("setFxFallback"),
     // null clears the override and hands control back to the environment.
     rate: z.number().min(1).max(200).nullable(),
@@ -249,7 +254,10 @@ export async function GET() {
   const guard = await requireSuperAdmin();
   if ("error" in guard) return guard.error;
 
-  return NextResponse.json({ fx: await currentFallback() });
+  const db = createServiceClient();
+  const { data: policy } = await db.rpc("get_settlement_policy");
+
+  return NextResponse.json({ fx: await currentFallback(), settlementPolicy: policy });
 }
 
 export async function POST(request: Request) {
@@ -779,6 +787,26 @@ export async function POST(request: Request) {
           changed: Object.keys(body.values).length,
           buckets: Object.keys(merged),
         });
+      }
+
+      /*
+       * Who receives the end-of-day results email.
+       *
+       * The RPC does the checking rather than this route: it is super-admin
+       * gated in SQL and refuses "selected with nobody selected", which is
+       * 'off' wearing a different label and reads back later as though mail is
+       * going out when it is not.
+       */
+      case "setSettlementPolicy": {
+        const { data, error } = await db.rpc("set_settlement_policy", {
+          p_mode: body.mode,
+          p_user_ids: body.userIds,
+          p_actor: actor,
+        });
+        if (error) {
+          return NextResponse.json({ error: error.message }, { status: 400 });
+        }
+        return NextResponse.json({ policy: data });
       }
 
       case "setFxFallback": {

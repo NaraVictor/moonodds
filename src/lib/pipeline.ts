@@ -9,8 +9,8 @@ import { ENGINE_CALL_BUDGET_MS, THIN_SEASON_GAMES, sessionCap } from "./engine/l
 import { ENGINE_PROMPT_VERSION } from "./engine/prompt";
 import { reportError } from "./report-error";
 import { SITE_URL } from "./site-url";
-import { utcDayWindow } from "./format";
-import { renderEmail, p as para, note, esc } from "./email-layout";
+import { formatMarket, utcDayWindow } from "./format";
+import { renderEmail, p as para, note, esc, emailTable, resultBadge } from "./email-layout";
 
 /**
  * The daily pipeline, ported from convex/cron_jobs and convex/football.
@@ -1550,6 +1550,10 @@ async function applyResults(
   let finished = 0;
   let live = 0;
 
+  // Which fixtures this pass settled. Needed because the day a result belongs
+  // to is the day the match was PLAYED, not the day it was graded — see below.
+  const gradedFixtures = new Set<string>();
+
   for (const fixture of withIds) {
     const result = byExternal.get(fixture.external_id as number);
     if (!result) continue;
@@ -1635,6 +1639,53 @@ async function applyResults(
         })
         .eq("id", p.id);
       graded++;
+      gradedFixtures.add(fixture.id);
+    }
+  }
+
+  /*
+   * Was that the last of the day?
+   *
+   * Asked after every grading pass rather than on a schedule, because the
+   * answer depends on the last fixture finishing and nothing else. A cron at a
+   * fixed hour would either fire before a late kickoff had settled — sending a
+   * results email with a pending row in it — or so late that the results
+   * arrive the following morning.
+   *
+   * The database decides and queues, under an advisory lock, so two graders
+   * finishing together cannot both queue it and mail everybody twice.
+   */
+  if (gradedFixtures.size) {
+    /*
+     * Asked for the days those fixtures were PLAYED, not for today.
+     *
+     * The sweep grades anything still unfinished four hours after kickoff, so
+     * a 21:00 kickoff can be settled at 01:30 the next morning. Keyed on the
+     * current date, that pass would have asked whether TODAY's board was
+     * complete — it is not, it has not started — and yesterday's board, the
+     * one that just finished, would never have been asked about at all. The
+     * email would simply never arrive for any day with a late kickoff.
+     */
+    const { data: played } = await db
+      .from("fixtures")
+      .select("fixture_date")
+      .in("id", [...gradedFixtures]);
+
+    const days = new Set(
+      (played ?? []).map((f) => String(f.fixture_date).slice(0, 10)),
+    );
+
+    for (const day of days) {
+      const { data: queued, error } = await db.rpc("queue_daily_results", {
+        p_date: day,
+      });
+      if (error) {
+        // Not fatal: the grading itself is written and correct, and the next
+        // pass asks the same question again.
+        console.warn(`[grade] could not check the board for ${day}:`, error.message);
+      } else if (queued) {
+        console.warn(`[grade] every board pick for ${day} has settled, results queued`);
+      }
     }
   }
 
@@ -2049,29 +2100,18 @@ export function dailyPicksEmail(
   board: Array<{ fixture: string; kickoff: string | null; confidence: number }>,
   count: number,
 ): string {
-  const cell = "padding:10px 12px;border-bottom:1px solid #e6e8eb;font-size:14px;";
-  // Alignment is NOT in here. It used to be, so the right-aligned column
-  // emitted `text-align:left;text-align:right;` — the cascade resolves that
-  // correctly in a browser, and Outlook renders with Word, whose handling of a
-  // duplicated declaration is not something to find out from a customer.
-  const head =
-    "padding:0 12px 8px;border-bottom:2px solid #111827;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:#6b7280;";
-
-  const rows = board
-    .map((b, i) => {
-      const time = b.kickoff
-        ? new Date(b.kickoff).toLocaleTimeString("en-GB", {
-            hour: "2-digit", minute: "2-digit", timeZone: "UTC",
-          })
-        : "—";
-      return (
-        `<tr><td style="${cell}color:#6b7280;">${i + 1}</td>` +
-        `<td style="${cell}font-weight:600;">${esc(b.fixture)}</td>` +
-        `<td style="${cell}color:#6b7280;white-space:nowrap;">${time}</td>` +
-        `<td style="${cell}font-weight:600;text-align:right;">${Math.round(b.confidence * 10)}%</td></tr>`
-      );
-    })
-    .join("");
+  const rows = board.map((b, i) => [
+    String(i + 1),
+    `<strong>${esc(b.fixture)}</strong>`,
+    b.kickoff
+      ? new Date(b.kickoff).toLocaleTimeString("en-GB", {
+          hour: "2-digit",
+          minute: "2-digit",
+          timeZone: "UTC",
+        })
+      : "—",
+    `<strong>${Math.round(b.confidence * 10)}%</strong>`,
+  ]);
 
   return renderEmail({
     preheader: `${count} game${count === 1 ? "" : "s"} we like today`,
@@ -2081,13 +2121,74 @@ export function dailyPicksEmail(
         `Our model went through the day's fixtures and settled on ${count} it likes enough to back. Here they are, with how sure it is about each one.`,
       ) +
       (board.length
-        ? `<table role="presentation" cellpadding="0" cellspacing="0" style="border-collapse:collapse;width:100%;margin-top:20px;">` +
-          `<thead><tr><th style="${head}text-align:left;">S/N</th><th style="${head}text-align:left;">Fixture</th>` +
-          `<th style="${head}text-align:left;">Time</th><th style="${head}text-align:right;">AI conf.</th></tr></thead>` +
-          `<tbody>${rows}</tbody></table>`
+        ? emailTable({
+            head: ["S/N", "Fixture", "Time", "AI conf."],
+            rows,
+            align: ["left", "left", "left", "right"],
+          })
         : "") +
       note("Kickoff times are UTC. The call itself, and why we made it, are on the site."),
     cta: { label: "See Predictions on Kicka", href: SITE_URL },
+  });
+}
+
+/**
+ * How the day finished, once every game on the board has.
+ *
+ * The bookend to dailyPicksEmail: the same board, the same order, with the
+ * call and the verdict filled in. It is the message that makes the morning one
+ * worth opening — a product that tells you what it predicted and never what
+ * happened is asking to be taken on trust it has not earned.
+ *
+ * The win rate counts won and lost only. A void is a game that did not
+ * produce a result — including it as a loss would be a lie, and as a win a
+ * flattering one — so it is shown in the count and kept out of the rate,
+ * exactly as /history does it.
+ */
+export function dailyResultsEmail(p: {
+  date: string;
+  results: Array<{
+    fixture: string;
+    prediction: string;
+    confidence: number;
+    status: string;
+  }>;
+}): string {
+  const graded = p.results.filter((r) => r.status === "won" || r.status === "lost");
+  const won = graded.filter((r) => r.status === "won").length;
+  const voided = p.results.length - graded.length;
+  const rate = graded.length ? Math.round((won / graded.length) * 100) : null;
+
+  const rows = p.results.map((r, i) => [
+    String(i + 1),
+    `<strong>${esc(r.fixture)}</strong>`,
+    esc(r.prediction),
+    `<strong>${Math.round(r.confidence * 10)}%</strong>`,
+    resultBadge(r.status),
+  ]);
+
+  const headline =
+    rate == null
+      ? "Every game on today's board is in."
+      : `Today's board finished at <strong>${rate}%</strong> — ${won} of ${graded.length} calls landed.`;
+
+  return renderEmail({
+    preheader:
+      rate == null
+        ? "Today's results are in"
+        : `${rate}% today — ${won} of ${graded.length} landed`,
+    body:
+      para("Today's results are in.") +
+      para(headline + (voided ? ` ${voided} was voided and does not count either way.` : "")) +
+      emailTable({
+        head: ["S/N", "Fixture", "Prediction", "Confidence", "Result"],
+        rows,
+        align: ["left", "left", "left", "right", "right"],
+      }) +
+      note(
+        "One day is a small sample. The running record, with every call we have ever settled, is on the site.",
+      ),
+    cta: { label: "See the full record", href: `${SITE_URL}/history` },
   });
 }
 
@@ -2448,6 +2549,104 @@ async function handleJob(
           reference: p.reference,
         }),
       });
+      return;
+    }
+
+    /*
+     * The day's results, to whoever is meant to receive them.
+     *
+     * Two gates, and they narrow rather than widen. The Office policy says who
+     * an operator wants mailed; notification_preferences says who asked to
+     * hear from us. Somebody who turned alerts off stays off whatever the
+     * policy says, which is why this intersects rather than choosing between
+     * them.
+     */
+    case "daily_results_ready": {
+      const p = job.payload as { dateKey: string };
+
+      const { data: policy } = await db
+        .from("settlement_email_policy")
+        .select("mode, user_ids")
+        .eq("id", true)
+        .maybeSingle();
+
+      const mode = policy?.mode ?? "all";
+      if (mode === "off") {
+        console.warn("[jobs/daily_results_ready] settlement emails are switched off");
+        return;
+      }
+
+      const dayStart = `${p.dateKey}T00:00:00.000Z`;
+      const dayEnd = new Date(`${p.dateKey}T00:00:00.000Z`);
+      dayEnd.setUTCDate(dayEnd.getUTCDate() + 1);
+
+      const { data: rows } = await db
+        .from("predictions")
+        .select(
+          "prediction_type, predicted_value, confidence_score, status, fixtures!inner(fixture_date, home:teams!fixtures_home_team_id_fkey(name), away:teams!fixtures_away_team_id_fkey(name))",
+        )
+        .eq("tier", "primary")
+        .in("status", ["won", "lost", "void"])
+        .gte("fixtures.fixture_date", dayStart)
+        .lt("fixtures.fixture_date", dayEnd.toISOString())
+        .order("confidence_score", { ascending: false });
+
+      const results = (rows ?? []).map((r) => {
+        const f = asOne(r.fixtures) as {
+          home: unknown;
+          away: unknown;
+        } | null;
+        return {
+          fixture: `${(asOne(f?.home as never) as { name?: string } | null)?.name ?? "?"} v ${(asOne(f?.away as never) as { name?: string } | null)?.name ?? "?"}`,
+          prediction: formatMarket(
+            r.prediction_type as Market,
+            r.predicted_value as string,
+          ),
+          confidence: Number(r.confidence_score ?? 0),
+          status: r.status as string,
+        };
+      });
+
+      // A day that settled nothing is not a day worth mailing about. This can
+      // only happen if the picks were deleted between queueing and draining.
+      if (!results.length) {
+        console.warn(`[jobs/daily_results_ready] nothing settled for ${p.dateKey}`);
+        return;
+      }
+
+      let query = db
+        .from("notification_preferences")
+        .select("user_id, profiles(email)")
+        .eq("daily_picks_alert", true)
+        .eq("email_enabled", true);
+
+      if (mode === "selected") {
+        const chosen = (policy?.user_ids ?? []) as string[];
+        if (!chosen.length) return;
+        query = query.in("user_id", chosen);
+      }
+
+      const { data: recipients } = await query;
+      const html = dailyResultsEmail({ date: p.dateKey, results });
+
+      let sent = 0;
+      let failed = 0;
+
+      for (const r of recipients ?? []) {
+        const email = (asOne(r.profiles) as { email: string | null } | null)?.email;
+        if (!email) continue;
+        const ok = await deliver("jobs/daily_results_ready", "email", () =>
+          messaging.sendEmail({
+            to: email,
+            subject: "How today's board finished",
+            html,
+          }),
+        );
+        if (ok) sent++;
+        else failed++;
+      }
+
+      settleBroadcast("jobs/daily_results_ready", sent, failed);
       return;
     }
 

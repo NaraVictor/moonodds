@@ -130,6 +130,94 @@ export function renderEmail({
 </body></html>`;
 }
 
+/**
+ * A bordered table, because email cannot be trusted with a borderless one.
+ *
+ * `border-collapse: collapse` is the usual way to get single-pixel rules
+ * between cells, and it silently disables border-radius — the corners simply
+ * do not round. So this uses `separate` with zero spacing and paints the rules
+ * per cell instead: every cell carries a right and bottom edge, the last
+ * column drops its right, the last row drops its bottom, and the outer border
+ * and radius live on the table itself.
+ *
+ * Outlook renders with Word, which ignores border-radius entirely. It shows
+ * the same table with square corners, which is the correct thing to degrade
+ * to — all the rules are still there, and the grid is what carries the meaning.
+ *
+ * One helper rather than two tables written by hand, so the results email and
+ * the picks email cannot drift into different grids.
+ */
+export function emailTable(t: {
+  head: string[];
+  rows: string[][];
+  /** Per-column alignment; defaults to left. */
+  align?: Array<"left" | "right" | "center">;
+}): string {
+  const cols = t.head.length;
+  const at = (i: number) => t.align?.[i] ?? "left";
+  const edge = (last: boolean) => (last ? "" : `border-right:1px solid ${RULE};`);
+
+  const head = t.head
+    .map(
+      (h, i) =>
+        `<th style="padding:9px 12px;${edge(i === cols - 1)}border-bottom:1px solid ${RULE};` +
+        `background:#fafbfb;font-family:${FONT};font-size:10px;letter-spacing:.06em;` +
+        `text-transform:uppercase;color:${MUTED};text-align:${at(i)};font-weight:700;">${h}</th>`,
+    )
+    .join("");
+
+  const body = t.rows
+    .map((r, ri) => {
+      const lastRow = ri === t.rows.length - 1;
+      const cells = r
+        .map(
+          (c, i) =>
+            `<td style="padding:10px 12px;${edge(i === cols - 1)}` +
+            `${lastRow ? "" : `border-bottom:1px solid ${RULE};`}` +
+            `font-family:${FONT};font-size:14px;color:${INK};text-align:${at(i)};` +
+            `vertical-align:middle;">${c}</td>`,
+        )
+        .join("");
+      return `<tr>${cells}</tr>`;
+    })
+    .join("");
+
+  return (
+    `<table role="presentation" cellpadding="0" cellspacing="0" ` +
+    `style="border-collapse:separate;border-spacing:0;width:100%;margin-top:20px;` +
+    `border:1px solid ${RULE};border-radius:10px;overflow:hidden;">` +
+    `<thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`
+  );
+}
+
+/**
+ * Won or lost, as the badge the site uses.
+ *
+ * The same wash-and-ink pair as /history and the board's table view, so a
+ * result means the same thing wherever somebody meets it.
+ *
+ * No glyph. On the site the badge carries a tick or a cross alongside the
+ * word, and in mail that is the one part that cannot be relied on: an inline
+ * SVG is stripped by Gmail, and the ✓ character renders as a colour emoji on
+ * some Android clients, which would put a cartoon in the middle of a results
+ * table. Colour plus the word says it unambiguously and renders everywhere.
+ */
+export function resultBadge(status: string): string {
+  const tone =
+    status === "won"
+      ? { bg: "#e7f6ec", ink: "#15803D", label: "WON" }
+      : status === "lost"
+        ? { bg: "#fdeceb", ink: "#b42318", label: "LOST" }
+        : { bg: "#f1f3f4", ink: MUTED, label: "VOID" };
+
+  return (
+    `<span style="display:inline-block;background:${tone.bg};color:${tone.ink};` +
+    `border-radius:999px;padding:3px 9px;font-family:${FONT};font-size:10px;` +
+    `font-weight:700;letter-spacing:.06em;">${tone.label}</span>`
+  );
+}
+
+
 /** A paragraph at the shell's measure. */
 export function p(html: string): string {
   return `<p style="margin:0 0 16px;">${html}</p>`;

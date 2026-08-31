@@ -40,6 +40,7 @@ import {
   useUserPicksReport,
   useAllConfigs,
   useFxFallback,
+  useSettlementPolicy,
   adminKeys,
   type BoardFixture,
   type CatalogLeague,
@@ -2549,6 +2550,149 @@ function PromptVariables({
  * depending on whether someone chose it or it is the compiled-in default nobody
  * has touched since the file was written.
  */
+/**
+ * Who receives the end-of-day results email.
+ *
+ * Three modes, and the middle one is the reason this exists: an operator
+ * testing a change wants it going to themselves and nobody else, and the
+ * alternative to a picker is switching it on for everybody and hoping.
+ *
+ * The line about preferences is not decoration. "Everyone" here means everyone
+ * who asked to hear from us — the send intersects this with each person's own
+ * notification settings — and an operator who believes this switch can reach
+ * an opted-out customer will eventually use it that way.
+ */
+function SettlementEmailPanel() {
+  const { data: policy, isPending } = useSettlementPolicy();
+  const { data: users } = useAdminUsers();
+  const action = useOfficeAction();
+  const qc = useQueryClient();
+  const [chosen, setChosen] = useState<Set<string> | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  if (isPending || !policy) {
+    return (
+      <Panel title="Results email" description="Who hears how the day finished.">
+        <Loading />
+      </Panel>
+    );
+  }
+
+  const selected = chosen ?? new Set(policy.userIds);
+
+  async function save(mode: "all" | "selected" | "off", ids: string[]) {
+    setError(null);
+    try {
+      await action.mutateAsync({ action: "setSettlementPolicy", mode, userIds: ids });
+      await qc.invalidateQueries({ queryKey: adminKeys.fx });
+      setChosen(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not save.");
+    }
+  }
+
+  const MODES = [
+    ["all", "Everyone", "Every subscriber who has alerts on."],
+    ["selected", "Only these people", "Useful while testing a change."],
+    ["off", "Nobody", "The email is not sent at all."],
+  ] as const;
+
+  return (
+    <Panel
+      title="Results email"
+      description="Sent once, after every game on the day's board has finished."
+    >
+      <div className="space-y-2">
+        {MODES.map(([mode, label, hint]) => (
+          <button
+            key={mode}
+            type="button"
+            disabled={action.isPending}
+            onClick={() => save(mode, mode === "selected" ? [...selected] : [])}
+            aria-pressed={policy.mode === mode}
+            className={`flex w-full cursor-pointer items-start gap-3 rounded-xl border p-3 text-left transition-colors disabled:opacity-40 ${
+              policy.mode === mode
+                ? "border-accent bg-accent/10"
+                : "border-border hover:bg-surface-secondary"
+            }`}
+          >
+            <span
+              aria-hidden
+              className="mt-0.5 flex h-4 w-4 flex-none items-center justify-center rounded-full border"
+              style={{
+                borderColor: policy.mode === mode ? "var(--accent)" : "var(--border)",
+                background: policy.mode === mode ? "var(--accent)" : "transparent",
+              }}
+            >
+              {policy.mode === mode && (
+                <Check className="h-2.5 w-2.5 text-accent-foreground" strokeWidth={4} />
+              )}
+            </span>
+            <span className="min-w-0">
+              <span className="block text-[13px] font-semibold">{label}</span>
+              <span className="block text-[11px] text-muted">{hint}</span>
+            </span>
+          </button>
+        ))}
+      </div>
+
+      {policy.mode === "selected" && (
+        <div className="mt-4">
+          <p className="label mb-2">Recipients</p>
+          <ul className="max-h-56 divide-y divide-separator overflow-y-auto rounded-xl border border-border">
+            {(users ?? []).map((u) => {
+              const on = selected.has(u.id as string);
+              return (
+                <li key={u.id as string}>
+                  <label className="flex cursor-pointer items-center gap-2.5 px-3 py-2">
+                    <input
+                      type="checkbox"
+                      checked={on}
+                      onChange={() => {
+                        const next = new Set(selected);
+                        if (on) next.delete(u.id as string);
+                        else next.add(u.id as string);
+                        setChosen(next);
+                      }}
+                      className="h-4 w-4 flex-none accent-[var(--accent)]"
+                    />
+                    <span className="min-w-0 flex-1 truncate text-[12px]">
+                      {(u.display_name as string) ?? "—"}
+                      <span className="text-muted"> · {(u.email as string) ?? "no email"}</span>
+                    </span>
+                  </label>
+                </li>
+              );
+            })}
+          </ul>
+          {chosen && (
+            <button
+              type="button"
+              disabled={action.isPending}
+              onClick={() => save("selected", [...selected])}
+              className="press mt-3 rounded-full bg-accent px-3 py-1.5 text-[11px] font-semibold text-accent-foreground disabled:opacity-40"
+            >
+              {action.isPending ? "Saving…" : `Save ${selected.size} recipient${selected.size === 1 ? "" : "s"}`}
+            </button>
+          )}
+        </div>
+      )}
+
+      {error && (
+        <p className="mt-3 text-[12px]" style={{ color: "var(--lost-ink)" }}>
+          {error}
+        </p>
+      )}
+
+      <p className="mt-4 text-[11px] leading-relaxed text-muted">
+        This narrows, it never widens: anyone who has switched their own alerts
+        off stays off whichever option is chosen here.
+        {policy.updatedBy && ` Last changed by ${policy.updatedBy}.`}
+      </p>
+    </Panel>
+  );
+}
+
 function FxFallbackPanel() {
   const { data: fx, isPending } = useFxFallback();
   const action = useOfficeAction();
@@ -3142,6 +3286,7 @@ function EnginePanel() {
       <OverlayVariables config={config} prompt={prompt ?? config.system_prompt} />
 
       <FxFallbackPanel />
+      <SettlementEmailPanel />
 
       <Panel
         title="System prompt"
