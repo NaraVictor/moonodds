@@ -68,7 +68,7 @@ export function SignInForm() {
           auth.verify();
         }}
       >
-        <div className="rounded-xl border border-border bg-surface-secondary px-3.5 py-3 text-[13px]">
+        <div className="rounded-xl border border-border bg-surface-secondary px-3.5 py-3 text-center text-[13px]">
           We sent a code to{" "}
           <strong className="font-semibold">{auth.email}</strong>. It expires
           shortly, so use it now.

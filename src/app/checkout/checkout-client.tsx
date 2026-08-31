@@ -8,7 +8,7 @@ import { Button } from "@heroui/react/button";
 import { Chip } from "@heroui/react/chip";
 import { Alert } from "@/components/ui/alert";
 import { Skeleton } from "@heroui/react/skeleton";
-import { Check, ShieldCheck, Sparkles } from "@/components/ui/icons";
+import { Check, CreditCard, Smartphone, Sparkles } from "@/components/ui/icons";
 import { useAccessState, useExtraPicksOffer } from "@/lib/queries";
 import { LinkButton } from "@/components/ui/link-button";
 import { extraPicksPriceUsd ,
@@ -302,11 +302,25 @@ export function CheckoutClient({ kind }: { kind: Kind }) {
           </Button>
           )}
 
-          <div className="flex items-start gap-2 text-[11px] leading-relaxed text-muted">
-            <ShieldCheck className="mt-0.5 h-3.5 w-3.5 flex-none" />
-            <p>
-              Card details go straight to Paystack and never touch our servers.
-            </p>
+          {/*
+            What we take, shown rather than described.
+
+            This line used to explain that card details go to Paystack and not
+            to us. True, and reassuring to about one reader in fifty — the rest
+            were being told how the plumbing works at the moment they wanted to
+            know whether they could pay with MoMo. In Ghana that is the first
+            question, not the last.
+
+            The marks are icons rather than logos: a card and a phone read
+            instantly, they carry no brand permission problem, and they do not
+            go stale when a provider changes its wordmark.
+          */}
+          <div className="flex items-center justify-center gap-2 text-[11px] leading-relaxed text-muted">
+            <span className="flex items-center gap-1" aria-hidden>
+              <CreditCard className="h-4 w-4" />
+              <Smartphone className="h-4 w-4" />
+            </span>
+            <p>We accept card or MoMo payments</p>
           </div>
         </Card.Content>
       </Card>
@@ -343,7 +357,7 @@ function InlineAuth({ auth }: { auth: ReturnType<typeof useOtpAuth> }) {
           auth.verify();
         }}
       >
-        <p className="text-[13px] leading-relaxed">
+        <p className="text-center text-[13px] leading-relaxed">
           Code sent to <strong className="font-semibold">{auth.email}</strong>.
         </p>
 
