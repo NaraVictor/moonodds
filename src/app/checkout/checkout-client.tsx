@@ -324,11 +324,22 @@ export function CheckoutClient({ kind }: { kind: Kind }) {
             <p className="text-[11px] leading-relaxed text-muted">
               We accept card or MoMo payments
             </p>
-            <div className="flex items-center justify-center gap-2">
+            <div className="flex items-center justify-center gap-2.5">
+              {/*
+                Sized to the MARKS, not to the files.
+
+                Visa's card sits on a square canvas and fills 63% of its
+                height; MoMo's yellow field fills all of its own. Given the
+                same height attribute the Visa card would render two thirds the
+                size of the MoMo one and read as the lesser option, which is
+                not a thing to imply about how somebody can pay. So the heights
+                are set so both marks stand 20px tall, and Visa's transparent
+                padding takes up the difference invisibly.
+              */}
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/pay/visa.svg" alt="Visa" width={60} height={20} />
+              <img src="/pay/visa.png" alt="Visa" width={32} height={32} />
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/pay/momo.svg" alt="MoMo" width={60} height={20} />
+              <img src="/pay/momo.png" alt="MoMo" width={43} height={20} />
             </div>
           </div>
         </Card.Content>
