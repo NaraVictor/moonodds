@@ -7,7 +7,6 @@ import { ConfidenceRing } from "./confidence-ring";
 import { TeamCrest } from "./team-crest";
 import { isUnlocked, type Pick, type UnlockedPick } from "@/lib/types";
 import { formatMarket, matchClock, teamName } from "@/lib/format";
-import { PASS_PRICE_USD } from "@/lib/pricing";
 
 /**
  * The prediction card.
@@ -317,8 +316,13 @@ export function PredictionCard({
             Filled, not a tinted word. On a locked card this is the only thing
             worth pressing, and as plain accent text it carried the same weight
             as "Summary" on an unlocked one — so the two cards looked equally
-            finished and neither invited a tap. It also names the price, because
-            "Unlock" alone asks the reader to find out what it costs.
+            finished and neither invited a tap.
+
+            No price on it. It used to name one, on the reasoning that "Unlock"
+            alone makes the reader go and find out what it costs — but a board
+            is a grid of these, so the same $3 was repeated down the page a
+            dozen times, which reads as a product asking rather than offering.
+            The price is stated once, on the paywall panel under the board.
           */
           <Link
             href="/checkout/day-pass"
@@ -329,7 +333,7 @@ export function PredictionCard({
             }}
           >
             <Lock className="h-3.5 w-3.5" />
-            Unlock today · ${PASS_PRICE_USD}
+            Unlock today
           </Link>
         )}
 

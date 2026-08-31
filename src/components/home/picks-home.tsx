@@ -368,7 +368,7 @@ export function PicksHome() {
               <p className="mx-auto mt-2 max-w-sm text-sm leading-relaxed text-muted">
                 {access?.isFirstDay
                   ? "You're seeing your free picks. The day pass unlocks the rest, and the full board tomorrow."
-                  : "One pass, one day, every prediction. No subscription."}
+                  : `Unlock access to all predictions for today with $${PASS_PRICE_USD}`}
               </p>
               <LinkButton href="/checkout/day-pass" size="lg" variant="primary" className="mt-5">
                 Unlock today · ${PASS_PRICE_USD}

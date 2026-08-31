@@ -11,6 +11,7 @@ import {
   type TeamLineup,
 } from "@/lib/queries";
 import { useBetSlip } from "@/lib/bet-slip";
+import { PASS_PRICE_USD } from "@/lib/pricing";
 import { ConfidenceRing } from "./confidence-ring";
 import { TeamCrest } from "./team-crest";
 import { isUnlocked, type Pick } from "@/lib/types";
@@ -562,7 +563,7 @@ function LockedNotice({ children }: { children: React.ReactNode }) {
           href="/checkout/day-pass"
           className="press mt-3 inline-flex h-9 items-center rounded-full bg-accent px-4 text-[13px] font-semibold text-accent-foreground"
         >
-          Unlock today · $3
+          Unlock today · ${PASS_PRICE_USD}
         </Link>
       </div>
     </div>
