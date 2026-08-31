@@ -1180,7 +1180,7 @@ function PipelinePanel() {
           ) : !runs.data?.length ? (
             <Empty>No runs yet.</Empty>
           ) : (
-            <ul className="divide-y divide-separator">
+            <ul className="max-h-[700px] divide-y divide-separator overflow-y-auto">
               {runs.data.map((r) => (
                 <li key={r.id} className="flex items-center justify-between gap-3 py-3 first:pt-0 last:pb-0">
                   <div className="min-w-0">
@@ -1214,7 +1214,7 @@ function PipelinePanel() {
           ) : !jobs.data?.length ? (
             <Empty>Queue is empty.</Empty>
           ) : (
-            <ul className="divide-y divide-separator">
+            <ul className="max-h-[700px] divide-y divide-separator overflow-y-auto">
               {jobs.data.map((j) => (
                 <li key={j.id} className="flex items-center justify-between gap-3 py-3 first:pt-0 last:pb-0">
                   <div className="min-w-0">
@@ -1718,7 +1718,7 @@ function LeaguesPanel() {
       ) : !data?.leagues.length ? (
         <Empty>No leagues yet.</Empty>
       ) : (
-        <ul className="divide-y divide-separator">
+        <ul className="max-h-[700px] divide-y divide-separator overflow-y-auto">
           {data.leagues.map((l) =>
             editing === l.id ? (
               <li key={l.id} className="py-3 first:pt-0">
@@ -1820,7 +1820,7 @@ function TeamsPanel() {
       ) : !teams.length ? (
         <Empty>No teams here.</Empty>
       ) : (
-        <ul className="max-h-[26rem] divide-y divide-separator overflow-y-auto">
+        <ul className="max-h-[700px] divide-y divide-separator overflow-y-auto">
           {teams.map((t) =>
             editing === t.id ? (
               <li key={t.id} className="py-3 first:pt-0">
