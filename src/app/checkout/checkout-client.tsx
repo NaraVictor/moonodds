@@ -8,7 +8,7 @@ import { Button } from "@heroui/react/button";
 import { Chip } from "@heroui/react/chip";
 import { Alert } from "@/components/ui/alert";
 import { Skeleton } from "@heroui/react/skeleton";
-import { Check, CreditCard, Smartphone, Sparkles } from "@/components/ui/icons";
+import { Check, Sparkles } from "@/components/ui/icons";
 import { useAccessState, useExtraPicksOffer } from "@/lib/queries";
 import { LinkButton } from "@/components/ui/link-button";
 import { extraPicksPriceUsd ,
@@ -311,16 +311,25 @@ export function CheckoutClient({ kind }: { kind: Kind }) {
             know whether they could pay with MoMo. In Ghana that is the first
             question, not the last.
 
-            The marks are icons rather than logos: a card and a phone read
-            instantly, they carry no brand permission problem, and they do not
-            go stale when a provider changes its wordmark.
+            Marks under the sentence rather than beside it. Inline, they read
+            as bullets on the line and competed with the words for the same
+            glance; underneath, the sentence makes the claim and the logos
+            settle it — which is the order somebody actually reads them in.
+
+            Plain <img>, not next/image: these are two fixed-size SVGs on a
+            page that already has a payment provider to load, and putting them
+            through the optimiser would buy nothing at all.
           */}
-          <div className="flex items-center justify-center gap-2 text-[11px] leading-relaxed text-muted">
-            <span className="flex items-center gap-1" aria-hidden>
-              <CreditCard className="h-4 w-4" />
-              <Smartphone className="h-4 w-4" />
-            </span>
-            <p>We accept card or MoMo payments</p>
+          <div className="space-y-2 text-center">
+            <p className="text-[11px] leading-relaxed text-muted">
+              We accept card or MoMo payments
+            </p>
+            <div className="flex items-center justify-center gap-2">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/pay/visa.svg" alt="Visa" width={60} height={20} />
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/pay/momo.svg" alt="MoMo" width={60} height={20} />
+            </div>
           </div>
         </Card.Content>
       </Card>
