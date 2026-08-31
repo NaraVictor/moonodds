@@ -2097,7 +2097,12 @@ export function noBoardOpsEmail(p: {
 }
 
 export function dailyPicksEmail(
-  board: Array<{ fixture: string; kickoff: string | null; confidence: number }>,
+  board: Array<{
+    fixture: string;
+    kickoff: string | null;
+    confidence: number;
+    odds?: number | null;
+  }>,
   count: number,
 ): string {
   const rows = board.map((b, i) => [
@@ -2111,6 +2116,7 @@ export function dailyPicksEmail(
         })
       : "—",
     `<strong>${Math.round(b.confidence * 10)}%</strong>`,
+    b.odds != null ? b.odds.toFixed(2) : "—",
   ]);
 
   return renderEmail({
@@ -2122,12 +2128,14 @@ export function dailyPicksEmail(
       ) +
       (board.length
         ? emailTable({
-            head: ["S/N", "Fixture", "Time", "AI conf."],
+            head: ["S/N", "Fixture", "Time", "AI conf.", "Odds"],
             rows,
-            align: ["left", "left", "left", "right"],
+            align: ["left", "left", "left", "right", "right"],
           })
         : "") +
-      note("Kickoff times are UTC. The call itself, and why we made it, are on the site."),
+      note(
+        "Kickoff times are UTC, and odds are the lowest price we recorded for each call. The call itself, and why we made it, are on the site.",
+      ),
     cta: { label: "See Predictions on Kicka", href: SITE_URL },
   });
 }
@@ -2152,12 +2160,34 @@ export function dailyResultsEmail(p: {
     prediction: string;
     confidence: number;
     status: string;
+    odds: number;
   }>;
 }): string {
   const graded = p.results.filter((r) => r.status === "won" || r.status === "lost");
-  const won = graded.filter((r) => r.status === "won").length;
+  const winners = p.results.filter((r) => r.status === "won");
   const voided = p.results.length - graded.length;
-  const rate = graded.length ? Math.round((won / graded.length) * 100) : null;
+  const rate = graded.length ? Math.round((winners.length / graded.length) * 100) : null;
+
+  /*
+   * The winners' odds ADDED, not multiplied.
+   *
+   * Multiplying is what an accumulator pays, and on a ten-pick board it
+   * produces five figures — a number that describes a bet almost nobody
+   * placed. Added, it is the return on a flat unit across the winning calls,
+   * which is the figure a tipster posts and a reader can check against their
+   * own slip.
+   *
+   * Built from the lowest price we recorded for each pick rather than the
+   * latest, so the total is one a customer could have beaten rather than one
+   * they could have missed. See app.pick_price_low.
+   */
+  const totalOdds = winners.reduce((sum, r) => sum + r.odds, 0);
+
+  const summary = [
+    ["Total Predictions", String(p.results.length)],
+    ["Games Won", String(winners.length)],
+    ["Total Odds", `${totalOdds.toFixed(2)} odds`],
+  ];
 
   const rows = p.results.map((r, i) => [
     String(i + 1),
@@ -2167,26 +2197,39 @@ export function dailyResultsEmail(p: {
     resultBadge(r.status),
   ]);
 
-  const headline =
-    rate == null
-      ? "Every game on today's board is in."
-      : `Today's board finished at <strong>${rate}%</strong> — ${won} of ${graded.length} calls landed.`;
-
   return renderEmail({
     preheader:
       rate == null
         ? "Today's results are in"
-        : `${rate}% today — ${won} of ${graded.length} landed`,
+        : `${winners.length} of ${graded.length} landed — ${totalOdds.toFixed(2)} odds`,
     body:
-      para("Today's results are in.") +
-      para(headline + (voided ? ` ${voided} was voided and does not count either way.` : "")) +
+      para("<strong>Today's results are in.</strong>") +
+      // The three numbers first, in the order a tipster posts them. Everything
+      // under this table is the working; these are the claim.
+      `<table role="presentation" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin:0 0 4px;">` +
+      summary
+        .map(
+          ([k, v]) =>
+            `<tr><td style="padding:3px 14px 3px 0;font-size:15px;color:#6b7280;">${k}:</td>` +
+            `<td style="padding:3px 0;font-size:15px;font-weight:700;color:#111827;">${v}</td></tr>`,
+        )
+        .join("") +
+      `</table>` +
+      para(
+        rate == null
+          ? "Every game on today's board is in."
+          : `That is a <strong>${rate}%</strong> strike rate on the day` +
+            (voided
+              ? `, from ${graded.length} settled calls. ${voided} was voided and counts neither way.`
+              : "."),
+      ) +
       emailTable({
         head: ["S/N", "Fixture", "Prediction", "Confidence", "Result"],
         rows,
         align: ["left", "left", "left", "right", "right"],
       }) +
       note(
-        "One day is a small sample. The running record, with every call we have ever settled, is on the site.",
+        "Total odds add the price of each winning call, taken at the lowest odds we recorded for it. One day is a small sample — the running record is on the site.",
       ),
     cta: { label: "See the full record", href: `${SITE_URL}/history` },
   });
@@ -2576,39 +2619,41 @@ async function handleJob(
         return;
       }
 
-      const dayStart = `${p.dateKey}T00:00:00.000Z`;
-      const dayEnd = new Date(`${p.dateKey}T00:00:00.000Z`);
-      dayEnd.setUTCDate(dayEnd.getUTCDate() + 1);
-
-      const { data: rows } = await db
-        .from("predictions")
-        .select(
-          "prediction_type, predicted_value, confidence_score, status, fixtures!inner(fixture_date, home:teams!fixtures_home_team_id_fkey(name), away:teams!fixtures_away_team_id_fkey(name))",
-        )
-        .eq("tier", "primary")
-        .in("status", ["won", "lost", "void"])
-        .gte("fixtures.fixture_date", dayStart)
-        .lt("fixtures.fixture_date", dayEnd.toISOString())
-        .order("confidence_score", { ascending: false });
-
-      const results = (rows ?? []).map((r) => {
-        const f = asOne(r.fixtures) as {
-          home: unknown;
-          away: unknown;
-        } | null;
-        return {
-          fixture: `${(asOne(f?.home as never) as { name?: string } | null)?.name ?? "?"} v ${(asOne(f?.away as never) as { name?: string } | null)?.name ?? "?"}`,
-          prediction: formatMarket(
-            r.prediction_type as Market,
-            r.predicted_value as string,
-          ),
-          confidence: Number(r.confidence_score ?? 0),
-          status: r.status as string,
-        };
+      /*
+       * One call, and the odds rule stays in SQL.
+       *
+       * This used to query predictions here and would have needed a second
+       * round trip per pick for its price. get_daily_results returns the
+       * settled board with app.pick_price_low already applied, so the email
+       * and the site cannot disagree about what a call was worth.
+       */
+      const { data: raw, error: resultsError } = await db.rpc("get_daily_results", {
+        p_date: p.dateKey,
       });
 
-      // A day that settled nothing is not a day worth mailing about. This can
-      // only happen if the picks were deleted between queueing and draining.
+      if (resultsError) {
+        throw new Error(`could not read the board for ${p.dateKey}: ${resultsError.message}`);
+      }
+
+      const results = (
+        (raw ?? []) as Array<{
+          fixture: string;
+          market: string;
+          value: string;
+          confidence: number | string;
+          status: string;
+          odds: number | string | null;
+        }>
+      ).map((r) => ({
+        fixture: r.fixture,
+        prediction: formatMarket(r.market as Market, r.value),
+        confidence: Number(r.confidence ?? 0),
+        status: r.status,
+        odds: Number(r.odds ?? 0),
+      }));
+
+      // A day that settled nothing is not a day worth mailing about. Only
+      // reachable if the picks were deleted between queueing and draining.
       if (!results.length) {
         console.warn(`[jobs/daily_results_ready] nothing settled for ${p.dateKey}`);
         return;
