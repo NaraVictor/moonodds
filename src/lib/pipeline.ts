@@ -1905,11 +1905,79 @@ export function slipLegSettledEmail(p: {
   });
 }
 
+/**
+ * What a settled slip says, in one place.
+ *
+ * The handler used to build the headline and the explanation itself and hand
+ * them to the renderer as strings, which put half the copy in the delivery
+ * code and half in the template. Tone belongs with the words: the SMS and the
+ * email now read from the same source, so they cannot drift into saying
+ * different things about the same result.
+ */
+export function slipSettledCopy(status: string, legs: number) {
+  const games = `${legs} game${legs === 1 ? "" : "s"}`;
+
+  if (status === "won") {
+    return {
+      headline: `WON \u2014 your ${games} came in`,
+      explain: "Every single game on your slip went your way.",
+      closing:
+        "Tomorrow\u2019s board goes up in the morning, and we will tell you when it is ready. Come and have another go.",
+      won: true,
+    };
+  }
+
+  if (status === "lost") {
+    return {
+      headline: `Your ${games} did not come in`,
+      explain:
+        "One game went against it, and a slip needs every leg. That is a hard way to lose one.",
+      /*
+       * Encouraging, and careful about what it encourages.
+       *
+       * The ask was to invite people back tomorrow, and the honest way to do
+       * that after a loss is to point at the next BOARD rather than the next
+       * stake. This product sells analysis and carries self-exclusion and
+       * spend caps in the profile; an email that told somebody who just lost
+       * to go again would be working against the rest of it.
+       */
+      closing:
+        "Tomorrow is a fresh board, and we would be glad to see you back for it. Take it at your own pace \u2014 there is no hurry, and there is no streak to keep up.",
+      won: false,
+    };
+  }
+
+  return {
+    headline: "Your slip was voided",
+    explain: "The games on it were called off or voided, so nothing was risked.",
+    closing: "Tomorrow\u2019s board goes up in the morning.",
+    won: false,
+  };
+}
+
 /** The slip is decided, one way or the other. */
-export function slipSettledEmail(p: { headline: string; explain: string }): string {
+export function slipSettledEmail(p: {
+  headline: string;
+  explain: string;
+  closing: string;
+  won: boolean;
+}): string {
+  /*
+   * The win gets emphasis, not a banner.
+   *
+   * The shell is deliberately letter-like — no coloured panels, no boxes — and
+   * a celebration band would be the first thing to break that, in the one
+   * message a customer is most likely to keep. So the excitement is carried by
+   * the word itself: WON, set large and in the brand green, with the rest of
+   * the message in the same quiet voice as every other email we send.
+   */
+  const heading = p.won
+    ? `<p style="margin:0 0 16px;font-size:26px;line-height:1.25;font-weight:800;color:#15803D;">${esc(p.headline)}</p>`
+    : para(`<strong>${esc(p.headline)}.</strong>`);
+
   return renderEmail({
     preheader: p.explain,
-    body: para(`<strong>${esc(p.headline)}.</strong>`) + para(p.explain),
+    body: heading + para(p.explain) + para(p.closing),
     cta: { label: "See your slips", href: `${SITE_URL}/slips` },
   });
 }
@@ -1946,11 +2014,13 @@ export function noPicksEmail(p: { skipped: string }): string {
       para("There are no predictions today.") +
       para(p.skipped) +
       para(
-        "We would rather sit a day out than put up picks we do not believe in. Publishing something for the sake of it is how a record stops meaning anything.",
+        "The AI decided to skip today\u2019s fixtures as it didn\u2019t have enough data. Any paid games will roll over to tomorrow if the model finds high-quality games to publish.",
       ) +
-      note(
-        "If you bought a pass for today, it carries forward on its own \u2014 you will have it on the next day we publish, at no extra cost. Nothing to claim and nothing to do.",
-      ),
+      // The paragraph above now carries the rollover promise, so this says only
+      // the part it leaves out. It used to explain the rollover in full, and
+      // making the same promise twice in a four-line email reads as a product
+      // that is not sure you believed it the first time.
+      note("It happens on its own \u2014 there is nothing to claim and nothing to do."),
     cta: { label: "See past results", href: `${SITE_URL}/history` },
   });
 }
@@ -2334,26 +2404,14 @@ async function handleJob(
 
       if (!pref) return;
       const profile = asOne(pref.profiles) as { email: string | null; phone: string | null } | null;
-      const games = `${p.legs} game${p.legs === 1 ? "" : "s"}`;
-      const headline =
-        p.status === "won"
-          ? `Your ${games} came in`
-          : p.status === "lost"
-            ? `Your ${games} did not come in`
-            : `Your slip was voided`;
-
-      const explain =
-        p.status === "won"
-          ? "Every game on it went your way."
-          : p.status === "lost"
-            ? "One of the games went against it, so the slip is settled."
-            : "The games on it were called off or voided, so nothing was risked.";
+      const copy = slipSettledCopy(p.status, p.legs);
+      const { headline, explain } = copy;
 
       if (pref.email_enabled && profile?.email) {
         await messaging.sendEmail({
           to: profile.email,
           subject: headline,
-          html: slipSettledEmail({ headline, explain }),
+          html: slipSettledEmail(copy),
         });
       }
       if (pref.sms_enabled && profile?.phone) {
@@ -2420,7 +2478,7 @@ async function handleJob(
        * the friendlier sentence would otherwise have been a lie inside an
        * apology, which is the worst place to put one.
        */
-      const skipped = `Our model went through ${p.considered} game${p.considered === 1 ? "" : "s"} today and did not find one it was confident enough to back.`;
+      const skipped = `Our model went through ${p.considered} game${p.considered === 1 ? "" : "s"} today and did not find one it was confident enough to publish.`;
 
       const { data: subscribers } = await db
         .from("notification_preferences")
