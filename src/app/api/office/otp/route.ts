@@ -5,7 +5,7 @@ import { z } from "zod";
 import { requireSuperAdmin } from "@/lib/api-auth";
 import { createServiceClient } from "@/lib/supabase/server";
 import { getProviders } from "@/lib/providers";
-import { note, p, renderEmail } from "@/lib/email-layout";
+import { esc, note, p, renderEmail } from "@/lib/email-layout";
 
 /**
  * Confirmation code for system-prompt changes.
@@ -52,6 +52,27 @@ function digestOtp(code: string): string {
   }
   const key = createHmac("sha256", secret).update("kicka-otp-pepper-v1").digest();
   return createHmac("sha256", key).update(code).digest("hex");
+}
+
+/**
+ * The confirmation code, through the same shell as everything else.
+ *
+ * Exported so it can be rendered without sending one — an email you can only
+ * see by triggering it is an email nobody reviews.
+ */
+export function promptCodeEmail(code: string): string {
+  return renderEmail({
+    preheader: `Your confirmation code expires in ${TTL_MINUTES} minutes.`,
+    body:
+      p("Someone asked to change the engine's system prompt. Here is the code to confirm it:") +
+      `<p style="margin:0 0 16px;font-size:32px;font-weight:800;letter-spacing:8px;color:#111827;">${esc(code)}</p>` +
+      note(
+        `It expires in ${TTL_MINUTES} minutes and works once. If this was not you, ignore this email — nothing has changed, and nobody can apply the change without this code.`,
+      ),
+    // No call to action. The code is used in the Office, and a button in a
+    // security email trains people to click buttons in security emails.
+    signOff: false,
+  });
 }
 
 export async function POST(request: Request) {
@@ -121,18 +142,7 @@ export async function POST(request: Request) {
     // site — which on a security email is the wrong impression to give: an
     // unbranded code in a plain message is exactly what a phishing attempt
     // looks like.
-    html: renderEmail({
-      preheader: `Your confirmation code expires in ${TTL_MINUTES} minutes.`,
-      body:
-        p("Someone asked to change the engine's system prompt. Here is the code to confirm it:") +
-        `<p style="margin:0 0 16px;font-size:32px;font-weight:800;letter-spacing:8px;color:#111827;">${code}</p>` +
-        note(
-          `It expires in ${TTL_MINUTES} minutes and works once. If this was not you, ignore this email — nothing has changed, and nobody can apply the change without this code.`,
-        ),
-      // No call to action. The code is used in the Office, and a button in a
-      // security email trains people to click buttons in security emails.
-      signOff: false,
-    }),
+    html: promptCodeEmail(code),
   });
 
   const masked = email.replace(/^(.{2}).*(@.*)$/, "$1***$2");

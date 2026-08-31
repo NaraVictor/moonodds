@@ -1856,13 +1856,136 @@ export async function runFetchLineups() {
  * the tease and the market and selection stay behind the paywall — which is
  * also why the button is worth pressing.
  */
+/*
+ * One builder per email, above the handlers that send them.
+ *
+ * They were written inline inside the job switch, which meant the only way to
+ * see one was to trigger the job that sends it — and the only way to trigger
+ * daily_picks_ready is to mail everybody who has opted in. An email nobody can
+ * look at without sending it to a mailing list does not get looked at.
+ *
+ * Pulled out, each one is a pure function from its payload to HTML: renderable
+ * in a test, in a preview, and in review, with no side effects and no
+ * recipients. The handlers below still own who receives what.
+ */
+
+/** One of the day's strongest calls, to people who asked for the alert. */
+export function highConfidenceEmail(p: {
+  home: string;
+  away: string;
+  league: string;
+}): string {
+  return renderEmail({
+    preheader: `${p.home} v ${p.away} — one of our strongest calls`,
+    body:
+      para(`This one stands out.`) +
+      para(
+        `<strong>${esc(p.home)} v ${esc(p.away)}</strong> in the ${esc(p.league)} is among the most confident calls our model has made today.`,
+      ) +
+      note("Confident is not certain. Never stake more than you can afford to lose."),
+    cta: { label: "See the call", href: SITE_URL },
+  });
+}
+
+/** A leg landed and the slip is still alive. */
+export function slipLegSettledEmail(p: {
+  match: string;
+  verb: string;
+  legsSettled: number;
+  legsTotal: number;
+}): string {
+  return renderEmail({
+    preheader: `${p.legsSettled} of ${p.legsTotal} games done, still going`,
+    body:
+      para(`<strong>${esc(p.match)}</strong> ${p.verb}.`) +
+      para(
+        `That is ${p.legsSettled} of your ${p.legsTotal} games finished. Your slip is still in play — the rest have yet to be decided.`,
+      ),
+    cta: { label: "View your slip", href: `${SITE_URL}/slips` },
+  });
+}
+
+/** The slip is decided, one way or the other. */
+export function slipSettledEmail(p: { headline: string; explain: string }): string {
+  return renderEmail({
+    preheader: p.explain,
+    body: para(`<strong>${esc(p.headline)}.</strong>`) + para(p.explain),
+    cta: { label: "See your slips", href: `${SITE_URL}/slips` },
+  });
+}
+
+/** Proof of purchase. */
+export function receiptEmail(p: {
+  what: string;
+  currency: string;
+  major: string;
+  reference: string;
+  date?: string;
+}): string {
+  const label = "padding:6px 16px 6px 0;color:#6b7280;";
+  return renderEmail({
+    preheader: `${p.what} — ${p.currency} ${p.major}`,
+    body:
+      para("Thanks — your payment went through.") +
+      `<table role="presentation" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin-top:8px;">` +
+      `<tr><td style="${label}">Item</td><td style="padding:6px 0;font-weight:600;">${esc(p.what)}</td></tr>` +
+      `<tr><td style="${label}">Amount</td><td style="padding:6px 0;font-weight:600;">${esc(p.currency)} ${esc(p.major)}</td></tr>` +
+      `<tr><td style="${label}">Reference</td><td style="padding:6px 0;font-family:monospace;">${esc(p.reference)}</td></tr>` +
+      `<tr><td style="${label}">Date</td><td style="padding:6px 0;">${esc(p.date ?? new Date().toUTCString())}</td></tr>` +
+      `</table>` +
+      note("Hold on to that reference — it is what we will ask for if you ever need us to look this payment up."),
+    cta: { label: "Go to Kicka", href: SITE_URL },
+  });
+}
+
+/** A day we chose not to publish, in the customer's language. */
+export function noPicksEmail(p: { skipped: string }): string {
+  return renderEmail({
+    preheader: "We would rather skip a day than publish a weak call",
+    body:
+      para("There are no predictions today.") +
+      para(p.skipped) +
+      para(
+        "We would rather sit a day out than put up picks we do not believe in. Publishing something for the sake of it is how a record stops meaning anything.",
+      ) +
+      note(
+        "If you bought a pass for today, it carries forward on its own \u2014 you will have it on the next day we publish, at no extra cost. Nothing to claim and nothing to do.",
+      ),
+    cta: { label: "See past results", href: `${SITE_URL}/history` },
+  });
+}
+
+/** The same day, in the operators' language. */
+export function noBoardOpsEmail(p: {
+  date: string;
+  considered: number;
+  floor: number;
+}): string {
+  return renderEmail({
+    preheader: `${p.considered} considered, none above ${p.floor}`,
+    body:
+      para(`Nothing was published for <strong>${esc(p.date)}</strong>.`) +
+      para(
+        `${p.considered} fixture${p.considered === 1 ? "" : "s"} were analysed and none scored above the ${p.floor} publish floor.`,
+      ) +
+      note(
+        "Subscribers have been told. Passes sold for this day roll forward automatically tonight.",
+      ),
+    cta: { label: "Open the Office", href: `${SITE_URL}/office` },
+  });
+}
+
 export function dailyPicksEmail(
   board: Array<{ fixture: string; kickoff: string | null; confidence: number }>,
   count: number,
 ): string {
   const cell = "padding:10px 12px;border-bottom:1px solid #e6e8eb;font-size:14px;";
+  // Alignment is NOT in here. It used to be, so the right-aligned column
+  // emitted `text-align:left;text-align:right;` — the cascade resolves that
+  // correctly in a browser, and Outlook renders with Word, whose handling of a
+  // duplicated declaration is not something to find out from a customer.
   const head =
-    "padding:0 12px 8px;border-bottom:2px solid #111827;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:#6b7280;text-align:left;";
+    "padding:0 12px 8px;border-bottom:2px solid #111827;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:#6b7280;";
 
   const rows = board
     .map((b, i) => {
@@ -1889,8 +2012,8 @@ export function dailyPicksEmail(
       ) +
       (board.length
         ? `<table role="presentation" cellpadding="0" cellspacing="0" style="border-collapse:collapse;width:100%;margin-top:20px;">` +
-          `<thead><tr><th style="${head}">S/N</th><th style="${head}">Fixture</th>` +
-          `<th style="${head}">Time</th><th style="${head}text-align:right;">AI Confidence</th></tr></thead>` +
+          `<thead><tr><th style="${head}text-align:left;">S/N</th><th style="${head}text-align:left;">Fixture</th>` +
+          `<th style="${head}text-align:left;">Time</th><th style="${head}text-align:right;">AI conf.</th></tr></thead>` +
           `<tbody>${rows}</tbody></table>`
         : "") +
       note("Kickoff times are UTC. The call itself, and why we made it, are on the site."),
@@ -2118,16 +2241,7 @@ async function handleJob(
             messaging.sendEmail({
               to: email,
               subject: `One we really like: ${p.home} v ${p.away}`,
-              html: renderEmail({
-                preheader: `${p.home} v ${p.away} — one of our strongest calls`,
-                body:
-                  para(`This one stands out.`) +
-                  para(
-                    `<strong>${esc(p.home)} v ${esc(p.away)}</strong> in the ${esc(p.league)} is among the most confident calls our model has made today.`,
-                  ) +
-                  note("Confident is not certain. Never stake more than you can afford to lose."),
-                cta: { label: "See the call", href: SITE_URL },
-              }),
+              html: highConfidenceEmail(p),
             }),
           );
           if (ok) sent++;
@@ -2194,14 +2308,11 @@ async function handleJob(
         await messaging.sendEmail({
           to: profile.email,
           subject: `${match} ${verb} — your slip is still live`,
-          html: renderEmail({
-            preheader: `${p.legsSettled} of ${p.legsTotal} games done, still going`,
-            body:
-              para(`<strong>${esc(match)}</strong> ${verb}.`) +
-              para(
-                `That is ${p.legsSettled} of your ${p.legsTotal} games finished. Your slip is still in play — the rest have yet to be decided.`,
-              ),
-            cta: { label: "View your slip", href: `${SITE_URL}/slips` },
+          html: slipLegSettledEmail({
+            match,
+            verb,
+            legsSettled: p.legsSettled,
+            legsTotal: p.legsTotal,
           }),
         });
       }
@@ -2242,11 +2353,7 @@ async function handleJob(
         await messaging.sendEmail({
           to: profile.email,
           subject: headline,
-          html: renderEmail({
-            preheader: explain,
-            body: para(`<strong>${headline}.</strong>`) + para(explain),
-            cta: { label: "See your slips", href: `${SITE_URL}/slips` },
-          }),
+          html: slipSettledEmail({ headline, explain }),
         });
       }
       if (pref.sms_enabled && profile?.phone) {
@@ -2276,18 +2383,11 @@ async function handleJob(
       await messaging.sendEmail({
         to: profile.email,
         subject: `Your Kicka receipt`,
-        html: renderEmail({
-          preheader: `${what} — ${p.currency} ${major}`,
-          body:
-            para("Thanks — your payment went through.") +
-            `<table role="presentation" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin-top:8px;">` +
-            `<tr><td style="padding:6px 16px 6px 0;color:#6b7280;">Item</td><td style="padding:6px 0;font-weight:600;">${esc(what)}</td></tr>` +
-            `<tr><td style="padding:6px 16px 6px 0;color:#6b7280;">Amount</td><td style="padding:6px 0;font-weight:600;">${p.currency} ${major}</td></tr>` +
-            `<tr><td style="padding:6px 16px 6px 0;color:#6b7280;">Reference</td><td style="padding:6px 0;font-family:monospace;">${esc(p.reference)}</td></tr>` +
-            `<tr><td style="padding:6px 16px 6px 0;color:#6b7280;">Date</td><td style="padding:6px 0;">${new Date().toUTCString()}</td></tr>` +
-            `</table>` +
-            note("Hold on to that reference — it is what we will ask for if you ever need us to look this payment up."),
-          cta: { label: "Go to Kicka", href: SITE_URL },
+        html: receiptEmail({
+          what,
+          currency: p.currency,
+          major,
+          reference: p.reference,
         }),
       });
       return;
@@ -2335,19 +2435,7 @@ async function handleJob(
           messaging.sendEmail({
             to: email,
             subject: "No predictions today",
-            html: renderEmail({
-              preheader: "We would rather skip a day than publish a weak call",
-              body:
-                para("There are no predictions today.") +
-                para(skipped) +
-                para(
-                  "We would rather sit a day out than put up picks we do not believe in. Publishing something for the sake of it is how a record stops meaning anything.",
-                ) +
-                note(
-                  "If you bought a pass for today, it carries forward on its own \u2014 you will have it on the next day we publish, at no extra cost. Nothing to claim and nothing to do.",
-                ),
-              cta: { label: "See past results", href: `${SITE_URL}/history` },
-            }),
+            html: noPicksEmail({ skipped }),
           }),
         );
       }
@@ -2362,17 +2450,10 @@ async function handleJob(
         await messaging.sendEmail({
           to: a.email,
           subject: `No board published for ${p.date}`,
-          html: renderEmail({
-            preheader: `${p.considered} considered, none above ${p.floor}`,
-            body:
-              para(`Nothing was published for <strong>${esc(p.date)}</strong>.`) +
-              para(
-                `${p.considered} fixture${p.considered === 1 ? "" : "s"} were analysed and none scored above the ${p.floor} publish floor.`,
-              ) +
-              note(
-                "Subscribers have been told. Passes sold for this day roll forward automatically tonight.",
-              ),
-            cta: { label: "Open the Office", href: `${SITE_URL}/office` },
+          html: noBoardOpsEmail({
+            date: p.date,
+            considered: p.considered,
+            floor: p.floor,
           }),
         });
       }
