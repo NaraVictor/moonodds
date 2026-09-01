@@ -1052,7 +1052,20 @@ export const livePayments: PaymentProvider = {
           ...(callbackUrl ? { callback_url: callbackUrl } : {}),
           // Ghana's actual payment mix. Mobile money is the majority rail here,
           // so omitting it would exclude most of the market.
-          channels: ["card", "mobile_money", "bank_transfer", "ussd"],
+          /*
+           * MoMo first, and only two options.
+           *
+           * Paystack renders these in the order given, and this listed card
+           * first while selling in Ghana. Every card attempt on this account
+           * has been abandoned — four of four — and the only mobile-money
+           * attempt failed on the customer's own balance rather than on
+           * anything we control.
+           *
+           * bank_transfer and ussd are gone rather than reordered. Each extra
+           * tile is another decision at the moment somebody has already
+           * decided to pay, and neither is how a $3 purchase is made here.
+           */
+          channels: ["mobile_money", "card"],
         },
       },
     );

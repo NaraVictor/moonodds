@@ -1,4 +1,5 @@
 import { createServiceClient } from "./supabase/server";
+import { PASS_PLANS, isPassPlan } from "./pricing";
 import { reportError } from "./report-error";
 import { getProviders } from "./providers";
 import { paymentAmountMatches } from "./pricing";
@@ -93,9 +94,16 @@ export async function settlePayment(
   }
 
   if (payment.purpose === "daily_pass") {
+    // The plan was recorded on the payment at checkout, so the length of the
+    // pass is decided by what was PAID for rather than by anything the client
+    // says at settlement time.
+    const meta = (payment.metadata ?? {}) as { plan?: string };
+    const plan = isPassPlan(meta.plan) ? meta.plan : "day";
+
     const { error } = await db.rpc("activate_daily_pass", {
       p_user_id: payment.user_id,
       p_reference: reference,
+      p_days: PASS_PLANS[plan].days,
     });
     if (error) {
       console.error("[payments] activate_daily_pass:", error);

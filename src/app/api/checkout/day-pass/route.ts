@@ -3,7 +3,7 @@ import { enforceRateLimit } from "@/lib/rate-limit";
 import { z } from "zod";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { getProviders } from "@/lib/providers";
-import { PASS_PRICE_USD, usdToPesewas } from "@/lib/pricing";
+import { PASS_PLANS, isPassPlan, usdToPesewas } from "@/lib/pricing";
 import { getUsdToGhsRateForServer } from "@/lib/pricing-server";
 import { settlePayment } from "@/lib/payments";
 import { requireVerifiedContact } from "@/lib/require-verified";
@@ -49,6 +49,13 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: verified.reason }, { status: verified.status });
   }
 
+  // Which plan. Unrecognised falls back to the day pass rather than failing:
+  // the client is not the authority on price, and the amount is read from
+  // PASS_PLANS below either way.
+  const body = (await request.json().catch(() => null)) as { plan?: unknown } | null;
+  const plan = isPassPlan(body?.plan) ? body.plan : "day";
+  const price = PASS_PLANS[plan].usd;
+
   const db = createServiceClient();
 
   // Already covered for today? Don't take money twice.
@@ -61,7 +68,10 @@ export async function POST(request: Request) {
     .eq("status", "active")
     .maybeSingle();
 
-  if (existing) {
+  // Only the day plan is blocked by holding today. A week or a month bought on
+  // top of a day you own extends past it — activate_daily_pass skips days
+  // already held — so refusing that sale would be refusing money for no reason.
+  if (existing && plan === "day") {
     return NextResponse.json(
       { alreadyActive: true, message: "You already have today's pass." },
       { status: 200 },
@@ -71,7 +81,7 @@ export async function POST(request: Request) {
   // Player protection is checked before any money moves. A self-exclusion or a
   // monthly cap the customer set for themselves outranks their wish to buy.
   const { data: gate } = await supabase.rpc("can_purchase", {
-    p_amount_usd: PASS_PRICE_USD,
+    p_amount_usd: price,
   });
   if (!(gate as { allowed?: boolean })?.allowed) {
     return NextResponse.json(
@@ -81,7 +91,7 @@ export async function POST(request: Request) {
   }
 
   const rate = await getUsdToGhsRateForServer();
-  const amountMinor = usdToPesewas(PASS_PRICE_USD, rate);
+  const amountMinor = usdToPesewas(price, rate);
 
   /*
    * Whether this pass will actually be for tomorrow, said before they pay.
@@ -123,6 +133,19 @@ export async function POST(request: Request) {
    * in 20260825020000 is the backstop for the narrower race where both requests
    * read before either wrote; this is what stops that race being reached at all.
    */
+  /*
+   * Keyed on the PLAN as well as the day.
+   *
+   * Reuse exists to turn a double-tap into one charge, and it did that by
+   * matching any pending day-pass for today. With more than one plan on sale
+   * that becomes a pricing bug: somebody who opened the day pass, went back
+   * and chose the month would be handed the day pass's reference and its
+   * amount — settlement compares against the stored amount, so they would be
+   * charged $3 and, once the plan on that row said "day", receive one day.
+   *
+   * Matching the plan too means a double-tap still reuses and a change of mind
+   * opens its own checkout.
+   */
   const pendingToday = () =>
     db
       .from("payments")
@@ -131,6 +154,7 @@ export async function POST(request: Request) {
       .eq("purpose", "daily_pass")
       .eq("status", "pending")
       .eq("metadata->>dateKey", today)
+      .eq("metadata->>plan", plan)
       .maybeSingle();
 
   const { data: inFlight } = await pendingToday();
@@ -151,9 +175,13 @@ export async function POST(request: Request) {
       purpose: "daily_pass",
       amount_minor: amountMinor,
       currency: "GHS",
-      amount_usd: PASS_PRICE_USD,
+      amount_usd: price,
       status: "pending",
-      metadata: { rate, dateKey: today },
+      // `plan` decides how many days settlement grants, so it lives on the
+      // PAYMENT rather than only on the Paystack metadata. Without it here,
+      // activate_daily_pass reads no plan, defaults to one day, and a $22
+      // month pass buys a single morning.
+      metadata: { rate, dateKey: today, plan },
     });
 
     if (payErr) {
@@ -189,7 +217,7 @@ export async function POST(request: Request) {
     // of in the popup. Without it they stop on Paystack's confirmation screen
     // and never reach the verify call.
     callbackUrl: `${SITE_URL}/checkout/day-pass`,
-    metadata: { purpose: "daily_pass", dateKey: today, priceUsd: PASS_PRICE_USD },
+    metadata: { purpose: "daily_pass", dateKey: today, priceUsd: price, plan },
   });
 
   // Server-side checkout-initiated event. The browser also captures
@@ -203,7 +231,7 @@ export async function POST(request: Request) {
     event: "checkout_initiated",
     properties: {
       kind: "day-pass",
-      price_usd: PASS_PRICE_USD,
+      price_usd: price,
       is_reused_reference: !!inFlight,
     },
   });

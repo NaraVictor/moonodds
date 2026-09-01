@@ -11,7 +11,7 @@ import { Skeleton } from "@heroui/react/skeleton";
 import { Check, Sparkles } from "@/components/ui/icons";
 import { useAccessState, useExtraPicksOffer } from "@/lib/queries";
 import { LinkButton } from "@/components/ui/link-button";
-import { extraPicksPriceUsd ,
+import { PASS_PLANS, perDayUsd, type PassPlan, extraPicksPriceUsd ,
 } from "@/lib/pricing";
 import posthog from "posthog-js";
 import { openPaystack } from "@/lib/paystack-popup";
@@ -49,6 +49,7 @@ export function CheckoutClient({ kind }: { kind: Kind }) {
   // Set by the init call when every one of today's games has kicked off, so
   // the pass the server will issue is tomorrow's. See the day-pass route.
   const [forTomorrow, setForTomorrow] = useState(false);
+  const [plan, setPlan] = useState<PassPlan>("day");
 
   const offer = useExtraPicksOffer(kind === "extra-picks");
 
@@ -59,7 +60,7 @@ export function CheckoutClient({ kind }: { kind: Kind }) {
     offer.data?.available ?? 0,
     offer.data?.unlockSize ?? 0,
   );
-  const priceUsd = kind === "day-pass" ? 3 : extraPicksPriceUsd(games);
+  const priceUsd = kind === "day-pass" ? PASS_PLANS[plan].usd : extraPicksPriceUsd(games);
 
   const endpoint =
     kind === "day-pass" ? "/api/checkout/day-pass" : "/api/checkout/extra-picks";
@@ -73,9 +74,10 @@ export function CheckoutClient({ kind }: { kind: Kind }) {
       const initRes = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        // No body. The games are drawn server-side, so there is nothing for the
-        // browser to say about which ones.
-        body: undefined,
+        // Extras: no body, the games are drawn server-side. Day pass: the
+        // chosen plan, which the route re-reads from PASS_PLANS rather than
+        // trusting any price the browser might send.
+        body: kind === "day-pass" ? JSON.stringify({ plan }) : undefined,
       });
       const init = await initRes.json();
       setForTomorrow(init.forTomorrow === true);
@@ -132,7 +134,7 @@ export function CheckoutClient({ kind }: { kind: Kind }) {
       setError(e instanceof Error ? e.message : "Something went wrong.");
       setStage("idle");
     }
-  }, [endpoint, kind, qc, priceUsd]);
+  }, [endpoint, kind, qc, priceUsd, plan]);
 
   /*
    * Verified, then straight into Paystack. No second button.
@@ -241,6 +243,49 @@ export function CheckoutClient({ kind }: { kind: Kind }) {
             </div>
           )}
 
+          {/*
+            Three lengths, and the longer two lead on what they save.
+
+            One pass a day is not an expensive product, it is an expensive
+            habit: somebody who wants this every morning was being asked for
+            roughly $90 a month, one transaction at a time, each with its own
+            moment to reconsider. The price per day was never the obstacle. The
+            decision per day was.
+          */}
+          {kind === "day-pass" && (
+            <div className="space-y-2">
+              <p className="label">How long</p>
+              {(Object.keys(PASS_PLANS) as PassPlan[]).map((key) => {
+                const p = PASS_PLANS[key];
+                const on = plan === key;
+                const saving =
+                  key === "day"
+                    ? null
+                    : Math.round((1 - perDayUsd(key) / PASS_PLANS.day.usd) * 100);
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => setPlan(key)}
+                    aria-pressed={on}
+                    className={`flex w-full cursor-pointer items-center justify-between gap-3 rounded-xl border px-3.5 py-3 text-left transition-colors ${
+                      on ? "border-accent bg-accent/10" : "border-border hover:bg-surface-secondary"
+                    }`}
+                  >
+                    <span className="min-w-0">
+                      <span className="block text-[13px] font-semibold">{p.label}</span>
+                      <span className="block text-[11px] text-muted">
+                        {p.blurb}
+                        {saving != null && ` · ${perDayUsd(key).toFixed(2)} a day, ${saving}% less`}
+                      </span>
+                    </span>
+                    <span className="numeral flex-none text-[15px] font-semibold">${p.usd}</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
           <div className="flex items-end justify-between border-t border-border pt-4">
             <div>
               <p className="label">Total</p>
@@ -253,7 +298,11 @@ export function CheckoutClient({ kind }: { kind: Kind }) {
             </div>
             {kind === "day-pass" && (
               <Chip size="sm" variant="soft" color="accent">
-                {forTomorrow ? "Tomorrow" : "Today only"}
+                {plan === "day"
+                  ? forTomorrow
+                    ? "Tomorrow"
+                    : "Today only"
+                  : `${PASS_PLANS[plan].days} days`}
               </Chip>
             )}
           </div>

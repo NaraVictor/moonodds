@@ -16,6 +16,42 @@ import { reportError } from "./report-error";
 export const PASS_PRICE_USD = 3;
 
 /**
+ * How long a pass lasts, and what it costs.
+ *
+ * A day pass was the only option, and $3 a day is a shape almost nobody buys:
+ * somebody who wants this every morning is being asked for roughly $90 a month,
+ * one transaction at a time, each with its own moment to reconsider. The daily
+ * price is not the problem — the daily DECISION is.
+ *
+ * The longer passes are priced so the per-day cost falls sharply: a week is
+ * three days' money for seven, a month is about a quarter of the daily rate.
+ * That is deliberate. The scarce thing here is not the prediction, whose
+ * marginal cost is nothing, it is somebody deciding once instead of thirty
+ * times.
+ *
+ * `days` is the number of PUBLISHING days granted, not calendar days. A pass
+ * covers the next N days it can actually serve, so a blank day costs the buyer
+ * nothing — see activate_daily_pass.
+ */
+export const PASS_PLANS = {
+  day: { days: 1, usd: PASS_PRICE_USD, label: "Day pass", blurb: "Today's board." },
+  week: { days: 7, usd: 9, label: "Week pass", blurb: "Seven publishing days." },
+  month: { days: 30, usd: 22, label: "Month pass", blurb: "Thirty publishing days." },
+} as const;
+
+export type PassPlan = keyof typeof PASS_PLANS;
+
+export function isPassPlan(v: unknown): v is PassPlan {
+  return typeof v === "string" && v in PASS_PLANS;
+}
+
+/** Per-day cost, for the "works out at" line the longer plans need. */
+export function perDayUsd(plan: PassPlan): number {
+  const p = PASS_PLANS[plan];
+  return Math.round((p.usd / p.days) * 100) / 100;
+}
+
+/**
  * Last-resort rate, used when the FX lookup fails or returns something
  * implausible AND neither the Office override nor the environment supplies one.
  *
