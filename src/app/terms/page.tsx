@@ -34,7 +34,7 @@ export default async function TermsPage() {
         eyebrow="Legal"
         title="Terms of use"
         intro="Plain terms for a simple product. Read them before you buy a pass."
-        updated="22 August 2026"
+        updated="1 September 2026"
       >
         <Section title="1. What Kicka provides">
           <p>
@@ -80,14 +80,21 @@ export default async function TermsPage() {
 
         <Section title="4. Passes and payment">
           <p>
-            A day pass grants access to all predictions published on the calendar
-            day it is bought. It renews nothing and there is nothing to cancel.
+            A pass grants access to all predictions published on the days it
+            covers. A day pass covers one such day; a week pass covers seven.
+            Neither renews, and there is nothing to cancel.
           </p>
           <p>
-            If we publish no predictions at all on a day you paid for, your pass
-            carries forward automatically to the next day we do. You do not need
-            to ask, and it costs you nothing. If that day is also blank, it
+            The days a pass covers are days we publish on, not calendar days. If
+            we publish nothing at all on a day your pass covers, it carries
+            forward automatically to the next day we do, so a blank day costs
+            you nothing. You do not need to ask. If that day is also blank, it
             carries forward again.
+          </p>
+          <p>
+            A pass bought after the last match on a day has started begins the
+            following day instead, for the same reason: you are buying calls you
+            can still act on.
           </p>
           <p>
             If a pass is charged in error, contact us and we will refund it. We

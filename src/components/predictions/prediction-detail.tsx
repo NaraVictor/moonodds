@@ -301,7 +301,7 @@ export function PredictionDetail({ id }: { id: string }) {
             ) : (
               <LockedNotice>
                 The reasoning, confidence score and the call itself unlock with a
-                day pass.
+                pass.
               </LockedNotice>
             )}
           </Section>

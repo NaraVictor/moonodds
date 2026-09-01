@@ -10,7 +10,7 @@ import { PageShell } from "@/components/legal/page-shell";
 export const metadata: Metadata = {
   title: "Help centre",
   description:
-    "How the day pass, free picks, confidence scores, slips and grading work.",
+    "How passes, free picks, confidence scores, slips and grading work.",
   alternates: { canonical: "/help" },
 };
 
@@ -48,12 +48,13 @@ const FAQS: { q: string; a: React.ReactNode; plain: string }[] = [
       "Two predictions a day in full, including the call, the confidence score and the reasoning, without an account. They are drawn from the day's three highest-confidence picks. Every settled prediction is free to everyone, permanently.",
   },
   {
-    q: "What does the day pass include?",
+    q: "What does a pass include?",
     a: (
       <>
-        Every prediction published that day, with full reasoning, for one day.
-        There is no subscription, no minimum term and nothing to cancel. A pass
-        covers a single day and then expires on its own.
+        Every prediction published on the days it covers, with full reasoning. A
+        day pass covers one publishing day; a week pass covers seven, and works
+        out cheaper per day. There is no subscription, no minimum term and
+        nothing to cancel — a pass runs out on its own.
       </>
     ),
     plain:

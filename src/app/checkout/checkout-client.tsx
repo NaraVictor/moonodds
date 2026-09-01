@@ -193,7 +193,12 @@ export function CheckoutClient({ kind }: { kind: Kind }) {
       <header className="space-y-1 text-center">
         <p className="label">Checkout</p>
         <h1 className="display text-2xl">
-          {kind === "day-pass" ? "Day pass" : "Extra picks"}
+          {/*
+            Neither "Day pass" nor "Week pass": both are on sale here and the
+            default is the week, so a page headed "Day pass" over a $10 total
+            was contradicting itself before anybody read the options.
+          */}
+          {kind === "day-pass" ? "Board access" : "Extra picks"}
         </h1>
       </header>
 
@@ -296,8 +301,25 @@ export function CheckoutClient({ kind }: { kind: Kind }) {
                         */}
                         {free > 0 && (
                           <span
+                            /*
+                              Ink on the badge, not green.
+                              
+                              The selected row is tinted with accent/10, so a
+                              green wash sat on a green field and the one
+                              element whose job is to be noticed was the
+                              hardest thing on the card to read. Foreground on
+                              surface is the highest-contrast pair the palette
+                              has, and it inverts with the theme — light badge
+                              on dark in dark mode — where a fixed black would
+                              disappear.
+                              
+                              Not yellow, though it was the other option: the
+                              MoMo mark at the foot of this same card is
+                              already yellow, and a second one here would read
+                              as related to it.
+                            */
                             className="rounded-full px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.06em]"
-                            style={{ background: "var(--won-wash)", color: "var(--won-ink)" }}
+                            style={{ background: "var(--foreground)", color: "var(--surface)" }}
                           >
                             {free} days free
                           </span>
@@ -350,8 +372,11 @@ export function CheckoutClient({ kind }: { kind: Kind }) {
               style={{ background: "var(--accent-wash)", color: "var(--foreground)" }}
             >
               Every game on today&rsquo;s board has already kicked off, so this
-              pass is for <strong>tomorrow</strong> — a full day rather than the
-              rest of tonight. Today&rsquo;s results are on the record either way.
+              pass starts <strong>tomorrow</strong>
+              {plan === "day"
+                ? " — a full day rather than the rest of tonight."
+                : ` — ${PASS_PLANS[plan].days} full days rather than the rest of tonight.`}{" "}
+              Today&rsquo;s results are on the record either way.
             </p>
           )}
 
@@ -362,10 +387,25 @@ export function CheckoutClient({ kind }: { kind: Kind }) {
             fullWidth
             size="lg"
             variant="primary"
+            /*
+             * Holding today blocks the DAY, not the page.
+             *
+             * This disabled the button for the whole day-pass checkout
+             * whenever the caller already had access — correct when a day was
+             * the only thing on sale, and wrong the moment a week appeared
+             * under it. The banner above says a week adds seven more days on
+             * top, the week is the default selection, and the button beneath
+             * both was greyed out: the screen invited a purchase it would not
+             * let anybody make.
+             *
+             * A week bought today genuinely extends past the day already held
+             * — activate_daily_pass skips days you own — so only the day plan
+             * has nothing to sell.
+             */
             isDisabled={
               busy ||
               priceUsd === 0 ||
-              (kind === "day-pass" && access?.hasFullAccess === true) ||
+              (kind === "day-pass" && plan === "day" && access?.hasFullAccess === true) ||
               (kind === "extra-picks" && !access?.hasFullAccess)
             }
             onPress={pay}

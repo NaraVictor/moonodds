@@ -367,7 +367,7 @@ export function PicksHome() {
               </h2>
               <p className="mx-auto mt-2 max-w-sm text-sm leading-relaxed text-muted">
                 {access?.isFirstDay
-                  ? "You're seeing your free picks. The day pass unlocks the rest, and the full board tomorrow."
+                  ? "You're seeing your free picks. A pass unlocks the rest, and the full board tomorrow."
                   : "Unlock access to all predictions for today."}
               </p>
               {/*
