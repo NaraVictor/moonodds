@@ -370,8 +370,14 @@ export function PicksHome() {
                   ? "You're seeing your free picks. The day pass unlocks the rest, and the full board tomorrow."
                   : "Unlock access to all predictions for today."}
               </p>
-              <LinkButton href="/checkout/day-pass" size="lg" variant="primary" className="mt-5">
-                Unlock today · ${PASS_PRICE_USD}
+              {/*
+                  "from", because the checkout opens on the week at $10. This
+                  said "Unlock today · $3" and led to a $10 total — a small
+                  surprise at the exact moment four of this account's five
+                  attempts have been abandoned.
+                */}
+                <LinkButton href="/checkout/day-pass" size="lg" variant="primary" className="mt-5">
+                Unlock · from ${PASS_PRICE_USD}
               </LinkButton>
             </div>
           )}

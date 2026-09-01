@@ -179,14 +179,19 @@ export async function POST(request: Request) {
       status: "pending",
       // `plan` decides how many days settlement grants, so it lives on the
       // PAYMENT rather than only on the Paystack metadata. Without it here,
-      // activate_daily_pass reads no plan, defaults to one day, and a $22
-      // month pass buys a single morning.
+      // activate_daily_pass reads no plan, defaults to one day, and a $10
+      // week pass buys a single morning.
       metadata: { rate, dateKey: today, plan },
     });
 
     if (payErr) {
       // 23505 is the partial unique index doing its job: a concurrent request
       // wrote first. Its reference is as good as ours, so fall in behind it.
+      //
+      // The index keys on the plan as well as the day (20260901100000), so the
+      // row that won is for the SAME plan and its amount is the right one to
+      // inherit. Before that it could have been a different plan's row, and
+      // falling in behind it would have charged a week's price for a day.
       if (payErr.code !== "23505") {
         console.error("[checkout/day-pass] payment row:", payErr);
         return NextResponse.json(

@@ -563,7 +563,7 @@ function LockedNotice({ children }: { children: React.ReactNode }) {
           href="/checkout/day-pass"
           className="press mt-3 inline-flex h-9 items-center rounded-full bg-accent px-4 text-[13px] font-semibold text-accent-foreground"
         >
-          Unlock today · ${PASS_PRICE_USD}
+          Unlock · from ${PASS_PRICE_USD}
         </Link>
       </div>
     </div>
