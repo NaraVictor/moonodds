@@ -32,7 +32,33 @@ import type { ReactNode } from "react";
  *
  * Passing no children to AlertIndicator makes HeroUI supply the icon for the
  * status, which is what carries the colour.
+ *
+ * AND THE INDICATOR WAS STILL CARRYING IT ALONE.
+ *
+ * HeroUI colours the icon and the title. An alert with a description and no
+ * title — which is most of them here — therefore rendered as a white box with
+ * one small coloured tick, so "your payment failed" and "you already have
+ * access" were the same object at a glance. The status was in the markup and
+ * almost invisible on screen.
+ *
+ * The surface is painted here instead, from the app's own wash/edge/ink
+ * triples rather than HeroUI's scale, so an alert matches the result badges
+ * and the paywall panels it sits among. Set on the root as inline custom
+ * properties, which beats the library's own rules without a specificity war
+ * and without a global override that would surprise the next person.
  */
+
+const TONES: Record<string, { bg: string; edge: string; ink: string }> = {
+  success: { bg: "var(--won-wash)", edge: "var(--won-edge)", ink: "var(--won-ink)" },
+  danger: { bg: "var(--lost-wash)", edge: "var(--lost-edge)", ink: "var(--lost-ink)" },
+  warning: { bg: "var(--warn-wash)", edge: "var(--warn-edge)", ink: "var(--warn-ink)" },
+  accent: { bg: "var(--accent-wash)", edge: "var(--accent-edge)", ink: "var(--accent)" },
+  default: {
+    bg: "var(--surface-secondary)",
+    edge: "var(--border)",
+    ink: "var(--foreground)",
+  },
+};
 export function Alert({
   status = "danger",
   title,
@@ -47,8 +73,21 @@ export function Alert({
   children?: ReactNode;
   className?: string;
 }) {
+  const tone = TONES[status] ?? TONES.default;
+
   return (
-    <AlertRoot status={status} className={className} role="alert">
+    <AlertRoot
+      status={status}
+      className={className}
+      role="alert"
+      style={{
+        background: tone.bg,
+        borderColor: tone.edge,
+        // The description inherits, so the whole block reads as one tone
+        // rather than a coloured icon beside grey text.
+        color: tone.ink,
+      }}
+    >
       <AlertIndicator>{icon}</AlertIndicator>
       <AlertContent>
         {title && <AlertTitle>{title}</AlertTitle>}

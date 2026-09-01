@@ -11,7 +11,7 @@ import { Skeleton } from "@heroui/react/skeleton";
 import { Check, Sparkles } from "@/components/ui/icons";
 import { useAccessState, useExtraPicksOffer } from "@/lib/queries";
 import { LinkButton } from "@/components/ui/link-button";
-import { PASS_PLANS, perDayUsd, type PassPlan, extraPicksPriceUsd ,
+import { PASS_PLANS, perDayUsd, freeDays, type PassPlan, extraPicksPriceUsd ,
 } from "@/lib/pricing";
 import posthog from "posthog-js";
 import { openPaystack } from "@/lib/paystack-popup";
@@ -49,7 +49,14 @@ export function CheckoutClient({ kind }: { kind: Kind }) {
   // Set by the init call when every one of today's games has kicked off, so
   // the pass the server will issue is tomorrow's. See the day-pass route.
   const [forTomorrow, setForTomorrow] = useState(false);
-  const [plan, setPlan] = useState<PassPlan>("day");
+  /*
+   * Opens on the week, not the day.
+   *
+   * The badge argues for it; the default is what most people accept. Standard
+   * for a better-value tier, and defensible here because the cheaper option is
+   * directly above it, priced, one tap away — nobody is hidden from the $3.
+   */
+  const [plan, setPlan] = useState<PassPlan>("week");
 
   const offer = useExtraPicksOffer(kind === "extra-picks");
 
@@ -196,9 +203,19 @@ export function CheckoutClient({ kind }: { kind: Kind }) {
         </Alert>
       )}
 
+      {/*
+        Offers the extension rather than closing the door.
+        
+        This used to read "no need to buy again", which was true when a day was
+        the only thing on sale and became a contradiction the moment a week
+        appeared underneath it: a week bought today extends PAST the day
+        already held — activate_daily_pass skips days you own — so there is
+        something worth buying, and the banner was talking a customer out of it.
+      */}
       {kind === "day-pass" && access?.hasFullAccess && (
         <Alert status="success">
-          You already have full access today, no need to buy again.
+          You have today covered. A week pass adds {PASS_PLANS.week.days} more
+          days on top of it.
         </Alert>
       )}
 
@@ -258,10 +275,7 @@ export function CheckoutClient({ kind }: { kind: Kind }) {
               {(Object.keys(PASS_PLANS) as PassPlan[]).map((key) => {
                 const p = PASS_PLANS[key];
                 const on = plan === key;
-                const saving =
-                  key === "day"
-                    ? null
-                    : Math.round((1 - perDayUsd(key) / PASS_PLANS.day.usd) * 100);
+                const free = freeDays(key);
                 return (
                   <button
                     key={key}
@@ -273,10 +287,25 @@ export function CheckoutClient({ kind }: { kind: Kind }) {
                     }`}
                   >
                     <span className="min-w-0">
-                      <span className="block text-[13px] font-semibold">{p.label}</span>
+                      <span className="flex flex-wrap items-center gap-1.5">
+                        <span className="text-[13px] font-semibold">{p.label}</span>
+                        {/*
+                          The saving as DAYS, not a percentage. "57% less" is a
+                          number to work out; "3 days free" is the same fact in
+                          the unit the product is sold in.
+                        */}
+                        {free > 0 && (
+                          <span
+                            className="rounded-full px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.06em]"
+                            style={{ background: "var(--won-wash)", color: "var(--won-ink)" }}
+                          >
+                            {free} days free
+                          </span>
+                        )}
+                      </span>
                       <span className="block text-[11px] text-muted">
                         {p.blurb}
-                        {saving != null && ` · ${perDayUsd(key).toFixed(2)} a day, ${saving}% less`}
+                        {free > 0 && ` $${perDayUsd(key).toFixed(2)} a day.`}
                       </span>
                     </span>
                     <span className="numeral flex-none text-[15px] font-semibold">${p.usd}</span>

@@ -35,8 +35,7 @@ export const PASS_PRICE_USD = 3;
  */
 export const PASS_PLANS = {
   day: { days: 1, usd: PASS_PRICE_USD, label: "Day pass", blurb: "Today's board." },
-  week: { days: 7, usd: 9, label: "Week pass", blurb: "Seven publishing days." },
-  month: { days: 30, usd: 22, label: "Month pass", blurb: "Thirty publishing days." },
+  week: { days: 7, usd: 10, label: "Week pass", blurb: "Seven publishing days." },
 } as const;
 
 export type PassPlan = keyof typeof PASS_PLANS;
@@ -49,6 +48,25 @@ export function isPassPlan(v: unknown): v is PassPlan {
 export function perDayUsd(plan: PassPlan): number {
   const p = PASS_PLANS[plan];
   return Math.round((p.usd / p.days) * 100) / 100;
+}
+
+/**
+ * How many days of the plan are, in effect, free.
+ *
+ * Derived rather than typed into the badge, so it cannot drift from the prices
+ * above the way a hardcoded "3 days free" would the moment either number
+ * moves.
+ *
+ * FLOORED, DELIBERATELY. Seven days at the daily rate is $21 and the week
+ * costs $10, so the saving is $11 — three and two thirds days. Rounding that
+ * to four would be a claim slightly larger than the truth, on the one badge
+ * whose whole job is to be believed. Three is a number a customer can check.
+ */
+export function freeDays(plan: PassPlan): number {
+  const p = PASS_PLANS[plan];
+  if (plan === "day") return 0;
+  const atDailyRate = p.days * PASS_PLANS.day.usd;
+  return Math.max(0, Math.floor((atDailyRate - p.usd) / PASS_PLANS.day.usd));
 }
 
 /**
