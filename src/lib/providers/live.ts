@@ -17,7 +17,7 @@ import type {
   VenueSplit,
 } from "./types";
 import { ENGINE_CALL_BUDGET_MS, THIN_SEASON_GAMES } from "@/lib/engine/limits";
-import { PICK_SCHEMA } from "@/lib/engine/output";
+import { pickSchema } from "@/lib/engine/output";
 
 /* -------------------------------------------------------------------------
  * API-Football
@@ -883,7 +883,7 @@ export function normaliseConfidence(raw: number): number {
 const ANTHROPIC_TIMEOUT_MS = ENGINE_CALL_BUDGET_MS;
 
 export const liveAi: AiProvider = {
-  async generatePicks({ systemPrompt, userPrompt, maxPicks }) {
+  async generatePicks({ systemPrompt, userPrompt, maxPicks, markets }) {
     const apiKey = process.env.ANTHROPIC_API_KEY;
     if (!apiKey) throw new Error("ANTHROPIC_API_KEY is not set.");
 
@@ -905,7 +905,7 @@ export const liveAi: AiProvider = {
       thinking: { type: "adaptive" },
       output_config: {
         effort: "high",
-        format: { type: "json_schema", schema: PICK_SCHEMA },
+        format: { type: "json_schema", schema: pickSchema(markets) },
       },
       messages: [
         {

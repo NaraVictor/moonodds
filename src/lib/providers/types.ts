@@ -296,6 +296,8 @@ export interface AiProvider {
     systemPrompt: string;
     userPrompt: string;
     maxPicks: number;
+    /** Markets the run may select. Narrows the JSON-schema enum. */
+    markets: Market[];
   }): Promise<EnginePick[]>;
 }
 

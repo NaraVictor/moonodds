@@ -13,7 +13,7 @@ import {
 } from "@/lib/pipeline";
 import { getProviders } from "@/lib/providers";
 import { leagueBadgeUrl, teamCrestUrl } from "@/lib/providers/types";
-import type { Market } from "@/lib/types";
+import { GRADEABLE_MARKETS, type Market } from "@/lib/types";
 import { runClvCheck, runRecalibration } from "@/lib/tuning";
 import {
   VARIABLES_BY_KEY,
@@ -234,6 +234,11 @@ const Body = z.discriminatedUnion("action", [
     action: z.literal("refundPayment"),
     reference: z.string().min(8),
     reason: z.string().min(3).max(500),
+  }),
+  z.object({
+    action: z.literal("setEnabledMarkets"),
+    configId: z.uuid(),
+    markets: z.array(z.string()).min(1),
   }),
   z.object({
     action: z.literal("setSelectedLeagues"),
@@ -1025,6 +1030,40 @@ export async function POST(request: Request) {
         const { error } = await db.from("teams").delete().eq("id", body.teamId);
         if (error) throw new Error(error.message);
         return NextResponse.json({ deleted: true });
+      }
+
+      /*
+       * Which markets the engine may select.
+       *
+       * Validated against GRADEABLE_MARKETS here rather than trusted: this
+       * writes the enum the model generates against, and an unrecognised
+       * string would produce a schema the API rejects on the next run — a
+       * broken board, hours later, with nothing pointing back to this edit.
+       *
+       * At least one, because zero markets is a config that can publish
+       * nothing. The schema's .min(1) says it and this says why.
+       */
+      case "setEnabledMarkets": {
+        const unknown = body.markets.filter(
+          (m) => !(GRADEABLE_MARKETS as readonly string[]).includes(m),
+        );
+        if (unknown.length) {
+          return NextResponse.json(
+            { error: `Not selectable markets: ${unknown.join(", ")}` },
+            { status: 400 },
+          );
+        }
+
+        const { error } = await db
+          .from("ai_engine_config")
+          .update({
+            enabled_markets: body.markets,
+            last_updated_at: new Date().toISOString(),
+            approved_by: actor,
+          })
+          .eq("id", body.configId);
+        if (error) throw new Error(error.message);
+        return NextResponse.json({ updated: true, count: body.markets.length });
       }
 
       case "setSelectedLeagues": {

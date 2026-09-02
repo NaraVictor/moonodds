@@ -52,8 +52,9 @@ import {
   formatMarket,
   formatPercent,
   teamShort,
+  MARKET_LABELS,
 } from "@/lib/format";
-import type { Pick } from "@/lib/types";
+import { GRADEABLE_MARKETS, type Market, type Pick } from "@/lib/types";
 import { Alert } from "@/components/ui/alert";
 import {
   ENGINE_VARIABLES,
@@ -64,7 +65,7 @@ import {
   type VariableGroup,
 } from "@/lib/engine/variables";
 import { placeholdersIn } from "@/lib/engine/template";
-import { useBacktest } from "@/lib/queries";
+import { useBacktest, useHistoryStats } from "@/lib/queries";
 
 /**
  * The Office.
@@ -1572,6 +1573,7 @@ function CatalogPanel() {
         missing" sat underneath the list proving it was missing.
       */}
       <CoveragePanel />
+      <MarketsPanel />
       <ImportPanel />
       <div className="grid gap-4 lg:grid-cols-2">
         <LeaguesPanel />
@@ -1679,6 +1681,116 @@ function CoveragePanel() {
           )}
         </>
       )}
+
+      {action.error && <ActionError message={action.error.message} />}
+    </Panel>
+  );
+}
+
+/**
+ * Which markets the engine may select.
+ *
+ * The sibling of Engine coverage: that one decides which matches can be
+ * picked from, this one decides what can be said about them. Both are stored
+ * on the config and versioned with it, so a draft can try a narrower set
+ * without disturbing what is live.
+ *
+ * The settled record is shown beside each market, because the toggle is only
+ * as good as the evidence behind it — and on a young record most of these
+ * numbers are far too small to act on. A market showing "3 settled" next to
+ * 33% is not a bad market, it is three coin flips, and putting the count on
+ * the same line is the cheapest way to stop it being read as a verdict.
+ */
+function MarketsPanel() {
+  const { data: config, isPending } = useEngineConfig();
+  const { data: stats } = useHistoryStats();
+  const action = useOfficeAction();
+  const [draft, setDraft] = useState<string[] | null>(null);
+
+  const saved: string[] = config?.enabled_markets?.length
+    ? (config.enabled_markets as string[])
+    : [...GRADEABLE_MARKETS];
+  const selected = draft ?? saved;
+  const dirty =
+    draft !== null &&
+    (draft.length !== saved.length || draft.some((m: string) => !saved.includes(m)));
+
+  const record = new Map(
+    (stats?.byMarket ?? []).map((m) => [m.market, m] as const),
+  );
+
+  function toggle(market: string) {
+    const next = selected.includes(market)
+      ? selected.filter((m) => m !== market)
+      : [...selected, market];
+    // Never all the way to zero: a config with no markets can publish nothing,
+    // and the engine would spend a full session producing an empty board.
+    if (next.length) setDraft(next);
+  }
+
+  if (isPending) {
+    return <Panel title="Markets"><Loading rows={3} /></Panel>;
+  }
+  if (!config) {
+    return (
+      <Panel title="Markets">
+        <Empty>No active engine config to attach markets to.</Empty>
+      </Panel>
+    );
+  }
+
+  return (
+    <Panel
+      title="Markets"
+      description="What the engine may select. Turning one off removes it from the model's output schema, so it cannot be picked at all."
+      action={
+        <button
+          type="button"
+          disabled={!dirty || action.isPending}
+          onClick={() =>
+            action.mutate(
+              { action: "setEnabledMarkets", configId: config.id, markets: selected },
+              { onSuccess: () => setDraft(null) },
+            )
+          }
+          className="press rounded-full bg-accent px-5 py-2.5 text-[13px] font-semibold text-accent-foreground disabled:opacity-40"
+        >
+          {action.isPending ? "Saving…" : dirty ? "Save markets" : "Saved"}
+        </button>
+      }
+    >
+      <ul className="divide-y divide-separator">
+        {GRADEABLE_MARKETS.map((m: Market) => {
+          const on = selected.includes(m);
+          const r = record.get(m);
+          return (
+            <li key={m}>
+              <label className="flex cursor-pointer items-center gap-3 py-2.5">
+                <input
+                  type="checkbox"
+                  checked={on}
+                  onChange={() => toggle(m)}
+                  disabled={action.isPending}
+                  className="h-4 w-4 flex-none accent-[var(--accent)]"
+                />
+                <span className="min-w-0 flex-1 text-[13px] font-semibold">
+                  {MARKET_LABELS[m] ?? m}
+                </span>
+                <span className="numeral flex-none text-[11px] text-muted">
+                  {r
+                    ? `${r.settled} settled · ${Math.round(r.winRate * 100)}%`
+                    : "no record yet"}
+                </span>
+              </label>
+            </li>
+          );
+        })}
+      </ul>
+
+      <p className="mt-4 text-[11px] leading-relaxed text-muted">
+        Counts are settled board picks. Anything under about thirty is too small
+        to judge a market on — one result moves it by tens of points.
+      </p>
 
       {action.error && <ActionError message={action.error.message} />}
     </Panel>

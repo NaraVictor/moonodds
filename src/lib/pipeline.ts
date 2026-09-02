@@ -1,10 +1,10 @@
 import { createServiceClient } from "./supabase/server";
 import { getProviders } from "./providers";
-import type { Market } from "./types";
+import { GRADEABLE_MARKETS, type Market } from "./types";
 import type { H2HMeeting, RecentMatch, VenueSplit } from "./providers/types";
 import { renderPrompt } from "./engine/template";
 import { resolveEngineVariables } from "./engine/variables";
-import { blankToNull, normalisePredictedValue } from "./engine/output";
+import { blankToNull, enabledMarkets, normalisePredictedValue } from "./engine/output";
 import { ENGINE_CALL_BUDGET_MS, THIN_SEASON_GAMES, sessionCap } from "./engine/limits";
 import { ENGINE_PROMPT_VERSION } from "./engine/prompt";
 import { reportError } from "./report-error";
@@ -914,9 +914,30 @@ ${briefs.join("\n")}`;
    * die.
    */
   const modelStartedAt = Date.now();
+  /*
+   * The markets this run may select.
+   *
+   * Two things carry it, and they have different jobs. The schema enum is the
+   * enforcement — the model's grammar cannot express a market that is not in
+   * it. The sentence appended below is so the model is not reasoning toward an
+   * option it will then be unable to emit, which wastes thinking and produces
+   * near-misses rather than clean refusals.
+   *
+   * Appended rather than edited into the prompt body: the permitted-markets
+   * section lives in the stored system_prompt, which an operator can edit in
+   * the Office, and rewriting somebody's prose from code is a worse failure
+   * than a slightly repetitive prompt.
+   */
+  const markets = enabledMarkets(config);
+  const restriction =
+    markets.length === GRADEABLE_MARKETS.length
+      ? ""
+      : `\n\nMARKET RESTRICTION FOR THIS RUN\n\nYou may select ONLY these markets, as predictionType and as altMarket: ${markets.join(", ")}. Any other market listed above is disabled for this run. If your analysis favours a disabled market, pick the best available alternative from the permitted list, or emit noBetZone.`;
+
   const picks = await ai.generatePicks({
-    systemPrompt: rendered.text,
+    systemPrompt: rendered.text + restriction,
     userPrompt,
+    markets,
     // One object per fixture. The old cap of 10 silently contradicted the
     // prompt's "emit for every fixture" whenever a day carried more than ten.
     maxPicks: fixtures.length,

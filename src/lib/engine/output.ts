@@ -1,4 +1,4 @@
-import { MARKETS, GRADEABLE_MARKETS } from "@/lib/types";
+import { MARKETS, GRADEABLE_MARKETS, type Market } from "@/lib/types";
 
 /**
  * The engine's output contract.
@@ -271,6 +271,48 @@ export function blankToNull<T extends Record<string, unknown>>(pick: T): T {
     }
   }
   return out as T;
+}
+
+/**
+ * Which markets the engine may select on this run.
+ *
+ * Empty or missing means every gradeable market. That is the safe reading of
+ * an unset column: a config nobody has configured should behave exactly as it
+ * did before the column existed, and the alternative — empty meaning nothing —
+ * turns a forgotten default into a blank board.
+ *
+ * corners_under_over can never appear whatever the config says, because it
+ * cannot be graded; GRADEABLE_MARKETS is the ceiling and this only narrows it.
+ */
+export function enabledMarkets(
+  config: { enabled_markets?: unknown } | null | undefined,
+): Market[] {
+  const raw = config?.enabled_markets;
+  const chosen = Array.isArray(raw) ? raw.map(String) : [];
+  const allowed = chosen.filter((m): m is Market =>
+    (GRADEABLE_MARKETS as readonly string[]).includes(m),
+  );
+  return allowed.length ? allowed : [...GRADEABLE_MARKETS];
+}
+
+/**
+ * The output contract, narrowed to the markets on offer.
+ *
+ * The enum is the enforcement, not the prompt. A model told in prose to avoid
+ * a market will mostly avoid it; a model whose grammar cannot express the
+ * market cannot select it at all, and the difference matters on the one run
+ * where the reasoning finds a tempting corners line.
+ */
+export function pickSchema(markets: Market[]) {
+  const list = markets.length ? markets : [...GRADEABLE_MARKETS];
+  const schema = structuredClone(PICK_SCHEMA) as typeof PICK_SCHEMA;
+  const props = schema.properties.picks.items.properties as Record<
+    string,
+    { enum?: string[] }
+  >;
+  props.predictionType.enum = [...list];
+  props.altMarket.enum = [...list];
+  return schema;
 }
 
 export const PICK_SCHEMA = {
