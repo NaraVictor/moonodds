@@ -1804,6 +1804,8 @@ type LeagueFootprint = {
   predictions: number;
   settled: number;
   slipLegs: number;
+  /** Fixtures elsewhere naming this league's teams. Any of them blocks it. */
+  blockedBy: number;
 };
 
 function LeaguesPanel() {
@@ -1812,7 +1814,9 @@ function LeaguesPanel() {
   const [editing, setEditing] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   // The league awaiting a second press, and what deleting it would cost.
-  const [doomed, setDoomed] = useState<{ id: string; counts: LeagueFootprint | null } | null>(null);
+  const [doomed, setDoomed] = useState<
+    { id: string; counts: LeagueFootprint | null; error: string | null } | null
+  >(null);
 
   return (
     <Panel
@@ -1885,35 +1889,46 @@ function LeaguesPanel() {
                   */}
                   <button
                     type="button"
-                    disabled={action.isPending}
+                    // Disabled until the footprint is in: confirming a cost
+                    // nobody has been shown is not a confirmation.
+                    disabled={action.isPending || (doomed?.id === l.id && !doomed.counts)}
                     onClick={async () => {
-                      if (doomed?.id === l.id) {
+                      if (doomed?.id === l.id && doomed.counts) {
                         action.mutate(
                           { action: "deleteLeague", leagueId: l.id },
                           { onSuccess: () => setDoomed(null) },
                         );
                         return;
                       }
-                      setDoomed({ id: l.id, counts: null });
+                      setDoomed({ id: l.id, counts: null, error: null });
                       try {
                         const res = await fetch("/api/office", {
                           method: "POST",
                           headers: { "Content-Type": "application/json" },
                           body: JSON.stringify({ action: "leagueFootprint", leagueId: l.id }),
                         });
-                        setDoomed({ id: l.id, counts: await res.json() });
+                        const json = await res.json();
+                        // A failed request still parses as JSON, and the old
+                        // version assigned it straight to `counts` — so a 403
+                        // rendered "Deleting undefined removes undefined
+                        // teams" and the second press still armed.
+                        if (!res.ok) {
+                          setDoomed({ id: l.id, counts: null, error: json.error ?? "Could not read the footprint." });
+                        } else {
+                          setDoomed({ id: l.id, counts: json as LeagueFootprint, error: null });
+                        }
                       } catch {
-                        setDoomed({ id: l.id, counts: null });
+                        setDoomed({ id: l.id, counts: null, error: "Could not read the footprint." });
                       }
                     }}
                     className="press rounded-full px-3 py-1.5 text-[11px] font-semibold disabled:opacity-40"
                     style={
-                      doomed?.id === l.id
+                      doomed?.id === l.id && doomed.counts
                         ? { background: "var(--lost-wash)", color: "var(--lost-ink)" }
                         : { border: "1px solid var(--border)", color: "var(--muted)" }
                     }
                   >
-                    {doomed?.id === l.id ? "Yes, delete" : "Delete"}
+                    {doomed?.id === l.id ? (doomed.counts ? "Yes, delete" : "Checking…") : "Delete"}
                   </button>
                   {doomed?.id === l.id && (
                     <button type="button" onClick={() => setDoomed(null)} className={PILL}>
@@ -1929,9 +1944,13 @@ function LeaguesPanel() {
 
       {doomed && (
         <p className="mt-3 text-[12px] leading-relaxed" style={{ color: "var(--lost-ink)" }}>
-          {doomed.counts
-            ? `Deleting ${doomed.counts.league} removes ${doomed.counts.teams} teams, ${doomed.counts.fixtures} fixtures and ${doomed.counts.predictions} predictions — ${doomed.counts.settled} of them settled and on the published record. ${doomed.counts.slipLegs} customer slip legs would be rebuilt without them. This cannot be undone.`
-            : "Counting what this would remove…"}
+          {doomed.error
+            ? doomed.error
+            : doomed.counts
+              ? doomed.counts.blockedBy > 0
+                ? `Cannot delete ${doomed.counts.league}: ${doomed.counts.blockedBy} fixtures in other competitions name its teams. Remove those fixtures first.`
+                : `Deleting ${doomed.counts.league} removes ${doomed.counts.teams} teams, ${doomed.counts.fixtures} fixtures and ${doomed.counts.predictions} predictions — ${doomed.counts.settled} of them settled and on the published record. ${doomed.counts.slipLegs} customer slip legs would be rebuilt without them. This cannot be undone.`
+              : "Counting what this would remove…"}
         </p>
       )}
 

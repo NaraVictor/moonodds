@@ -1,0 +1,26 @@
+-- ============================================================================
+-- Two refresh_slip functions, and every one-argument call was ambiguous
+--
+-- 20260816140000 created app.refresh_slip(uuid). 20260828090000 created
+-- app.refresh_slip(uuid, uuid default null) to carry the prediction that
+-- triggered a leg notification. `create or replace` does not replace across a
+-- different signature, so both have existed side by side ever since, and
+--
+--   perform app.refresh_slip(some_uuid);
+--
+-- matches both. Postgres refuses it: "function app.refresh_slip(uuid) is not
+-- unique".
+--
+-- It has been latent for a week because the only one-argument caller left is
+-- the settlement trigger from the older migration, which the newer migration
+-- replaced with a two-argument call. The admin deletes added last night are
+-- one-argument, so slip repair raised on its first real use — which is
+-- precisely the case the repair exists for. Nothing showed it until a slip
+-- existed to repair: the arrays were empty, the loop never ran, and every test
+-- passed.
+--
+-- The one-argument version goes. The two-argument one defaults that parameter
+-- to null and is behaviourally identical when it is omitted, so nothing that
+-- called the old one loses anything.
+-- ============================================================================
+drop function if exists app.refresh_slip(uuid);
