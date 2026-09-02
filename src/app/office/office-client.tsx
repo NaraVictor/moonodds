@@ -1257,7 +1257,7 @@ function PredictionsPanel() {
   return (
     <Panel
       title="All predictions"
-      description={`${data?.total ?? 0} on record. Deleting is for a pick that should never have been published, a settled one or one already on a customer's slip is refused and voided in Grade instead.`}
+      description={`${data?.total ?? 0} on record. Deleting removes a pick at any status; the published win rate is computed on read, so it recalculates immediately, and any slip carrying the pick is rebuilt from its remaining legs.`}
     >
       {isPending ? (
         <Loading rows={6} />
@@ -1797,11 +1797,22 @@ function MarketsPanel() {
   );
 }
 
+type LeagueFootprint = {
+  league: string;
+  teams: number;
+  fixtures: number;
+  predictions: number;
+  settled: number;
+  slipLegs: number;
+};
+
 function LeaguesPanel() {
   const { data, isPending } = useCatalog();
   const action = useOfficeAction();
   const [editing, setEditing] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
+  // The league awaiting a second press, and what deleting it would cost.
+  const [doomed, setDoomed] = useState<{ id: string; counts: LeagueFootprint | null } | null>(null);
 
   return (
     <Panel
@@ -1862,11 +1873,66 @@ function LeaguesPanel() {
                   <button type="button" onClick={() => setEditing(l.id)} className={PILL}>
                     Edit
                   </button>
+                  {/*
+                    Two presses, and the first one goes and counts.
+
+                    A league carries its teams, its fixtures, every prediction
+                    on those fixtures and any slip leg pointing at them — none
+                    of which is visible from this row. Asking "are you sure"
+                    without saying what for is a confirmation in form only, so
+                    the first press fetches the footprint and the second acts
+                    on a number the operator has actually read.
+                  */}
+                  <button
+                    type="button"
+                    disabled={action.isPending}
+                    onClick={async () => {
+                      if (doomed?.id === l.id) {
+                        action.mutate(
+                          { action: "deleteLeague", leagueId: l.id },
+                          { onSuccess: () => setDoomed(null) },
+                        );
+                        return;
+                      }
+                      setDoomed({ id: l.id, counts: null });
+                      try {
+                        const res = await fetch("/api/office", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ action: "leagueFootprint", leagueId: l.id }),
+                        });
+                        setDoomed({ id: l.id, counts: await res.json() });
+                      } catch {
+                        setDoomed({ id: l.id, counts: null });
+                      }
+                    }}
+                    className="press rounded-full px-3 py-1.5 text-[11px] font-semibold disabled:opacity-40"
+                    style={
+                      doomed?.id === l.id
+                        ? { background: "var(--lost-wash)", color: "var(--lost-ink)" }
+                        : { border: "1px solid var(--border)", color: "var(--muted)" }
+                    }
+                  >
+                    {doomed?.id === l.id ? "Yes, delete" : "Delete"}
+                  </button>
+                  {doomed?.id === l.id && (
+                    <button type="button" onClick={() => setDoomed(null)} className={PILL}>
+                      Cancel
+                    </button>
+                  )}
                 </div>
               </li>
             ),
           )}
         </ul>
+      )}
+
+      {doomed && (
+        <p className="mt-3 text-[12px] leading-relaxed" style={{ color: "var(--lost-ink)" }}>
+          {doomed.counts
+            ? `Deleting ${doomed.counts.league} removes ${doomed.counts.teams} teams, ${doomed.counts.fixtures} fixtures and ${doomed.counts.predictions} predictions — ${doomed.counts.settled} of them settled and on the published record. ${doomed.counts.slipLegs} customer slip legs would be rebuilt without them. This cannot be undone.`
+            : "Counting what this would remove…"}
+        </p>
       )}
 
       {action.error && <ActionError message={action.error.message} />}
@@ -4027,27 +4093,33 @@ function UsersPanel() {
 
                 {open && (
                   <div className="rise mt-3 space-y-3 rounded-2xl bg-surface-secondary p-4">
+                    {/*
+                      Named after what is on sale, so a comp and a purchase are
+                      the same object in an operator's head. The thirty-day one
+                      is deliberately not called a month pass: there is no month
+                      plan any more, and labelling a comp after a product
+                      nobody can buy invites somebody to look for it.
+                    */}
                     <div className="flex flex-wrap gap-2">
-                      <button
-                        type="button"
-                        disabled={action.isPending}
-                        onClick={() =>
-                          action.mutate({ action: "grantPass", userId: u.id, days: 1 })
-                        }
-                        className={PILL}
-                      >
-                        Comp 1 day
-                      </button>
-                      <button
-                        type="button"
-                        disabled={action.isPending}
-                        onClick={() =>
-                          action.mutate({ action: "grantPass", userId: u.id, days: 7 })
-                        }
-                        className={PILL}
-                      >
-                        Comp 7 days
-                      </button>
+                      {(
+                        [
+                          [1, "Comp a day"],
+                          [7, "Comp a week"],
+                          [30, "Comp 30 days"],
+                        ] as const
+                      ).map(([days, label]) => (
+                        <button
+                          key={days}
+                          type="button"
+                          disabled={action.isPending}
+                          onClick={() =>
+                            action.mutate({ action: "grantPass", userId: u.id, days })
+                          }
+                          className={PILL}
+                        >
+                          {label}
+                        </button>
+                      ))}
                       <button
                         type="button"
                         disabled={action.isPending || active === 0}

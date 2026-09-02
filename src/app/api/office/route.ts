@@ -100,6 +100,8 @@ const Body = z.discriminatedUnion("action", [
     fixtureIds: z.array(z.uuid()).min(1).max(100),
   }),
   z.object({ action: z.literal("deletePrediction"), predictionId: z.uuid() }),
+  z.object({ action: z.literal("leagueFootprint"), leagueId: z.uuid() }),
+  z.object({ action: z.literal("deleteLeague"), leagueId: z.uuid() }),
   z.object({
     action: z.literal("setPredictionTier"),
     predictionId: z.uuid(),
@@ -446,123 +448,58 @@ export async function POST(request: Request) {
        * holding is refused too. What is left is the actual case: a bad pick,
        * caught before anyone acted on it.
        */
+      /*
+       * Any status, including settled and slipped.
+       *
+       * This used to refuse a settled pick — "it counts towards the published
+       * record, void it in Grade instead" — and refuse one on a customer's
+       * slip. The reasoning was sound and the remedy was not: Grade's override
+       * list shows the eight highest-confidence picks on the first page, so a
+       * pick outside that slice could not be voided either. The guard pointed
+       * at a door that was locked.
+       *
+       * Deleting is safe now because the two things it used to break are
+       * handled. The published record needs no repair — get_history_stats and
+       * get_engine_stats compute from the table on read, so the win rate and
+       * settled count are correct the moment the row is gone. And slips are
+       * rebuilt: slip_legs cascades, which silently left leg_count and
+       * combined_odds describing a slip that no longer existed, so
+       * admin_delete_prediction captures the affected slips before the cascade
+       * and refreshes each one after.
+       *
+       * The audit log above records who did it and when, which is what makes
+       * an irreversible action accountable rather than merely blocked.
+       */
       case "deletePrediction": {
-        const { data: pred } = await db
-          .from("predictions")
-          .select("id, status")
-          .eq("id", body.predictionId)
-          .maybeSingle();
-
-        if (!pred) {
-          return NextResponse.json({ error: "That prediction is already gone." }, { status: 404 });
-        }
-
-        if (pred.status === "won" || pred.status === "lost") {
-          return NextResponse.json(
-            {
-              error: "That pick is settled and counts towards the published record. Void it in Grade instead, which keeps the trail.",
-            },
-            { status: 409 },
-          );
-        }
-
-        const { count: legs } = await db
-          .from("slip_legs")
-          .select("id", { count: "exact", head: true })
-          .eq("prediction_id", body.predictionId);
-
-        if (legs && legs > 0) {
-          return NextResponse.json(
-            {
-              error: `${legs} customer slip${legs === 1 ? " has" : "s have"} this pick on ${legs === 1 ? "it" : "them"}. Void it in Grade instead, deleting would remove it from ${legs === 1 ? "that slip" : "those slips"} with no trace.`,
-            },
-            { status: 409 },
-          );
-        }
-
-        const { error } = await db.from("predictions").delete().eq("id", body.predictionId);
+        const { data, error } = await db.rpc("admin_delete_prediction", {
+          p_prediction_id: body.predictionId,
+        });
         if (error) throw new Error(error.message);
-        return NextResponse.json({ deleted: true });
+        return NextResponse.json(data ?? { deleted: true });
       }
 
       /*
-       * Move one pick across the paywall.
+       * What deleting a league would take with it, before anybody agrees to it.
        *
-       * Three refusals, and each of them protects a promise already made:
-       *
-       *   settled     its tier is in the published record. get_history_stats
-       *               counts the board and ignores extras, so moving a graded
-       *               pick silently rewrites the hit rate on /history.
-       *   sold        a buyer was dealt this fixture. get_my_extra_picks
-       *               filters on tier = 'extra', so promoting it removes the
-       *               pick from their list as completely as deleting the row.
-       *   on a slip   somebody added it to a slip while it was on the free
-       *               board. Demoting it puts what they are holding behind a
-       *               paywall they have not paid.
-       *
-       * The engine's own settleTiers applies the same freezes, so a run cannot
-       * undo an operator's move on a sold or slipped pick either.
+       * leagues cascades to teams and fixtures, and fixtures cascade to
+       * predictions and slip legs — so one catalogue row can carry away
+       * settled history and legs from live slips, none of which is visible
+       * from the row itself.
        */
-      case "setPredictionTier": {
-        if (body.tier !== "primary" && body.tier !== "extra") {
-          return NextResponse.json({ error: "Unknown tier." }, { status: 400 });
-        }
-
-        const { data: pred } = await db
-          .from("predictions")
-          .select("id, status, tier, fixture_id")
-          .eq("id", body.predictionId)
-          .maybeSingle();
-
-        if (!pred) {
-          return NextResponse.json({ error: "No such pick." }, { status: 404 });
-        }
-
-        if (pred.status !== "pending") {
-          return NextResponse.json(
-            {
-              error: "That pick is settled and its tier is part of the published record. Moving it would rewrite the hit rate on /history.",
-            },
-            { status: 409 },
-          );
-        }
-
-        const { data: orders } = await db
-          .from("extra_pick_orders")
-          .select("id")
-          .eq("status", "active")
-          .contains("fixture_ids", [pred.fixture_id]);
-
-        if (orders?.length) {
-          return NextResponse.json(
-            {
-              error: `${orders.length} customer${orders.length === 1 ? " has" : "s have"} paid for this game. Moving it would take it off ${orders.length === 1 ? "their" : "their"} list with no trace.`,
-            },
-            { status: 409 },
-          );
-        }
-
-        const { count: legs } = await db
-          .from("slip_legs")
-          .select("id", { count: "exact", head: true })
-          .eq("prediction_id", body.predictionId);
-
-        if (legs && legs > 0 && body.tier === "extra") {
-          return NextResponse.json(
-            {
-              error: `${legs} customer slip${legs === 1 ? " has" : "s have"} this pick. Moving it to extras would put something they are already holding behind the paywall.`,
-            },
-            { status: 409 },
-          );
-        }
-
-        const { error } = await db
-          .from("predictions")
-          .update({ tier: body.tier })
-          .eq("id", body.predictionId);
+      case "leagueFootprint": {
+        const { data, error } = await db.rpc("admin_league_footprint", {
+          p_league_id: body.leagueId,
+        });
         if (error) throw new Error(error.message);
+        return NextResponse.json(data);
+      }
 
-        return NextResponse.json({ moved: true, tier: body.tier });
+      case "deleteLeague": {
+        const { data, error } = await db.rpc("admin_delete_league", {
+          p_league_id: body.leagueId,
+        });
+        if (error) throw new Error(error.message);
+        return NextResponse.json(data);
       }
 
       case "gradeResults":
@@ -1180,8 +1117,18 @@ export async function POST(request: Request) {
           };
         });
 
+        /*
+         * Leaves an existing pass alone rather than overwriting it.
+         *
+         * An upsert here rewrote any day the customer already held, setting
+         * amount_usd to 0 — so comping somebody who had paid quietly restated
+         * their purchase as a gift and took it back out of revenue. Ignoring
+         * the conflict means a comp only ever fills days they did not have,
+         * which is the whole intent of a comp.
+         */
         const { error } = await db.from("daily_passes").upsert(rows, {
           onConflict: "user_id,date_key",
+          ignoreDuplicates: true,
         });
         if (error) throw new Error(error.message);
         return NextResponse.json({ granted: body.days });

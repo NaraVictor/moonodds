@@ -17,7 +17,6 @@ import {
   MARKET_LABELS,
   formatMarketShort,
   formatPercent,
-  formatSigned,
   teamShort,
 } from "@/lib/format";
 import type { Market, Pick } from "@/lib/types";
@@ -86,28 +85,20 @@ function StatsPanel({ filters }: { filters: HistoryFilters }) {
           : null,
     },
     /*
-     * Only when a real price backs it.
+     * No return figure.
      *
-     * This figure used to be computed from app.pick_price, which falls back to
-     * an estimate derived from the confidence score when a pick has no odds
-     * snapshot — and nothing wrote snapshots, so the published +119.7% was
-     * arithmetic over prices no bookmaker ever quoted. It now counts only
-     * settled picks carrying a real one, and until some do, the tile is absent
-     * rather than showing a zero that would read as "we broke even".
+     * It was computed from app.pick_price, which falls back to an estimate
+     * derived from the confidence score when a pick carries no odds snapshot —
+     * so the +119.7% published here was arithmetic over prices no bookmaker
+     * quoted. Gating it on a real price left the tile absent anyway, since the
+     * odds feed has not filled the table yet.
+     *
+     * Removed rather than left waiting. A number that has never once been
+     * shown is not a feature in reserve, it is a slot on the page that keeps
+     * inviting the question; when the feed has priced enough settled picks to
+     * make a return meaningful, it is worth deciding then how to present it
+     * and over what sample.
      */
-    ...(stats.roiSample > 0 && stats.roi != null
-      ? [
-          {
-            label: "Return",
-            value: formatSigned(stats.roi),
-            ink: stats.roi >= 0 ? "var(--success)" : "var(--danger)",
-            note:
-              stats.roiSample < stats.settled
-                ? `from ${stats.roiSample} priced call${stats.roiSample === 1 ? "" : "s"}`
-                : null,
-          },
-        ]
-      : []),
     { label: "Settled calls", value: String(stats.settled) },
     // Absent rather than a dash, for the same reason as the return: until a
     // real bookmaker price exists there is nothing to average.
